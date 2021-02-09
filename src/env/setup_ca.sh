@@ -12,7 +12,6 @@ done
 dnf -y module enable idm:DL1
 dnf -y copr enable jjelen/vsmartcard
 dnf -y install virt_cacard vpcd softhsm
-dnf install  -y
 
 
 SOPIN='12345678'
@@ -25,11 +24,11 @@ CONF=$DIR/conf
 NAME=localuser1
 
 
-if [[ ! -f "$CONF/softhsm2.conf" ]]; 
+if [[ ! -f "$CONF/softhsm2.conf" ]]
 then 
     echo "File $CONF/softhsm2.conf does not exist"
     exit 1
-elif [[ ! -f "$CONF/ca.cnf"]];
+elif [[ ! -f "$CONF/ca.cnf" ]]
 then
     echo "File $CONF/ca.cnf does not exist"
     exit 
@@ -49,7 +48,7 @@ elif [[ ! -f "$CONF/sssd.conf" ]]
 then
     echo "File $CONF/sssd.conf does not exist"
     exit 1
-
+fi
 
 # Configurting softhm2
 P11LIB='/usr/lib64/pkcs11/libsofthsm2.so'
