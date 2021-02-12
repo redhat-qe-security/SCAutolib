@@ -2,6 +2,7 @@ import subprocess as subp
 import pexpect
 import logging
 import time
+import sys
 
 log = logging.getLogger("base")
 
@@ -55,7 +56,7 @@ class VirtCard:
     def __enter__(self):
         return self
 
-    def __exit__(self, type_, value, traceback):
+    def __exit__(self, except_type, except_value, except_trace):
         self.remove()
 
     def remove(self):
@@ -71,26 +72,33 @@ class VirtCard:
         log.debug("Smart card enrolled")
 
     def run_cmd(self, cmd, expect, pin=True, passwd=None, shell=None):
-        if shell is None:
-            shell = pexpect.spawn(cmd)
+        try:
+            if shell is None:
+                shell = pexpect.spawn(cmd, encoding='utf-8')
+            shell.maxread = 1000
+            if passwd is not None:
+                pattern = "PIN for " if pin else "Password"
+                time.sleep(1)
+                out = shell.expect([pexpect.TIMEOUT, pattern], timeout=10)
+                if out == 0:
+                    log.info("pshell() timed out on passsword / PIN waiting")
+                assert out == 1
+                shell.sendline(passwd)
 
-        if passwd is not None:
-            pattern = "PIN for " if pin else "Password"
-            time.sleep(1)
-            out = shell.expect([pexpect.TIMEOUT, pattern], timeout=10)
+            out = shell.expect([pexpect.TIMEOUT, expect], timeout=20)
             if out == 0:
-                log.info("pshell() timed out on passsword / PIN waiting")
-            assert out == 1
-            shell.sendline(passwd)
+                log.info("\npshell() timed out\n")
+            assert out == 1, "Wrong pattern is matched"
 
-        out = shell.expect([pexpect.TIMEOUT, expect], timeout=20)
-        if out == 0:
-            log.info("\npshell() timed out\n")
-        assert out == 1, "Wrong pattern is matched"
-
+        except pexpect.exceptions.EOF as e:
+            log.error(
+                f"Pattern '{expect}' not found in output.\n"
+                f"Output:\n{str(shell.before)}")
+            raise e
+        except Exception as e:
+            log.error(f"Unexpected exception: {str(e)}")
+            raise e
         return shell
-
-    # TODO: create decorator for reseting sssd config and removing the card
 
 
 class RemCard:
