@@ -1,4 +1,3 @@
-from shutil import copy, copytree
 import subprocess as subp
 import logging
 import sys
@@ -34,6 +33,6 @@ if __name__ == "__main__":
         name = sys.argv[1]
         dir_path = sys.argv[2]
         fnc[name](dir_path)
-    except KeyError as e:
+    except KeyError:
         log.error(f"Wrong function name: {name}")
         exit(1)

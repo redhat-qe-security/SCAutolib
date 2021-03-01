@@ -1,0 +1,4 @@
+*__pycache__*
+src/env/krb-server-client-setup-rhel8.sh
+src/env/keys*
+*.pem*

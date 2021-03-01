@@ -1,5 +1,4 @@
 #!/usr/bin/bash
-
 DIR=''
 
 while getopts d: flag
@@ -11,7 +10,7 @@ done
 
 dnf -y module enable idm:DL1
 dnf -y copr enable jjelen/vsmartcard
-dnf -y install virt_cacard vpcd softhsm
+dnf -y install vpcd softhsm
 
 
 SOPIN='12345678'
@@ -86,13 +85,19 @@ openssl ca -config $CONF/ca.cnf -batch -notext -keyfile rootCA.key -in ${NAME}.c
 
 pkcs11-tool --module libsofthsm2.so --slot-index 0 -w ${NAME}.key -y privkey --label ${NAME} -p $PIN --set-id 0 -d 0
 pkcs11-tool --module libsofthsm2.so --slot-index 0 -w ${NAME}.crt -y cert --label ${NAME} -p $PIN --set-id 0 -d 0
-
+######################################
+# Setup SELinux module
+######################################
 semodule -i $CONF/virtcacard.cil
 cp /usr/lib/systemd/system/pcscd.service /etc/systemd/system/
 sed -i 's/ --auto-exit//' /etc/systemd/system/pcscd.service
 systemctl daemon-reload
 systemctl restart pcscd
 
+######################################
+# Install virt_cacard service
+######################################
+dnf -y install virt_cacard
 cp $CONF/virt_cacard.service /etc/systemd/system/virt_cacard.service
 sed -i "s,{TESTDIR},$DIR,g" /etc/systemd/system/virt_cacard.service
 systemctl daemon-reload
