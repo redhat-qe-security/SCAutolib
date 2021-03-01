@@ -2,7 +2,6 @@ import subprocess as subp
 import pexpect
 import logging
 import time
-import sys
 
 log = logging.getLogger("base")
 
