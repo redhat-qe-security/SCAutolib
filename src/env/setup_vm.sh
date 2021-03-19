@@ -1,6 +1,7 @@
 #!/usr/bin/bash
-# set -x
-# trap read debug
+#echo "Fuck"
+set -e
+#trap read debug
 
 bold=$(tput bold)
 normal=$(tput sgr0)
@@ -25,8 +26,9 @@ function help {
     exit 0
 }
 
+
 function log {
-    echo -e "${bold}[LOG `date +"%T"`]${normal} $1" 
+    echo -e "${bold}[LOG $(date +"%T")]${normal} $1"
 }
 
 while getopts i:n:s:l:k:hr flag
@@ -35,12 +37,13 @@ do
         i) IMG_NAME=${OPTARG};;
         n) NAME=${OPTARG};;
         s) SCRIPT=${OPTARG};;
-        l) LOCAL=${OPTARG};;
         k) KEY=${OPTARG};;
         r) RUN=1;;
-	    h) help;;   
+	      h) help;;
+#	      *) echo "Invalid flag";;
     esac
 done
+
 
 if [[ ! -a ${IMG_PATH}/${IMG_NAME} ]] 
 then
@@ -53,10 +56,11 @@ then
 fi
 
 # TODO add key for VM with full path or just a name?
-if [ $KEY = "" ]
+if [[ $KEY = "" ]]
 then
-    ssh-keygen -f ./keys/${NAME}.key -q -N ""
+    ssh-keygen -f ./keys/"${NAME}".key -q -N ""
     KEY="./keys/${NAME}.key.pub"
+    chmod 600 "./keys/${NAME}.key"
     log "ssh key is generated into ${KEY}"
 fi
 
@@ -85,10 +89,11 @@ virt-install \
 sleep 15
 
 # virsh domifaddr $NAME
-ip_rhel8=`virsh domifaddr $NAME | grep -o -E "$rx\.$rx\.$rx\.$rx"`
+ip_rhel8=$(virsh domifaddr "$NAME" | grep -o -E "$rx\.$rx\.$rx\.$rx")
 log "IP address of the VM: ${bold}${ip_rhel8}${normal}"
 
-scp -o StrictHostKeyChecking=no -i ${KEY} redhat.repo root@$ip_rhel8:/etc/yum.repos.d/
+echo $KEY
+scp -o StrictHostKeyChecking=no -i "$KEY" conf/redhat.repo root@"$ip_rhel8":/etc/yum.repos.d/
 log "Repo file is copied"
 
 # scp krb_server:/var/kerberos/krb5kdc/kdc-ca.pem ./ 
@@ -112,13 +117,13 @@ log "Repo file is copied"
 #     ssh -o StrictHostKeyChecking=no -i vm_key root@$ip_rhel8 bash /root/$SCRIPT    
 # fi
 
-if [ $SCRIPT != '' ]
+if [ "$SCRIPT" != "" ]
 then
-    scp -o StrictHostKeyChecking=no -i ${KEY} $SCRIPT root@$ip_rhel8:/root/
+    scp -o StrictHostKeyChecking=no -i $KEY $SCRIPT root@$ip_rhel8:/root/
     log "Script $SCRIPT is copied to /root/$SCRIPT"
     if [ $RUN = 1 ]
     then
-        ssh -o StrictHostKeyChecking=no -i $KEY root@$ip_rhel8 bash /root/$SCRIPT    
+        ssh -o StrictHostKeyChecking=no -i "$KEY" root@$ip_rhel8 bash /root/$SCRIPT
         log "Script ${SCRIPT} for ${ip_rhel8} is finished"
     fi
 fi

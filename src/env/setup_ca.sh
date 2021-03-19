@@ -1,27 +1,34 @@
 #!/usr/bin/bash
-DIR=''
+DIR=""
 
 while getopts d: flag
 do
-    case "${flag}" in
-        d) DIR=${OPTARG};;
+    case "$flag" in
+        d) DIR=$OPTARG;;
+        *) echo "Invalid flag is used: $flag";;
     esac
 done
 
 dnf -y module enable idm:DL1
 dnf -y copr enable jjelen/vsmartcard
-dnf -y install vpcd softhsm
+dnf -y install vpcd softhsm python3-pip sssd-tools
+yum groupinstall "Smart Card Support" -y
 
+if [[ $DIR = "" ]]
+then 
+    DIR=.
+fi
 
 SOPIN='12345678'
 PIN='123456'
 export GNUTLS_PIN=$PIN
-GENERATE_KEYS=1
-PKCS11_TOOL='pkcs11-tool'
-NSSDB=$DIR/db
-CONF=$DIR/conf
+VIRT=$DIR/virt_card
+NSSDB=$DIR/virt_card/db
+CONF=$VIRT/conf
 NAME=localuser1
 
+mkdir $VIRT
+cp -r conf/ $CONF
 
 if [[ ! -f "$CONF/softhsm2.conf" ]]
 then 
@@ -51,9 +58,10 @@ fi
 
 # Configurting softhm2
 P11LIB='/usr/lib64/pkcs11/libsofthsm2.so'
-sed -i "s,<TESTDIR>,$DIR,g" $CONF/softhsm2.conf
+sed -i "s,<TESTDIR>,$VIRT,g" $CONF/softhsm2.conf
+pushd $VIRT || exit
 
-mkdir $DIR/tokens
+mkdir tokens
 export SOFTHSM2_CONF="$CONF/softhsm2.conf" # Should I save previous value of 
 softhsm2-util --init-token --slot 0 --label 'SC test' --so-pin="$SOPIN" --pin="$PIN"
 
@@ -72,7 +80,7 @@ touch serial index.txt crlnumber index.txt.attr
 echo 01 > serial
 openssl genrsa -out rootCA.key 2048
 
-openssl req -batch -config $CONF/ca.cnf -x509 -new -nodes -key rootCA.key -sha256 -days 10000 -set_serial 0 -extensions v3_ca -out $DIR/rootCA.crt
+openssl req -batch -config $CONF/ca.cnf -x509 -new -nodes -key rootCA.key -sha256 -days 10000 -set_serial 0 -extensions v3_ca -out $VIRT/rootCA.crt
 openssl ca -config $CONF/ca.cnf -gencrl -out crl/root.crl
 
 # Setup user and certs on the card
@@ -99,7 +107,7 @@ systemctl restart pcscd
 ######################################
 dnf -y install virt_cacard
 cp $CONF/virt_cacard.service /etc/systemd/system/virt_cacard.service
-sed -i "s,{TESTDIR},$DIR,g" /etc/systemd/system/virt_cacard.service
+sed -i "s,{TESTDIR},$VIRT,g" /etc/systemd/system/virt_cacard.service
 systemctl daemon-reload
 echo 'disable-in: virt_cacard' >> /usr/share/p11-kit/modules/opensc.module
 systemctl restart pcscd virt_cacard
@@ -113,7 +121,7 @@ chmod 600 ~localuser1/.ssh/authorized_keys
 
 cp $CONF/sssd.conf /etc/sssd/sssd.conf
 chmod 600 /etc/sssd/sssd.conf
-cat $DIR/rootCA.crt > /etc/sssd/pki/sssd_auth_ca_db.pem
+cat $VIRT/rootCA.crt > /etc/sssd/pki/sssd_auth_ca_db.pem
 
 systemctl stop pcscd.service pcscd.socket virt_cacard sssd
 rm -rf /var/lib/sss/{db,mc}/*
