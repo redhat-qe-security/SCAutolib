@@ -1,10 +1,16 @@
 #!/usr/bin/bash
 DIR=""
 
-while getopts d: flag
+function help() {
+    echo -e "Script for settingup the local Certificate Authority and virtual smart card"
+    echo -e "\t-h -- this message"
+    echo -e "\t-d directory where SCAutoLib directory is located"
+}
+while getopts hd: flag
 do
     case "$flag" in
         d) DIR=$OPTARG;;
+        h) help;;
         *) echo "Invalid flag is used: $flag";;
     esac
 done
@@ -28,7 +34,7 @@ CONF=$VIRT/conf
 NAME=localuser1
 
 mkdir $VIRT
-cp -r conf/ $CONF
+cp -r $DIR/SCAutolib/src/env/conf $CONF
 
 if [[ ! -f "$CONF/softhsm2.conf" ]]
 then 
