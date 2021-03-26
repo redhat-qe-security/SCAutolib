@@ -86,7 +86,9 @@ touch serial index.txt crlnumber index.txt.attr
 echo 01 > serial
 openssl genrsa -out rootCA.key 2048
 
-openssl req -batch -config $CONF/ca.cnf -x509 -new -nodes -key rootCA.key -sha256 -days 10000 -set_serial 0 -extensions v3_ca -out $VIRT/rootCA.crt
+openssl req -batch -config $CONF/ca.cnf -x509 -new -nodes \
+            -key rootCA.key -sha256 -days 10000 -set_serial 0 \
+            -extensions v3_ca -out $VIRT/rootCA.crt
 openssl ca -config $CONF/ca.cnf -gencrl -out crl/root.crl
 
 # Setup user and certs on the card
@@ -113,7 +115,7 @@ systemctl restart pcscd
 ######################################
 dnf -y install virt_cacard
 cp $CONF/virt_cacard.service /etc/systemd/system/virt_cacard.service
-sed -i "s,{TESTDIR},$VIRT,g" /etc/systemd/system/virt_cacard.service
+sed -i "s,<TESTDIR>,$VIRT,g" /etc/systemd/system/virt_cacard.service
 systemctl daemon-reload
 echo 'disable-in: virt_cacard' >> /usr/share/p11-kit/modules/opensc.module
 systemctl restart pcscd virt_cacard
