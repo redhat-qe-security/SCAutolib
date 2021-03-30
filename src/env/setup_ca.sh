@@ -69,7 +69,7 @@ pushd $VIRT || exit
 
 mkdir tokens
 export SOFTHSM2_CONF="$CONF/softhsm2.conf" # Should I save previous value of 
-softhsm2-util --init-token --slot 0 --label 'SC test' --so-pin="$SOPIN" --pin="$PIN"
+softhsm2-util --init-token --slot 0 --label "SC test" --so-pin="$SOPIN" --pin="$PIN"
 
 
 # Creating NSS database
