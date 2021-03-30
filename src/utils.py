@@ -9,35 +9,21 @@ SERVICES = {"sssd": "/etc/sssd/sssd.conf", "krb": "/etc/krb5.conf"}
 DEFAULTS = {"sssd": f"{FILE_PATH}/env/conf/sssd.conf"}
 
 
-def config_variants(service, variants, section):
-    def wrapper(test):
-        def inner_wrapper(*args):
-            for var in variants:
-                if var == "":  # default variant
-                    test(args)
-                    continue
-                # change config
-                edit_config(SERVICES[service], var, section)
-                # restart service
-                restart_service(service)
-                # run test
-                test(args)
-                # restore config
-                restore_config(service)
-
-        return inner_wrapper
-
-    return wrapper
-
-
 def _edit_config(config, string, section):
+    holder = f"#<{section}>"
     with open(config, "r") as file:
         content = file.read()
-    content = content.replace(f"#<{section}>", f"{string}\n#<{section}>")
+        if holder not in content:
+            log.error(f"File {config} is not updated. "
+                      f"Maybe placeholder in the config {config} "
+                      f"for the section {section} is missing?")
+            raise Exception(f"Placeholder {holder} is not present in {config}")
+
+    content = content.replace(holder, f"{string}\n{holder}")
     with open(config, "w+") as file:
         file.write(content)
-    # TODO how to check if there was some errors?
-    log.debug(f"File {config} is updated")
+
+    log.debug(f"Section {section} if config file {config} is updated")
 
 
 def edit_config(service, string, section):
@@ -52,19 +38,26 @@ def edit_config(service, string, section):
     return wrapper
 
 
-def get_slots() -> str:
-    # TODO get all slots with active cards
-    result = subp.run(["pkcs11-tool", "--list--slots"], text=True, capture_output=True)
-    slots = result.stdout.decode("utf8")
-    return slots
-
-
 def restart_service(service):
-    subp.run(["systemctl", "restart", f"{service}"], check=True)
-    log.debug(f"Service {service} is restarted")
-    # FIXME do I need to work with ant exceptions here?
+    try:
+        subp.run(["systemctl", "restart", f"{service}"], check=True, capture_output=True, text=True, encoding="utf8")
+        log.debug(f"Service {service} is restarted")
+    except subp.CalledProcessError as e:
+        log.error(f"Command {e.cmd} is ended with non-zero return code ({e.returncode})")
+        log.error(f"stdout:\n{e.stdout}")
+        log.error(f"stderr:\n{e.stderr}")
+    except Exception as e:
+        log.error(f"Unexpected exception is raised: {e}")
+        raise e
 
 
 def restore_config(service=None):
-    shutil.copyfile(DEFAULTS[service], SERVICES[service])
-    log.debug(f"File {SERVICES[service]} is restored")
+    try:
+        shutil.copyfile(DEFAULTS[service], SERVICES[service])
+        log.debug(f"File {SERVICES[service]} is restored")
+    except shutil.SameFileError:
+        log.debug(f"Source file {DEFAULTS[service]} and destination file {SERVICES[service]} are the same")
+    except Exception as e:
+        log.error(f"Unexpected exception is raised: {e}")
+        log.error(f"File {SERVICES[service]} is not restored")
+        raise e
