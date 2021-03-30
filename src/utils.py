@@ -4,7 +4,7 @@ from os import path
 
 from SCAutolib import log
 
-FILE_PATH = path.dirname(path.realpath(__file__))
+FILE_PATH = path.dirname(path.abspath(__file__))
 SERVICES = {"sssd": "/etc/sssd/sssd.conf", "krb": "/etc/krb5.conf"}
 DEFAULTS = {"sssd": f"{FILE_PATH}/env/conf/sssd.conf"}
 
@@ -46,10 +46,9 @@ def edit_config(service, string, section):
             _edit_config(SERVICES[service], string, section)
             restart_service(service)
             test(args)
-            # restore_config(service)
-
+            restore_config(service)
+            restart_service(service)
         return inner_wrapper
-
     return wrapper
 
 
