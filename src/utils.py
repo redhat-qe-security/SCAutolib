@@ -9,6 +9,20 @@ SERVICES = {"sssd": "/etc/sssd/sssd.conf", "krb": "/etc/krb5.conf"}
 DEFAULTS = {"sssd": f"{FILE_PATH}/env/conf/sssd.conf"}
 
 
+def edit_config(service, string, section):
+    def wrapper(test):
+        def inner_wrapper(*args):
+            _edit_config(SERVICES[service], string, section)
+            restart_service(service)
+            test(args)
+            restore_config(service)
+            restart_service(service)
+
+        return inner_wrapper
+
+    return wrapper
+
+
 def _edit_config(config, string, section):
     holder = f"#<{section}>"
     with open(config, "r") as file:
@@ -24,18 +38,6 @@ def _edit_config(config, string, section):
         file.write(content)
 
     log.debug(f"Section {section} if config file {config} is updated")
-
-
-def edit_config(service, string, section):
-    def wrapper(test):
-        def inner_wrapper(*args):
-            _edit_config(SERVICES[service], string, section)
-            restart_service(service)
-            test(args)
-            restore_config(service)
-            restart_service(service)
-        return inner_wrapper
-    return wrapper
 
 
 def restart_service(service):
