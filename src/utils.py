@@ -1,12 +1,15 @@
 import shutil
 import subprocess as subp
 from os import path
+from random import randint
+
+from OpenSSL import crypto
 
 from SCAutolib import log
 
-FILE_PATH = path.dirname(path.abspath(__file__))
+DIR_PATH = path.dirname(path.abspath(__file__))
 SERVICES = {"sssd": "/etc/sssd/sssd.conf", "krb": "/etc/krb5.conf"}
-DEFAULTS = {"sssd": f"{FILE_PATH}/env/conf/sssd.conf"}
+DEFAULTS = {"sssd": f"{DIR_PATH}/env/conf/sssd.conf"}
 
 
 def edit_config(service, string, section):
@@ -42,7 +45,7 @@ def _edit_config(config, string, section):
 
 def restart_service(service):
     try:
-        subp.run(["systemctl", "restart", f"{service}"], check=True, capture_output=True, text=True, encoding="utf8")
+        subp.run(["systemctl", "restart", f"{service}"], check=True, encoding="utf8")
         log.debug(f"Service {service} is restarted")
     except subp.CalledProcessError as e:
         log.error(f"Command {e.cmd} is ended with non-zero return code ({e.returncode})")
