@@ -6,7 +6,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.x509.oid import NameOID
 from cryptography import x509
-from shutil import copy, SameFileError
+from shutil import copy, SameFileError, copyfile
 from SCAutolib import log
 
 DIR_PATH = path.dirname(path.abspath(__file__))
@@ -37,15 +37,17 @@ def backup(file_path, service=None):
         def inner_wrapper(*args):
             if not path.exists(BACKUP):
                 mkdir(BACKUP)
-            target = f"{BACKUP}/{path.split(file_path)[1]}-backup"
+            target = f"{BACKUP}/{path.split(file_path)[1]}"
             copy(file_path, target)
             log.debug(f"File from {file_path} is copied to {target}")
             if service is not None:
                 restart_service(service)
+
             test(args)
+
             copy(target, file_path)
             log.debug(f"File from {target} is restored to {file_path}")
-            remove(file_path)
+            remove(target)
             if service is not None:
                 restart_service(service)
 
@@ -73,9 +75,10 @@ def _edit_config(config, string, section):
 
 def restart_service(service):
     try:
-        subp.run(["systemctl", "restart", f"{service}"], check=True, encoding="utf8")
+        result = subp.run(["systemctl", "restart", f"{service}"], check=True, encoding="utf8")
+        assert result.returncode == 0
         log.debug(f"Service {service} is restarted")
-    except subp.CalledProcessError as e:
+    except (subp.CalledProcessError, AssertionError) as e:
         log.error(f"Command {e.cmd} is ended with non-zero return code ({e.returncode})")
         log.error(f"stdout:\n{e.stdout}")
         log.error(f"stderr:\n{e.stderr}")
