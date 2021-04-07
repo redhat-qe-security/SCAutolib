@@ -6,7 +6,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.x509.oid import NameOID
 from cryptography import x509
-from shutil import copy
+from shutil import copy, SameFileError
 from SCAutolib import log
 
 DIR_PATH = path.dirname(path.abspath(__file__))
@@ -86,9 +86,9 @@ def restart_service(service):
 
 def restore_config(service=None):
     try:
-        shutil.copyfile(DEFAULTS[service], SERVICES[service])
+        copy(DEFAULTS[service], SERVICES[service])
         log.debug(f"File {SERVICES[service]} is restored")
-    except shutil.SameFileError:
+    except SameFileError:
         log.debug(f"Source file {DEFAULTS[service]} and destination file {SERVICES[service]} are the same")
     except Exception as e:
         log.error(f"Unexpected exception is raised: {e}")
