@@ -54,7 +54,6 @@ def backup(file_path: str, service: str = None):
                     By default is None - no service is need to be restarted
     :return: decorated function
     """
-
     def wrapper(test):
         def inner_wrapper(*args):
             if not path.exists(BACKUP):
@@ -73,7 +72,6 @@ def backup(file_path: str, service: str = None):
                 remove(target)
                 if service is not None:
                     restart_service(service)
-
         return inner_wrapper
 
     return wrapper
@@ -126,7 +124,7 @@ def restart_service(service: str):
         raise e
 
 
-def generate_root_ca_crt():
+def generate_root_ca_crt(issuer="Example"):
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     serial = randint(1, 1000)
     if not path.exists(TMP):
