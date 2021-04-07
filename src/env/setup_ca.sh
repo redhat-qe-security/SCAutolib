@@ -33,6 +33,7 @@ NSSDB=$VIRT/db
 CONF=$VIRT/conf
 NAME=localuser1
 
+
 if [[ ! -f "$CONF/softhsm2.conf" ]]
 then 
     echo "File $CONF/softhsm2.conf does not exist"
