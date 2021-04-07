@@ -2,3 +2,6 @@
 src/env/krb-server-client-setup-rhel8.sh
 src/env/keys*
 *.pem*
+*tmp*
+.idea/
+.vscode/
