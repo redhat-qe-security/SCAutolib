@@ -28,13 +28,13 @@ fi
 SOPIN='12345678'
 PIN='123456'
 export GNUTLS_PIN=$PIN
-VIRT=$DIR/virt_card
-NSSDB=$DIR/virt_card/db
+VIRT=$DIR
+NSSDB=$VIRT/db
 CONF=$VIRT/conf
 NAME=localuser1
 
-mkdir $VIRT
-cp -r $DIR/SCAutolib/src/env/conf $CONF
+#mkdir $VIRT
+#cp -r $DIR/SCAutolib/src/env/conf $CONF
 
 if [[ ! -f "$CONF/softhsm2.conf" ]]
 then 
@@ -69,7 +69,7 @@ pushd $VIRT || exit
 
 mkdir tokens
 export SOFTHSM2_CONF="$CONF/softhsm2.conf" # Should I save previous value of 
-softhsm2-util --init-token --slot 0 --label 'SC test' --so-pin="$SOPIN" --pin="$PIN"
+softhsm2-util --init-token --slot 0 --label "SC test" --so-pin="$SOPIN" --pin="$PIN"
 
 
 # Creating NSS database
@@ -86,7 +86,9 @@ touch serial index.txt crlnumber index.txt.attr
 echo 01 > serial
 openssl genrsa -out rootCA.key 2048
 
-openssl req -batch -config $CONF/ca.cnf -x509 -new -nodes -key rootCA.key -sha256 -days 10000 -set_serial 0 -extensions v3_ca -out $VIRT/rootCA.crt
+openssl req -batch -config $CONF/ca.cnf -x509 -new -nodes \
+            -key rootCA.key -sha256 -days 10000 -set_serial 0 \
+            -extensions v3_ca -out $VIRT/rootCA.crt
 openssl ca -config $CONF/ca.cnf -gencrl -out crl/root.crl
 
 # Setup user and certs on the card
@@ -107,32 +109,5 @@ cp /usr/lib/systemd/system/pcscd.service /etc/systemd/system/
 sed -i 's/ --auto-exit//' /etc/systemd/system/pcscd.service
 systemctl daemon-reload
 systemctl restart pcscd
-
-######################################
-# Install virt_cacard service
-######################################
-dnf -y install virt_cacard
-cp $CONF/virt_cacard.service /etc/systemd/system/virt_cacard.service
-sed -i "s,{TESTDIR},$VIRT,g" /etc/systemd/system/virt_cacard.service
-systemctl daemon-reload
-echo 'disable-in: virt_cacard' >> /usr/share/p11-kit/modules/opensc.module
-systemctl restart pcscd virt_cacard
-sleep 10
-
-mkdir /home/localuser1/.ssh
-ssh-keygen -D /usr/lib64/pkcs11/opensc-pkcs11.so > ~localuser1/.ssh/authorized_keys
-chown -R localuser1:localuser1 ~localuser1/.ssh/
-chmod 700 ~localuser1/.ssh/
-chmod 600 ~localuser1/.ssh/authorized_keys
-
-cp $CONF/sssd.conf /etc/sssd/sssd.conf
-chmod 600 /etc/sssd/sssd.conf
-cat $VIRT/rootCA.crt > /etc/sssd/pki/sssd_auth_ca_db.pem
-
-systemctl stop pcscd.service pcscd.socket virt_cacard sssd
-rm -rf /var/lib/sss/{db,mc}/*
-systemctl start pcscd sssd
-
-pip3 install avocado-framework pexpect
 
 exit 0

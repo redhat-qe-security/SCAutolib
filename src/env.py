@@ -5,15 +5,23 @@ import os
 
 log = logging.getLogger("base")
 
+# TODO add docs about parameters
+path = os.path.dirname(os.path.abspath(__file__))
+
 
 def setup_ca(dir_path):
-    assert os.path.exists(dir_path), "Path is not exist"
-    assert os.path.isdir(dir_path), "Not a directory"
+    # FIXME: setup_ca.sh is updated
+    """
+    Call bash sript for settingup the local CA
+    :param dir_path: working directory
+    """
+    # assert os.path.exists(dir_path), "Path is not exist"
+    # assert os.path.isdir(dir_path), "Not a directory"
     log.debug("Start setup of local CA")
     out = subp.run(
-        ["bash", f"{dir_path}/SCAutolib/src/env/setup_ca.sh", "-d", dir_path])
+        ["ansible-playbook", f"{path}/env/main.yml"])
 
-    assert out.returncode == 0, "Something break in setup script :("
+    assert out.returncode == 0, "Something break in setup playbook :("
     log.debug("Setup of local CA is completed")
 
 
