@@ -2,6 +2,8 @@ import datetime
 import subprocess as subp
 from os import path, mkdir, remove
 from random import randint
+from time import sleep
+
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.x509.oid import NameOID
@@ -18,21 +20,41 @@ CERTS = f"{TMP}/certs"
 BACKUP = f"{TMP}/backup"
 
 
-def edit_config(service, string, section):
+def edit_config(service: str, string: str, holder: str, section: bool = True):
+    """
+    Decorator for editing config file. Before editing, config file is backuped.
+
+    :param service: service for which config file will be edited
+    :param string: string to add or replace
+    :param holder: what is need to be replace. In case of adding the string to
+                   the file, specify section where string should be added
+    :param section: specify if holder is a name of a section in the config file
+    :return: decorated function
+    """
+
     def wrapper(test):
+        @backup(SERVICES[service], service)
         def inner_wrapper(*args):
-            _edit_config(SERVICES[service], string, section)
+            _edit_config(SERVICES[service], string, holder, section)
             restart_service(service)
             test(args)
-            restore_config(service)
-            restart_service(service)
 
         return inner_wrapper
 
     return wrapper
 
 
-def backup(file_path, service=None):
+def backup(file_path: str, service: str = None):
+    """
+    Decorator for backingup file. After executing wrapped function, restore
+    given file to the prevrious location.
+
+    :param file_path: path to file to be backuped
+    :param service: service to be restarted after restoring the file.
+                    By default is None - no service is need to be restarted
+    :return: decorated function
+    """
+
     def wrapper(test):
         def inner_wrapper(*args):
             if not path.exists(BACKUP):
@@ -40,46 +62,63 @@ def backup(file_path, service=None):
             target = f"{BACKUP}/{path.split(file_path)[1]}"
             copy(file_path, target)
             log.debug(f"File from {file_path} is copied to {target}")
-            if service is not None:
-                restart_service(service)
 
-            test(args)
-
-            copy(target, file_path)
-            log.debug(f"File from {target} is restored to {file_path}")
-            remove(target)
-            if service is not None:
-                restart_service(service)
+            try:
+                test(args)
+            except Exception as e:
+                raise e
+            finally:
+                copy(target, file_path)
+                log.debug(f"File from {target} is restored to {file_path}")
+                remove(target)
+                if service is not None:
+                    restart_service(service)
 
         return inner_wrapper
 
     return wrapper
 
 
-def _edit_config(config, string, section):
-    holder = f"#<{section}>"
+def _edit_config(config: str, string: str, holder: str, section: bool):
+    """
+    Funcion for actual editing the config file.
+
+    :param config: path to config file
+    :param string: string to be add
+    :param holder: section or substinrg to update
+    :param section: specify if holder is a section
+    """
+    old = f"#<{holder}>" if section else holder
+    new = f"{string}\n{old}" if section else string
+
     with open(config, "r") as file:
         content = file.read()
-        if holder not in content:
+        if (old is not None) and (old not in content):
             log.error(f"File {config} is not updated. "
                       f"Maybe placeholder in the config {config} "
-                      f"for the section {section} is missing?")
-            raise Exception(f"Placeholder {holder} is not present in {config}")
+                      f"for the section {holder} is missing?")
+            raise Exception(f"Placeholder {old} is not present in {config}")
 
-    content = content.replace(holder, f"{string}\n{holder}")
+    content = content.replace(old, new)
     with open(config, "w+") as file:
         file.write(content)
 
-    log.debug(f"Section {section} if config file {config} is updated")
+    log.debug(f"Section {holder} if config file {config} is updated")
 
 
-def restart_service(service):
+def restart_service(service: str):
+    """
+    Restart given service and wait 5 sec
+
+    :param service: service name
+    """
     try:
         result = subp.run(["systemctl", "restart", f"{service}"], check=True, encoding="utf8")
         assert result.returncode == 0
+        sleep(5)
         log.debug(f"Service {service} is restarted")
     except (subp.CalledProcessError, AssertionError) as e:
-        log.error(f"Command {e.cmd} is ended with non-zero return code ({e.returncode})")
+        log.error(f"Command {' '.join(e.cmd)} is ended with non-zero return code ({e.returncode})")
         log.error(f"stdout:\n{e.stdout}")
         log.error(f"stderr:\n{e.stderr}")
     except Exception as e:
@@ -87,19 +126,7 @@ def restart_service(service):
         raise e
 
 
-def restore_config(service=None):
-    try:
-        copy(DEFAULTS[service], SERVICES[service])
-        log.debug(f"File {SERVICES[service]} is restored")
-    except SameFileError:
-        log.debug(f"Source file {DEFAULTS[service]} and destination file {SERVICES[service]} are the same")
-    except Exception as e:
-        log.error(f"Unexpected exception is raised: {e}")
-        log.error(f"File {SERVICES[service]} is not restored")
-        raise e
-
-
-def generate_root_ca_crt(issuer="Example"):
+def generate_root_ca_crt():
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     serial = randint(1, 1000)
     if not path.exists(TMP):
