@@ -33,9 +33,6 @@ NSSDB=$VIRT/db
 CONF=$VIRT/conf
 NAME=localuser1
 
-#mkdir $VIRT
-#cp -r $DIR/SCAutolib/src/env/conf $CONF
-
 if [[ ! -f "$CONF/softhsm2.conf" ]]
 then 
     echo "File $CONF/softhsm2.conf does not exist"
