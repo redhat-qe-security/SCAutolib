@@ -5,23 +5,38 @@ from SCAutolib import log
 
 
 class VirtCard:
-    def __init__(self):
+    def __init__(self, insert=False):
+        self._inserted = insert
         log.debug("Smart card initialized")
 
     def __enter__(self):
+        if self._inserted:
+            self.insert()
         return self
 
-    def __exit__(self, except_type, except_value, except_trace):
+    def __exit__(self, exp_type, exp_value, exp_traceback):
+        if exp_type is not None:
+            log.error("Exception in authselect context")
+            log.error(f"Exception type: {exp_type}")
+            log.error(f"Exception value: {exp_value}")
+            log.error(f"Exception traceback: {exp_traceback}")
         self.remove()
 
     def remove(self):
-        subp.run(["systemctl", "stop", "virt_cacard.service"])
+        rc = subp.run(["systemctl", "stop", "virt_cacard.service"])
+        time.sleep(2)
+        msg = "Smart card removal failed"
+        assert rc.returncode == 0, msg
+        self._inserted = False
         log.debug("Smart card removed")
 
     def insert(self):
-        subp.run(["systemctl", "start", "virt_cacard.service"])
+        rc = subp.run(["systemctl", "start", "virt_cacard.service"])
         time.sleep(2)
-        log.debug("Smart card inserted")
+        msg = "Smart card insert failed"
+        assert rc.returncode == 0, msg
+        self._inserted = True
+        log.debug("Smart card is inserted")
 
     def enroll(self):
         log.debug("Smart card enrolled")
