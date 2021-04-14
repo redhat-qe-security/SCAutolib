@@ -8,8 +8,10 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.x509.oid import NameOID
 from cryptography import x509
-from shutil import copy, SameFileError, copyfile
+from shutil import copy
 from SCAutolib import log
+import SCAutolib.src.virt_card as virt_sc
+import SCAutolib.src.authselect as authselect
 
 DIR_PATH = path.dirname(path.abspath(__file__))
 SERVICES = {"sssd": "/etc/sssd/sssd.conf", "krb": "/etc/krb5.conf"}
@@ -104,21 +106,23 @@ def _edit_config(config: str, string: str, holder: str, section: bool):
     log.debug(f"Section {holder} if config file {config} is updated")
 
 
-def restart_service(service: str):
+def restart_service(service: str) -> int:
     """
     Restart given service and wait 5 sec
 
     :param service: service name
+    :return: return code of systemcrt restart
     """
     try:
         result = subp.run(["systemctl", "restart", f"{service}"], check=True, encoding="utf8")
-        assert result.returncode == 0
         sleep(5)
         log.debug(f"Service {service} is restarted")
-    except (subp.CalledProcessError, AssertionError) as e:
+        return result.returncode
+    except subp.CalledProcessError as e:
         log.error(f"Command {' '.join(e.cmd)} is ended with non-zero return code ({e.returncode})")
         log.error(f"stdout:\n{e.stdout}")
         log.error(f"stderr:\n{e.stderr}")
+        return e.returncode
     except Exception as e:
         log.error(f"Unexpected exception is raised: {e}")
         raise e
@@ -172,3 +176,11 @@ def generate_root_ca_crt(issuer="Example"):
         f.write(builder.public_bytes(serialization.Encoding.PEM))
 
     return cert, key_path
+
+
+def check_su_login_with_sc(pin=True, passwd="123456"):
+    """Function for common use case - su loging"""
+    with authselect.Authselect():
+        with virt_sc.VirtCard(insert=True) as sc:
+            sc.run_cmd('su - localuser1 -c "su - localuser1 -c whoami"',
+                       expect="localuser1", passwd=passwd, pin=pin)
