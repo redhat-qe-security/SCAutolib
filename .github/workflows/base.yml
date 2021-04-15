@@ -32,4 +32,4 @@ jobs:
         run: pip3 install pytest
 
       - name: Run pytest
-        run: pytest test/test_utils.py
+        run: pytest -m ci test/
