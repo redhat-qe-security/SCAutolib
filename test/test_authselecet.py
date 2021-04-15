@@ -1,5 +1,5 @@
 from pytest import mark
 
-@mark.ci
+@mark.centos
 def test():
     assert True

@@ -23,27 +23,11 @@ jobs:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v2
 
-      - name: Red Hat release
-        run: cat /etc/redhat-release
-      
-      - name: Info
-
-        run: |
-          echo "🎉 The job was automatically triggered by a ${{ github.event_name }} event."
-          echo "🐧 This job is now running on a ${{ runner.os }} server hosted by GitHub!"
-          echo "🔎 The name of your branch is ${{ github.ref }} and your repository is ${{ github.repository }}."
-          echo "💡 The ${{ github.repository }} repository has been cloned to the runner."
-          echo "🖥️ The workflow is now ready to test your code on the runner."
-      - name: List files in the repository
-        run: |
-          ls 
-          echo "🍏 This job's status is ${{ job.status }}."
-
-      - name: Test pip
-        run: pip3 --version
+      - name: Upgrade pip
+        run: python3 -m pip install --upgrade pip
 
       - name: Install pytest
-        run: pip3 install pytest
+        run: pip3 install pytest cryptography
 
       - name: Run pytest
-        run: pytest
+        run: pytest -m centos test/
