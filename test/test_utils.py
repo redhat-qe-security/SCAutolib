@@ -9,9 +9,9 @@ FILES = f"{CUR_PATH}/files"
 
 def test_service_restart():
     """Test for restarting the service"""
-    rc = utils.restart_service("sssd")
+    rc = utils.restart_service("cron")
     assert rc == 0
-    stat = system("systemctl status sssd")
+    stat = system("systemctl status cron")
     assert stat == 0
 
 

@@ -6,6 +6,7 @@ from time import sleep
 
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization, hashes
+from cryptography.hazmat.backends import default_backend
 from cryptography.x509.oid import NameOID
 from cryptography import x509
 from shutil import copy, SameFileError, copyfile
@@ -127,7 +128,7 @@ def restart_service(service: str) -> int:
 
 
 def generate_root_ca_crt(issuer="Example"):
-    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048, backend=default_backend())
     serial = randint(1, 1000)
     if not path.exists(TMP):
         mkdir(TMP)
@@ -168,7 +169,7 @@ def generate_root_ca_crt(issuer="Example"):
         .add_extension(key_usage, critical=True) \
         .add_extension(subject_key, critical=True) \
         .add_extension(authority_key, critical=True) \
-        .sign(key, hashes.SHA256())
+        .sign(key, hashes.SHA256(), default_backend())
     cert = f"{CERTS}/rootCA-{serial}.pem"
     with open(cert, "wb") as f:
         f.write(builder.public_bytes(serialization.Encoding.PEM))
