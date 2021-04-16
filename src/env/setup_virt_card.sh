@@ -1,11 +1,11 @@
 CONF=""
 VIRT=""
 
-while getopts c:v: flag
+while getopts c:w: flag
 do
     case "$flag" in
         c) CONF=$OPTARG;;
-        v) VIRT=$OPTARG;;
+        w) VIRT=$OPTARG;;
         *) echo "Invalid flag is used: $flag";;
     esac
 done

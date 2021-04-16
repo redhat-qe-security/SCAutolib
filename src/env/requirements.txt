@@ -1,0 +1,4 @@
+avocado-framework
+pexpect
+click
+pyyaml

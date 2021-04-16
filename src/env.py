@@ -1,46 +1,78 @@
-import subprocess as subp
 import logging
-import sys
-import os
+from os.path import (exists, realpath, isdir,
+                     isfile, dirname, abspath)
+import click
+import yaml
+import subprocess as subp
 
 log = logging.getLogger("base")
 
 # TODO add docs about parameters
-path = os.path.dirname(os.path.abspath(__file__))
+path = dirname(abspath(__file__))
+SETUP_CA = f"{path}/env/setup_ca.sh"
+SETUP_VSC = f"{path}/env/setup_virt_card.sh"
+CLEANUP_CA = f"{path}/env/cleanup_ca.sh"
 
 
-def setup_ca(dir_path):
-    # FIXME: setup_ca.sh is updated
+@click.group()
+def cli():
+    pass
+
+
+@click.command()
+@click.option("--path", "-p", type=click.Path(), help="Path to working directory")
+@click.option("--conf", "-c", type=click.Path(), help="Path to YAML file with configurations")
+def setup_ca(path, conf):
     """
-    Call bash sript for settingup the local CA
-    :param dir_path: working directory
+    Call bash sript for settingup the local CA.
     """
-    # assert os.path.exists(dir_path), "Path is not exist"
-    # assert os.path.isdir(dir_path), "Not a directory"
+    assert exists(path), f"Path {path} is not exist"
+    assert isdir(path), f"{path} is not a directory"
+    assert exists(realpath(conf)), f"File {conf} is not exist"
+    assert isfile(realpath(conf)), f"{conf} is not a file"
+
     log.debug("Start setup of local CA")
-    out = subp.run(
-        ["ansible-playbook", f"{path}/env/main.yml"])
+
+    with open(conf, "r") as file:
+        data = yaml.load(file, Loader=yaml.FullLoader)
+        user = data["variables"]["user"]
+        out = subp.run(["bash", SETUP_CA, "--dir", path,
+                        "--username", user["name"],
+                        "--userpasswd", user["passwd"],
+                        "--pin", user["pin"]])
+        assert out.returncode == 0, "Something break in setup playbook :("
+        log.debug("Setup of local CA is completed")
+
+
+@click.command()
+@click.option("--conf", "-c", type=click.Path())
+@click.option("--work-dir", "-w", type=click.Path())
+def setup_virt_card(conf, work_dir):
+    assert exists(conf), f"Path {conf} is not exist"
+    assert isdir(conf), f"{conf} Not a directory"
+    assert exists(work_dir), f"Path {work_dir} is not exist"
+    assert isdir(work_dir), f"{work_dir} Not a directory"
+
+    log.debug("Start setup of local CA")
+    out = subp.run(["bash", SETUP_VSC, "-c", conf, "-w", work_dir])
 
     assert out.returncode == 0, "Something break in setup playbook :("
     log.debug("Setup of local CA is completed")
 
 
-def cleanup_ca(dir_path):
+@click.command()
+def cleanup_ca():
     log.debug("Start cleanup of local CA")
     out = subp.run(
-        ["bash", f"{dir_path}/SCAutolib/src/env/cleanup_ca.sh"])
+        ["bash", CLEANUP_CA])
 
     assert out.returncode == 0, "Something break in setup script :("
     log.debug("Cleanup of local CA is completed")
 
 
+cli.add_command(setup_ca)
+cli.add_command(setup_virt_card)
+cli.add_command(cleanup_ca)
+
 if __name__ == "__main__":
-    assert len(sys.argv) < 4, "Too many input arguments"
-    fnc = {"setup_ca": setup_ca, "cleanup_ca": cleanup_ca}
-    try:
-        name = sys.argv[1]
-        dir_path = sys.argv[2]
-        fnc[name](dir_path)
-    except KeyError:
-        log.error(f"Wrong function name: {name}")
-        exit(1)
+    cli()
