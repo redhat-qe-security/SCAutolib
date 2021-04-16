@@ -2,3 +2,4 @@ avocado-framework
 pexpect
 click
 pyyaml
+cryptography
