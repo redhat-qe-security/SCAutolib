@@ -128,7 +128,12 @@ def restart_service(service: str) -> int:
         raise e
 
 
-def generate_root_ca_crt(issuer="Example"):
+def generate_root_ca_crt():
+    """
+    Function for generating the root CA certificate with keys
+
+    :return: tuple with path to the certificate and to the key files.
+    """
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     serial = randint(1, 1000)
     if not path.exists(TMP):
@@ -178,9 +183,15 @@ def generate_root_ca_crt(issuer="Example"):
     return cert, key_path
 
 
-def check_su_login_with_sc(pin=True, passwd="123456"):
-    """Function for common use case - su loging"""
+def check_su_login_with_sc(pin=True, passwd="123456", username="localuser1"):
+    """
+    Function for common use case - su loging.
+
+    :param pin: Specif is PIN or password is used for login
+    :param passwd: PIN or password for login
+    :param username: username to login
+    """
     with authselect.Authselect():
         with virt_sc.VirtCard(insert=True) as sc:
-            sc.run_cmd('su - localuser1 -c "su - localuser1 -c whoami"',
-                       expect="localuser1", passwd=passwd, pin=pin)
+            sc.run_cmd(f'su - {username} -c "su - {username} -c whoami"',
+                       expect=username, passwd=passwd, pin=pin)
