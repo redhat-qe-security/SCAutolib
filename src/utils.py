@@ -3,15 +3,16 @@ import subprocess as subp
 from os import path, mkdir, remove
 from random import randint
 from time import sleep
-
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.x509.oid import NameOID
 from cryptography import x509
 from shutil import copy
-from SCAutolib import log
+
 import SCAutolib.src.virt_card as virt_sc
 import SCAutolib.src.authselect as authselect
+from SCAutolib import log
+
 
 DIR_PATH = path.dirname(path.abspath(__file__))
 SERVICES = {"sssd": "/etc/sssd/sssd.conf", "krb": "/etc/krb5.conf"}
@@ -33,7 +34,6 @@ def edit_config(service: str, string: str, holder: str, section: bool = True):
     :param section: specify if holder is a name of a section in the config file
     :return: decorated function
     """
-
     def wrapper(test):
         @backup(SERVICES[service], service)
         def inner_wrapper(*args):
@@ -103,7 +103,8 @@ def _edit_config(config: str, string: str, holder: str, section: bool):
     with open(config, "w+") as file:
         file.write(content)
 
-    log.debug(f"Section {holder} if config file {config} is updated")
+    log.debug(f"{'Section' if section else 'Substring'} {holder} in config "
+              f"file {config} is updated")
 
 
 def restart_service(service: str) -> int:
@@ -123,9 +124,6 @@ def restart_service(service: str) -> int:
         log.error(f"stdout:\n{e.stdout}")
         log.error(f"stderr:\n{e.stderr}")
         return e.returncode
-    except Exception as e:
-        log.error(f"Unexpected exception is raised: {e}")
-        raise e
 
 
 def generate_root_ca_crt():
