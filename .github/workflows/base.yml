@@ -25,6 +25,10 @@ jobs:
 
       - name: Check OS
         run: uname -a
+
+      - name: Who Am I
+        run: whoami
+
       - name: Cecheck redhat release
         run: cat /etc/redhat-release
 
