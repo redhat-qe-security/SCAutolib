@@ -113,7 +113,7 @@ def restart_service(service: str) -> int:
     :return: return code of systemcrt restart
     """
     try:
-        result = subp.run(["systemctl", "restart", f"{service}"], check=True, encoding="utf8")
+        result = subp.run(["sudo", "systemctl", "restart", f"{service}"], check=True, encoding="utf8")
         sleep(5)
         log.debug(f"Service {service} is restarted")
         return result.returncode
