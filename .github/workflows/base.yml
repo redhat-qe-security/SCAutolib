@@ -32,6 +32,9 @@ jobs:
       - name: Upgrade pip
         run: python3 -m pip install --upgrade pip
 
+      - name: Install library requirements
+        run: pip3 install --upgrade -I -r src/env/requirements.txt --user
+
       - name: Install pytest
         run: pip3 install pytest
 
