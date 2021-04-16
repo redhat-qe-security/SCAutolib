@@ -6,3 +6,11 @@ variables:
       name: localuser1
       passwd: "654321"
       pin: "123456"
+configs:
+  dir: conf/
+  sssd: conf/sssd.conf
+  softhsm: conf/softhsm2.conf
+  ca_cnf: conf/ca.cnf
+  req_user: conf/req_"{{ variables.user.name }}".cnf
+  virtcacard: conf/virtcacard.cil
+  service: conf/virt_cacard.service

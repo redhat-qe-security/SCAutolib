@@ -1,7 +1,13 @@
 #!/usr/bin/bash
-DIR=""
+
+DIR="."
 NAME="localuser1"
 PIN='123456'
+SOPIN='12345678'
+export GNUTLS_PIN=$PIN
+VIRT=$DIR
+NSSDB=$VIRT/db
+CONF=$VIRT/conf
 
 function help() {
   echo -e "Script for settingup the local Certificate Authority and virtual smart card"
@@ -58,16 +64,6 @@ dnf -y module enable idm:DL1
 dnf -y copr enable jjelen/vsmartcard
 dnf -y install vpcd softhsm python3-pip sssd-tools
 yum groupinstall "Smart Card Support" -y
-
-if [[ $DIR == "" ]]; then
-  DIR=.
-fi
-
-SOPIN='12345678'
-export GNUTLS_PIN=$PIN
-VIRT=$DIR
-NSSDB=$VIRT/db
-CONF=$VIRT/conf
 
 if [[ ! -f "$CONF/softhsm2.conf" ]]; then
   echo "File $CONF/softhsm2.conf does not exist"

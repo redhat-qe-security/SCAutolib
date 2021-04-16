@@ -45,16 +45,16 @@ def setup_ca(path, conf):
 
 
 @click.command()
-@click.option("--conf", "-c", type=click.Path())
+@click.option("--conf-dir", "-C", type=click.Path(), help="Direc")
 @click.option("--work-dir", "-w", type=click.Path())
-def setup_virt_card(conf, work_dir):
-    assert exists(conf), f"Path {conf} is not exist"
-    assert isdir(conf), f"{conf} Not a directory"
+def setup_virt_card(conf_dir, work_dir):
+    assert exists(conf_dir), f"Path {conf_dir} is not exist"
+    assert isdir(conf_dir), f"{conf_dir} Not a directory"
     assert exists(work_dir), f"Path {work_dir} is not exist"
     assert isdir(work_dir), f"{work_dir} Not a directory"
 
     log.debug("Start setup of local CA")
-    out = subp.run(["bash", SETUP_VSC, "-c", conf, "-w", work_dir])
+    out = subp.run(["bash", SETUP_VSC, "-c", conf_dir, "-w", work_dir])
 
     assert out.returncode == 0, "Something break in setup playbook :("
     log.debug("Setup of local CA is completed")
