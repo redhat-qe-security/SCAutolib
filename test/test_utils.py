@@ -12,19 +12,19 @@ def test_service_restart():
     """Test for restarting the service"""
     rc = utils.restart_service("sssd")
     assert rc == 0
-    stat = system("systemctl status cron")
+    stat = system("sudo systemctl status sssd")
     assert stat == 0
 
 @pytest.mark.ci
 def test_service_restart_fail():
     """Test for fault of service restart."""
-    copy(f"{FILES}/test.service", "/etc/systemd/system/test.service")
-    rc = system("sudo systemctl daemon-reload")
+    system(f"cp {FILES}/test.service", "/etc/systemd/system/test.service")
+    rc = system("systemctl daemon-reload")
     assert rc == 0
     rc = utils.restart_service("test")
     assert rc != 0
-    remove("/etc/systemd/system/test.service")
-    rc = system("sudo systemctl daemon-reload")
+    system("rm -f /etc/systemd/system/test.service")
+    rc = system("systemctl daemon-reload")
     assert rc == 0
 
 

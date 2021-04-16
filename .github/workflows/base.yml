@@ -28,6 +28,9 @@ jobs:
 
       - name: Cecheck redhat release
         run: cat /etc/redhat-release
+      
+      - name: who am i
+        run: whoami
 
       - name: Upgrade pip
         run: python3 -m pip install --upgrade pip
