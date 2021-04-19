@@ -1,5 +1,6 @@
 #!/usr/bin/bash
 
+set -xe
 NAME=localuser1
 
 dnf -y module disable idm:DL1

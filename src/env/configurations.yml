@@ -7,7 +7,7 @@ variables:
       passwd: "654321"
       pin: "123456"
 configs:
-  dir: conf/
+  dir: conf/ # relative to the file or full path lik /root/conf
   sssd: conf/sssd.conf
   softhsm: conf/softhsm2.conf
   ca_cnf: conf/ca.cnf

@@ -1,19 +1,29 @@
 #!/usr/bin/bash
 
-DIR="."
+set -xe
+
+bold=$(tput bold)
+normal=$(tput sgr0)
+
+
 NAME="localuser1"
 PIN='123456'
 SOPIN='12345678'
 export GNUTLS_PIN=$PIN
-VIRT=$DIR
-NSSDB=$VIRT/db
-CONF=$VIRT/conf
+DIR="."
+NSSDB=$DIR/db
+CONF=$DIR/conf
 
 function help() {
   echo -e "Script for settingup the local Certificate Authority and virtual smart card"
   echo -e "\t-h -- this message"
   echo -e "\t-dir directory where SCAutoLib directory is located"
 }
+
+function log() {
+  echo -e "${bold}[LOG $(date +"%T")]${normal} $1"
+}
+
 
 while (("$#")); do
   case "$1" in
@@ -48,7 +58,15 @@ while (("$#")); do
       exit 1
     fi
     ;;
-
+  --conf-dir)
+    if [ -n "$2" ] && [ "${2:0:1}" != "-" ]; then
+      CONF=$2
+      shift 2
+    else
+      echo "Error: Argument for $1 is missing" >&2
+      exit 1
+    fi
+    ;;
   -h | --help)
     help
     shift
@@ -59,11 +77,6 @@ while (("$#")); do
     ;;
   esac
 done
-
-dnf -y module enable idm:DL1
-dnf -y copr enable jjelen/vsmartcard
-dnf -y install vpcd softhsm python3-pip sssd-tools
-yum groupinstall "Smart Card Support" -y
 
 if [[ ! -f "$CONF/softhsm2.conf" ]]; then
   echo "File $CONF/softhsm2.conf does not exist"
@@ -85,10 +98,16 @@ elif [[ ! -f "$CONF/sssd.conf" ]]; then
   exit 1
 fi
 
+dnf -y module enable idm:DL1
+dnf -y copr enable jjelen/vsmartcard
+dnf -y install vpcd softhsm python3-pip sssd-tools
+yum groupinstall "Smart Card Support" -y
+
 # Configurting softhm2
 P11LIB='/usr/lib64/pkcs11/libsofthsm2.so'
-sed -i "s,<TESTDIR>,$VIRT,g" $CONF/softhsm2.conf
-pushd $VIRT || exit
+sed -i "s,<TESTDIR>,$DIR,g" $CONF/softhsm2.conf
+cat $CONF/softhsm2.conf
+pushd $DIR || exit
 
 mkdir tokens
 export SOFTHSM2_CONF="$CONF/softhsm2.conf" # Should I save previous value of
@@ -110,7 +129,7 @@ openssl genrsa -out rootCA.key 2048
 
 openssl req -batch -config $CONF/ca.cnf -x509 -new -nodes \
   -key rootCA.key -sha256 -days 10000 -set_serial 0 \
-  -extensions v3_ca -out $VIRT/rootCA.crt
+  -extensions v3_ca -out $DIR/rootCA.crt
 openssl ca -config $CONF/ca.cnf -gencrl -out crl/root.crl
 
 # Setup user and certs on the card
@@ -131,5 +150,7 @@ cp /usr/lib/systemd/system/pcscd.service /etc/systemd/system/
 sed -i 's/ --auto-exit//' /etc/systemd/system/pcscd.service
 systemctl daemon-reload
 systemctl restart pcscd
+
+log "End of setup-ca script"
 
 exit 0

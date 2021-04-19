@@ -1,5 +1,16 @@
+#!/usr/bin/bash
+
+set -x -e
+
+bold=$(tput bold)
+normal=$(tput sgr0)
+
 CONF=""
 VIRT=""
+
+function log() {
+  echo -e "${bold}[LOG $(date +"%T")]${normal} $1"
+}
 
 while getopts c:w: flag
 do
@@ -9,7 +20,6 @@ do
         *) echo "Invalid flag is used: $flag";;
     esac
 done
-
 
 dnf -y install virt_cacard
 cp $CONF/virt_cacard.service /etc/systemd/system/virt_cacard.service
@@ -32,3 +42,7 @@ cat $VIRT/rootCA.crt > /etc/sssd/pki/sssd_auth_ca_db.pem
 systemctl stop pcscd.service pcscd.socket virt_cacard sssd
 rm -rf /var/lib/sss/{db,mc}/*
 systemctl start pcscd sssd
+
+log "End of setup-virt-card script"
+
+exit 0
