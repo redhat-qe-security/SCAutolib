@@ -36,10 +36,10 @@ def edit_config(service: str, string: str, holder: str, section: bool = True):
     """
     def wrapper(test):
         @backup(SERVICES[service], service)
-        def inner_wrapper(*args):
+        def inner_wrapper(*args, **kwargs):
             _edit_config(SERVICES[service], string, holder, section)
             restart_service(service)
-            test(*args)
+            test(*args, **kwargs)
 
         return inner_wrapper
 
@@ -57,7 +57,7 @@ def backup(file_path: str, service: str = None):
     :return: decorated function
     """
     def wrapper(test):
-        def inner_wrapper(*args):
+        def inner_wrapper(*args, **kwargs):
             if not path.exists(TMP):
                 mkdir(TMP)
             if not path.exists(BACKUP):
@@ -67,7 +67,7 @@ def backup(file_path: str, service: str = None):
             log.debug(f"File from {file_path} is copied to {target}")
 
             try:
-                test(*args)
+                test(*args, **kwargs)
             except Exception as e:
                 raise e
             finally:
