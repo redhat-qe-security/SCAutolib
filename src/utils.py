@@ -14,7 +14,7 @@ import SCAutolib.src.authselect as authselect
 from SCAutolib import log
 
 
-DIR_PATH = path.dirname(path.abspath(__file__))
+DIR_PATH = path.realpath(path.dirname(path.abspath(__file__)))
 SERVICES = {"sssd": "/etc/sssd/sssd.conf", "krb": "/etc/krb5.conf"}
 DEFAULTS = {"sssd": f"{DIR_PATH}/env/conf/sssd.conf"}
 TMP = f"{DIR_PATH}/tmp"
@@ -39,7 +39,7 @@ def edit_config(service: str, string: str, holder: str, section: bool = True):
         def inner_wrapper(*args):
             _edit_config(SERVICES[service], string, holder, section)
             restart_service(service)
-            test(args)
+            test(*args)
 
         return inner_wrapper
 
@@ -58,6 +58,8 @@ def backup(file_path: str, service: str = None):
     """
     def wrapper(test):
         def inner_wrapper(*args):
+            if not path.exists(TMP):
+                mkdir(TMP)
             if not path.exists(BACKUP):
                 mkdir(BACKUP)
             target = f"{BACKUP}/{path.split(file_path)[1]}"
@@ -65,7 +67,7 @@ def backup(file_path: str, service: str = None):
             log.debug(f"File from {file_path} is copied to {target}")
 
             try:
-                test(args)
+                test(*args)
             except Exception as e:
                 raise e
             finally:
@@ -136,8 +138,11 @@ def generate_root_ca_crt():
     serial = randint(1, 1000)
     if not path.exists(TMP):
         mkdir(TMP)
+    if not path.exists(KEYS):
         mkdir(KEYS)
+    if not path.exists(CERTS):
         mkdir(CERTS)
+
     key_path = f"{KEYS}/private-key-{serial}.pem"
     with open(key_path, "wb") as f:
         f.write(key.private_bytes(

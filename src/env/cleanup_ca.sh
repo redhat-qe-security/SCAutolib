@@ -18,7 +18,8 @@ rm -f /etc/systemd/system/pcscd.service
 systemctl daemon-reload
 systemctl restart pcscd
 
-pip3 uninstall avocado-framework -y
-pip3 uninstall pexpect -y
+pip3 uninstall avocado-framework pexpect click pyyaml \
+avocado-framework-plugin-varianter-yaml-to-mux -y
+
 
 exit 0

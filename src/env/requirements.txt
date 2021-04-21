@@ -2,3 +2,4 @@ avocado-framework
 pexpect
 click
 pyyaml
+avocado-framework-plugin-varianter-yaml-to-mux
