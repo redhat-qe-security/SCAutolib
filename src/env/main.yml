@@ -27,3 +27,6 @@
         name:
           - pexpect
           - avocado-framework
+          - click
+          - pyyaml
+          - avocado-framework-plugin-varianter-yaml-to-mux
