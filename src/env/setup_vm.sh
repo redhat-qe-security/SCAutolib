@@ -75,9 +75,6 @@ sleep 15
 ip_rhel8=$(virsh domifaddr "$NAME" | grep -o -E "$rx\.$rx\.$rx\.$rx")
 log "IP address of the VM: ${bold}${ip_rhel8}${normal}"
 
-scp -o StrictHostKeyChecking=no -i "$KEY" conf/redhat.repo root@"$ip_rhel8":/etc/yum.repos.d/
-log "Repo file is copied"
-
 # scp krb_server:/var/kerberos/krb5kdc/kdc-ca.pem ./
 # scp -o StrictHostKeyChecking=no -i $KEY ./kdc-ca.pem root@$ip_rhel8:/etc/sssd/pki/sssd_auth_ca_db.pem
 # echo "[LOG] sssd_auth_ca_db.pem file is copied"
