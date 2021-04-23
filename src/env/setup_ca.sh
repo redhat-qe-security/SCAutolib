@@ -103,7 +103,7 @@ dnf -y copr enable jjelen/vsmartcard
 dnf -y install vpcd softhsm python3-pip sssd-tools
 yum groupinstall "Smart Card Support" -y
 
-# Configurting softhm2
+# Configuring softhm2
 P11LIB='/usr/lib64/pkcs11/libsofthsm2.so'
 sed -i "s,<TESTDIR>,$DIR,g" $CONF/softhsm2.conf
 cat $CONF/softhsm2.conf
