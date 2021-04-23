@@ -25,7 +25,10 @@ def cli():
 @click.option("--conf", "-c", type=click.Path(), help="Path to YAML file with configurations")
 def setup_ca(work_dir, conf):
     """
-    Call bash sript for settingup the local CA.
+    Setup local CA
+
+    :param work_dir: Path to working directory
+    :param conf: Path to YAML file with configurations
     """
     assert exists(work_dir), f"Path {work_dir} is not exist"
     assert isdir(work_dir), f"{work_dir} is not a directory"
@@ -50,9 +53,15 @@ def setup_ca(work_dir, conf):
 
 
 @click.command()
-@click.option("--conf-dir", "-C", type=click.Path(), help="Direc")
-@click.option("--work-dir", "-w", type=click.Path())
+@click.option("--conf-dir", "-C", type=click.Path(), help="Directory with configuration files")
+@click.option("--work-dir", "-w", type=click.Path(), help="Working directory")
 def setup_virt_card(conf_dir, work_dir):
+    """
+    Setup virtual smart card. Has to be run after configuration of the local CA.
+
+    :param conf_dir: Directory with configuration files
+    :param work_dir: Working directory
+    """
     assert exists(conf_dir), f"Path {conf_dir} is not exist"
     assert isdir(conf_dir), f"{conf_dir} Not a directory"
     assert exists(work_dir), f"Path {work_dir} is not exist"
@@ -67,6 +76,9 @@ def setup_virt_card(conf_dir, work_dir):
 
 @click.command()
 def cleanup_ca():
+    """
+    Cleanup the host after configuration of the testing environment.
+    """
     log.debug("Start cleanup of local CA")
     out = subp.run(
         ["bash", CLEANUP_CA])

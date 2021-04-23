@@ -1,5 +1,5 @@
 #!/usr/bin/bash
-
+# author: Pavel Yadlouski <pyadlous@redhat.com>
 set -xe
 
 bold=$(tput bold)
@@ -16,8 +16,12 @@ CONF=$DIR/conf
 
 function help() {
   echo -e "Script for settingup the local Certificate Authority and virtual smart card"
-  echo -e "\t-h -- this message"
-  echo -e "\t-dir directory where SCAutoLib directory is located"
+  echo -e "\t${bold}-h | --help${normal} this message"
+  echo -e "\t${bold}-d | --dir${normal} working durectory. At this directory all necessart file structure woudld be created"
+  echo -e "\t${bold}--username${normal} user name for the local user"
+  echo -e "\t${bold}--userpasswd${normal} password to be set for the local user"
+  echo -e "\t${bold}--pin${normal} PIN to be set for the smart card for a given user in --username"
+  echo -e "\t${bold}--conf-dir${normal} directory with all necessary configuraion files"
 }
 
 function log() {
@@ -98,9 +102,9 @@ elif [[ ! -f "$CONF/sssd.conf" ]]; then
   exit 1
 fi
 
-dnf -y module enable idm:DL1
+#dnf -y module enable idm:DL1
 dnf -y copr enable jjelen/vsmartcard
-dnf -y install vpcd softhsm python3-pip sssd-tools
+dnf -y install vpcd softhsm python3-pip sssd-tools httpd
 yum groupinstall "Smart Card Support" -y
 
 # Configuring softhm2
