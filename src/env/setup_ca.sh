@@ -106,7 +106,7 @@ RELEASE=$(cat /etc/redhat-release)
 if [[ $RELEASE == *"Red Hat Enterprise Linux release 9"*  ]]
 then
   dnf install -y http://hdn.corp.redhat.com/rhel7-csb-stage/RPMS/noarch/redhat-internal-cert-install-0.1-23.el7.csb.noarch.rpm
-  yes | dnf copr enable copr.devel.redhat.com/jjelen/vsmartcard rhel-9.dev-x86_64
+  dnf -y copr enable copr.devel.redhat.com/jjelen/vsmartcard rhel-9.dev-x86_64
 else
   dnf -y module enable idm:DL1
   dnf -y copr enable jjelen/vsmartcard

@@ -3,10 +3,18 @@
 set -xe
 NAME=localuser1
 
-dnf -y module disable idm:DL1
-dnf remove virt_cacard vpcd -y
-dnf -y copr remove jjelen/vsmartcard
 systemctl disable virt_cacard.service --now
+dnf remove virt_cacard vpcd -y
+
+RELEASE=$(cat /etc/redhat-release)
+if [[ $RELEASE == *"Red Hat Enterprise Linux release 9"*  ]]
+then
+  dnf remove -y redhat-internal-cert-install-0.1-23.el7.csb.noarch.rpm
+  dnf -y copr remove copr.devel.redhat.com/jjelen/vsmartcard rhel-9.dev-x86_64
+else
+  dnf -y module disable idm:DL1
+  dnf -y copr remove jjelen/vsmartcard
+fi
 
 userdel -r ${NAME}
 
