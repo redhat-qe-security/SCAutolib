@@ -75,13 +75,17 @@ def setup_virt_card(conf_dir, work_dir):
 
 
 @click.command()
-def cleanup_ca():
+@click.option("--conf", "-c", type=click.Path(), help="Path to YAML file with configurations")
+def cleanup_ca(conf):
     """
     Cleanup the host after configuration of the testing environment.
     """
     log.debug("Start cleanup of local CA")
+    with open(conf, "r") as file:
+        data = yaml.load(file, Loader=yaml.FullLoader)
+    username = data["variables"]["user"]["name"]
     out = subp.run(
-        ["bash", CLEANUP_CA])
+        ["bash", CLEANUP_CA, "--username", username])
 
     assert out.returncode == 0, "Something break in setup script :("
     log.debug("Cleanup of local CA is completed")
