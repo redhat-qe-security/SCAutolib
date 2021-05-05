@@ -1,9 +1,8 @@
 ---
-name: Basic libarary configuration
 variables:
   root_passwd: redhat
   user:
-      name: localuser1
+      local_name: localuser1
       passwd: "654321"
       pin: "123456"
 configs:
