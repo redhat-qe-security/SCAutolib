@@ -13,7 +13,6 @@ import SCAutolib.src.virt_card as virt_sc
 import SCAutolib.src.authselect as authselect
 from SCAutolib import log
 
-
 DIR_PATH = path.realpath(path.dirname(path.abspath(__file__)))
 SERVICES = {"sssd": "/etc/sssd/sssd.conf", "krb": "/etc/krb5.conf"}
 DEFAULTS = {"sssd": f"{DIR_PATH}/env/conf/sssd.conf"}
@@ -34,6 +33,7 @@ def edit_config(service: str, string: str, holder: str, section: bool = True):
     :param section: specify if holder is a name of a section in the config file
     :return: decorated function
     """
+
     def wrapper(test):
         @backup(SERVICES[service], service)
         def inner_wrapper(*args, **kwargs):
@@ -46,6 +46,27 @@ def edit_config(service: str, string: str, holder: str, section: bool = True):
     return wrapper
 
 
+def _backup(file_path, name=None, service=None, fnc=None, *args, **kwargs):
+    # Compose target file. If 'name' is specified, file would have this name,
+    # otherwise the name would remain is in the source
+    target = f"{BACKUP}/{path.split(file_path)[1] if name is None else name}"
+
+    copy(file_path, target)
+    log.debug(f"File from {file_path} is copied to {target}")
+
+    if fnc is not None:
+        try:
+            fnc(*args, **kwargs)
+        except Exception as e:
+            raise e
+        finally:
+            copy(target, file_path)
+            log.debug(f"File from {target} is restored to {file_path}")
+            remove(target)
+            if service is not None:
+                restart_service(service)
+
+
 def backup(file_path: str, service: str = None):
     """
     Decorator for backingup file. After executing wrapped function, restore
@@ -56,26 +77,11 @@ def backup(file_path: str, service: str = None):
                     By default is None - no service is need to be restarted
     :return: decorated function
     """
+
     def wrapper(test):
         def inner_wrapper(*args, **kwargs):
-            if not path.exists(TMP):
-                mkdir(TMP)
-            if not path.exists(BACKUP):
-                mkdir(BACKUP)
-            target = f"{BACKUP}/{path.split(file_path)[1]}"
-            copy(file_path, target)
-            log.debug(f"File from {file_path} is copied to {target}")
+            _backup(file_path=file_path, service=service, fnc=test, *args, **kwargs)
 
-            try:
-                test(*args, **kwargs)
-            except Exception as e:
-                raise e
-            finally:
-                copy(target, file_path)
-                log.debug(f"File from {target} is restored to {file_path}")
-                remove(target)
-                if service is not None:
-                    restart_service(service)
         return inner_wrapper
 
     return wrapper
@@ -90,7 +96,7 @@ def _edit_config(config: str, string: str, holder: str, section: bool):
     :param holder: section or substinrg to update
     :param section: specify if holder is a section
     """
-    old = f"#<{holder}>" if section else holder
+    old = f"#<[{holder}]>" if section else holder
     new = f"{string}\n{old}" if section else string
 
     with open(config, "r") as file:
@@ -136,12 +142,6 @@ def generate_root_ca_crt():
     """
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     serial = randint(1, 1000)
-    if not path.exists(TMP):
-        mkdir(TMP)
-    if not path.exists(KEYS):
-        mkdir(KEYS)
-    if not path.exists(CERTS):
-        mkdir(CERTS)
 
     key_path = f"{KEYS}/private-key-{serial}.pem"
     with open(key_path, "wb") as f:

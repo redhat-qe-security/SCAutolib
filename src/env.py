@@ -1,23 +1,99 @@
 import logging
 from os.path import (exists, realpath, isdir,
                      isfile, dirname, abspath)
+from os import mkdir
 import click
 import yaml
 import subprocess as subp
 from shutil import copytree
+from re import match
+import SCAutolib.src.utils as utils
 
 log = logging.getLogger("env")
 
 # TODO add docs about parameters
-path = dirname(abspath(__file__))
-SETUP_CA = f"{path}/env/setup_ca.sh"
-SETUP_VSC = f"{path}/env/setup_virt_card.sh"
-CLEANUP_CA = f"{path}/env/cleanup_ca.sh"
+DIR_PATH = dirname(abspath(__file__))
+SETUP_CA = f"{DIR_PATH}/env/setup_ca.sh"
+SETUP_VSC = f"{DIR_PATH}/env/setup_virt_card.sh"
+CLEANUP_CA = f"{DIR_PATH}/env/cleanup_ca.sh"
+TMP = f"{DIR_PATH}/tmp"
+KEYS = f"{TMP}/keys"
+CERTS = f"{TMP}/certs"
+BACKUP = f"{TMP}/backup"
 
 
 @click.group()
 def cli():
     pass
+
+
+def _prep_tmp_dirs():
+    if not exists(TMP):
+        mkdir(TMP)
+    if not exists(KEYS):
+        mkdir(KEYS)
+    if not exists(CERTS):
+        mkdir(CERTS)
+    if not exists(BACKUP):
+        mkdir(BACKUP)
+
+
+def _create_sssd_conf(username="localuser1"):
+    holder = "#<{holder}>\n"
+    content = []
+    if exists("/etc/sssd/sssd.conf"):
+        utils._backup("/etc/sssd/sssd.conf", name="sssd-original.conf")
+
+        with open("/etc/sssd/sssd.conf", "r") as f:
+            content = f.readlines()
+        for index, line in enumerate(content):
+            if match(r"^\[(.*)]\n$", line):
+                content[index] = line + holder.format(holder=line.rstrip("\n"))
+    #     TODO: add mathrule for testing user
+    else:
+        content = ["[sssd]\n",
+                   "debug_level = 9\n",
+                   "services = nss, pam\n",
+                   "domains = shadowutils\n",
+                   "#<[sssd]>\n",
+                   "\n[nss]\n",
+                   "debug_level = 9\n",
+                   "#<[nss]>\n",
+                   "\n[pam]\n",
+                   "debug_level = 9\n",
+                   "pam_cert_auth = True\n",
+                   "#<[pam]>\n",
+
+                   "\n[domain/shadowutils]\n",
+                   "debug_level = 9\n",
+                   "id_provider = files\n",
+                   "#<[domain/shadowutils]>\n",
+
+                   f"\n[certmap/shadowutils/{username}]\n",
+                   f"matchrule = < SUBJECT >.*CN = {username}.*\n",
+                   f"#<[certmap/shadowutils/{username}]>\n"]
+
+    with open("/etc/sssd/sssd.conf", "w") as f:
+        f.write("".join(content))
+
+
+def _create_softhsm2_conf():
+    pass
+
+
+@click.command()
+@click.option("--username", "-u", type=click.STRING, help="Username to be set in config files (e.g sssd.conf)")
+def prepair(username):
+    _prep_tmp_dirs()
+
+    _create_sssd_conf(username)
+    # TODO: create softhsm2.conf file
+    _create_softhsm2_conf()
+    # TODO: create .cnf files for certificates
+
+    # TODO: create virtcacard.cil
+
+    # TODO: creata virt_cacard.service
 
 
 @click.command()
@@ -94,6 +170,7 @@ def cleanup_ca(conf):
 cli.add_command(setup_ca)
 cli.add_command(setup_virt_card)
 cli.add_command(cleanup_ca)
+cli.add_command(prepair)
 
 if __name__ == "__main__":
     cli()
