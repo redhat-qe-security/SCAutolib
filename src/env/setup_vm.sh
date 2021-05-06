@@ -1,6 +1,8 @@
+# author: Pavel Yadlouski
+# Part of SCAutolib
+
 #!/usr/bin/bash
-set -e
-#trap read debug
+set -ex
 
 bold=$(tput bold)
 normal=$(tput sgr0)

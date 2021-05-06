@@ -1,5 +1,7 @@
-#!/usr/bin/bash
+# author: Pavel Yadlouski
+# Part of SCAutolib
 
+#!/usr/bin/bash
 NAME=localuser1
 
 dnf -y module disable idm:DL1

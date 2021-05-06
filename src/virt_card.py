@@ -1,3 +1,6 @@
+# author: Pavel Yadlouski
+# Part of SCAutolib
+
 import sys
 import time
 import pexpect

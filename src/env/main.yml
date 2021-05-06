@@ -1,4 +1,7 @@
 ---
+# author: Pavel Yadlouski
+# Part of SCAutolib
+
 - hosts: vm
   become: true
   remote_user: root

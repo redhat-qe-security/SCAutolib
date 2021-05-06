@@ -1,3 +1,6 @@
+# author: Pavel Yadlouski
+# Part of SCAutolib
+
 import subprocess as subp
 import logging
 import sys

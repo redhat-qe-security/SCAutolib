@@ -1,3 +1,6 @@
+# author: Pavel Yadlouski
+# Part of SCAutolib
+
 import datetime
 import subprocess as subp
 from os import path, mkdir, remove
@@ -15,6 +18,7 @@ from SCAutolib import log
 
 
 DIR_PATH = path.dirname(path.abspath(__file__))
+DIR_PATH = "/root"
 SERVICES = {"sssd": "/etc/sssd/sssd.conf", "krb": "/etc/krb5.conf"}
 DEFAULTS = {"sssd": f"{DIR_PATH}/env/conf/sssd.conf"}
 TMP = f"{DIR_PATH}/tmp"

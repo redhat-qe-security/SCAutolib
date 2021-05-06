@@ -1,3 +1,6 @@
+# author: Pavel Yadlouski
+# Part of SCAutolib
+
 #!/usr/bin/bash
 DIR=""
 

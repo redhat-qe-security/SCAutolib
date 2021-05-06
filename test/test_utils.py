@@ -1,3 +1,6 @@
+# author: Pavel Yadlouski
+# Unit tests for of SCAutolib
+
 import pytest
 from SCAutolib.src import utils
 from shutil import copy
