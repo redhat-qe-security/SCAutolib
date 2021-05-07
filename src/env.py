@@ -1,12 +1,13 @@
 import logging
 from os.path import (exists, realpath, isdir,
                      isfile, dirname, abspath)
-from os import mkdir
+from os import mkdir, getenv
 import click
 import yaml
 import subprocess as subp
 from shutil import copytree
 from re import match
+from dotenv import load_dotenv
 import SCAutolib.src.utils as utils
 
 log = logging.getLogger("env")
@@ -16,15 +17,60 @@ DIR_PATH = dirname(abspath(__file__))
 SETUP_CA = f"{DIR_PATH}/env/setup_ca.sh"
 SETUP_VSC = f"{DIR_PATH}/env/setup_virt_card.sh"
 CLEANUP_CA = f"{DIR_PATH}/env/cleanup_ca.sh"
-TMP = f"{DIR_PATH}/tmp"
+WORK_DIR = None
+TMP = f"{WORK_DIR}/tmp"
+CONF_DIR = f"{WORK_DIR}/conf"
 KEYS = f"{TMP}/keys"
 CERTS = f"{TMP}/certs"
 BACKUP = f"{TMP}/backup"
+CONFIG_DATA = None  # for caching configuration data
 
 
 @click.group()
 def cli():
     pass
+
+
+@click.command()
+@click.option("--conf", "-c", type=click.Path(), help="Path to YAML file with "
+                                                      "configurations.")
+@click.option("--work-dir", "-w", type=click.Path(), help="Absolute path to working "
+                                                          "directory.")
+@click.option("--env", "-e", type=click.Path, help="Absolute path to .env file with environment "
+                                                   "varibles to be used in the library.")
+def prepair(conf, work_dir, env):
+    global WORK_DIR
+    WORK_DIR = work_dir
+    _load_env(env)
+
+    _prep_tmp_dirs()
+    log.debug("tmp directories are created")
+
+    usernames = _read_config(conf, items=["variables.local_user.name",
+                                          "variables.krb_user.name"])
+    _create_sssd_config(*usernames)
+    log.debug("SSSD configuration file is updated")
+
+    _create_softhsm2_config()
+    log.debug("SoftHSM2 configuration file is created in the "
+              f"{CONF_DIR}/softhsm2.conf")
+
+    _create_virtcacard_configs()
+    log.debug("Configuration files for virtual smart card are created.")
+    # TODO: create .cnf files for certificates
+
+
+def _load_env(env):
+    if env is None:
+        with open(f"{DIR_PATH}/.env", "w") as f:
+            f.write(f"WORK_DIR = {WORK_DIR}\n")
+            f.write(f"TMP = {WORK_DIR}/tmp\n")
+            f.write(f"CONF_DIR = {WORK_DIR}/conf\n")
+            f.write(f"KEYS = {WORK_DIR}/tmp/keys\n")
+            f.write(f"CERTS = {WORK_DIR}/tmp/certs\n")
+            f.write(f"BACKUP = {WORK_DIR}/tmp/backup\n")
+        env = f"{DIR_PATH}/.env"
+    load_dotenv(env)
 
 
 def _prep_tmp_dirs():
@@ -36,9 +82,11 @@ def _prep_tmp_dirs():
         mkdir(CERTS)
     if not exists(BACKUP):
         mkdir(BACKUP)
+    if not exists(CONF_DIR):
+        mkdir(CONF_DIR)
 
 
-def _create_sssd_conf(local_user=None, krb_user=None):
+def _create_sssd_config(local_user: str = None, krb_user: str = None):
     """
     Update the content of the sssd.conf file. If file exists, it would be store
     to the backup folder and content in would be edited for testing purposes.
@@ -97,8 +145,23 @@ def _create_sssd_conf(local_user=None, krb_user=None):
         f.write("".join(content))
 
 
-def _create_softhsm2_conf():
-    pass
+def _create_softhsm2_config():
+    """
+    Create SoftHSM2 configuraion file in conf_dir. Same directory has to be used
+    in setup-ca function, otherwise configuraion file wouldn't be found causing
+    the error. conf_dir expected to be in work_dir.
+
+    Args:
+    """
+    hsm_conf = getenv("SOFTHSM2_CONF")
+    if hsm_conf is not None:
+        with open(f"{BACKUP}/SoftHSM2-conf-env-var", "w") as f:
+            f.write(hsm_conf)
+    with open(f"{CONF_DIR}/softhsm2.conf", "w") as f:
+        f.write(f"directories.tokendir = {WORK_DIR}/tokens/\n"
+                f"slots.removable = true\n"
+                f"objectstore.backend = file\n"
+                f"log.level = INFO")
 
 
 def _read_config(config, items: [str] = None) -> dict or list:
@@ -113,16 +176,18 @@ def _read_config(config, items: [str] = None) -> dict or list:
 
     Returns: dictionary with full contant or list with required items
     """
-    with open(config, "r") as file:
-        data = yaml.load(file, Loader=yaml.FullLoader)
-        assert data, "Data are not loaded correctly."
+    global CONFIG_DATA
+    if CONFIG_DATA is None:
+        with open(config, "r") as file:
+            CONFIG_DATA = yaml.load(file, Loader=yaml.FullLoader)
+            assert CONFIG_DATA, "Data are not loaded correctly."
 
     if items is None:
-        return data
+        return CONFIG_DATA
     return_list = []
     for item in items:
         parts = item.split(".")
-        value = data
+        value = CONFIG_DATA
         for part in parts:
             try:
                 if value is None:
@@ -137,23 +202,47 @@ def _read_config(config, items: [str] = None) -> dict or list:
     return return_list
 
 
+def _create_virtcacard_configs():
+    """
+    Create systemd service (virt_cacard.service) and semodule (virtcacard.cil)
+    for virtual smart card.
+    """
+    # TODO create virt_cacard.service
+    service_path = "/etc/systemd/system/virt_cacard.service"
+    module_path = f"{CONF_DIR}/virtcacard.cil"
+    if exists(service_path):
+        utils._backup(service_path, "virt_cacard-original.service")
+    if exists(module_path):
+        utils._backup(module_path, "virtcacard.cil-original")
+
+    with open(service_path, "w") as f:
+        f.write(f"""[Unit]
+Description=virt_cacard Service
+Requires=pcscd.service
+
+[Service]
+Environment=SOFTHSM2_CONF="{CONF_DIR}/softhsm2.conf"
+WorkingDirectory={WORK_DIR}
+ExecStart=/usr/bin/virt_cacard >> /var/log/virt_cacard.debug 2>&1
+KillMode=process
+
+[Install]
+WantedBy=multi-user.target
+""")
+    log.debug(f"Service file {service_path} for virtual smart card is created.")
+    with open(module_path, "w") as f:
+        f.write("""(allow pcscd_t node_t (tcp_socket (node_bind)));
+
+; allow p11_child to read softhsm cache - not present in RHEL by default
+(allow sssd_t named_cache_t (dir """)
+
+    log.debug(f"SELinux module create {module_path}")
+
+
+
+
 @click.command()
-@click.option("--conf", "-c", type=click.Path(), help="Path to YAML file with configurations")
-def prepair(conf):
-    _prep_tmp_dirs()
-    usernames = _read_config(conf, items=["variables.local_user.name", "variables.krb_user.name"])
-    _create_sssd_conf(*usernames)
-    # TODO: create softhsm2.conf file
-    _create_softhsm2_conf()
-    # TODO: create .cnf files for certificates
-
-    # TODO: create virtcacard.cil
-
-    # TODO: creata virt_cacard.service
-
-
-@click.command()
-@click.option("--work-dir", "-p", type=click.Path(), help="Path to working directory")
+@click.option("--work-dir", "-w", type=click.Path(), help="Path to working directory")
 @click.option("--conf", "-c", type=click.Path(), help="Path to YAML file with configurations")
 def setup_ca(work_dir, conf):
     """
