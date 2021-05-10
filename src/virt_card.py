@@ -13,6 +13,7 @@ class VirtCard:
 
     This class can be used in context manage (with statment).
     """
+
     def __init__(self, insert=False):
         """
         Constructor for virtual smart card.

@@ -5,7 +5,7 @@ import subprocess as subp
 class Authselect:
 
     backup_name = "tmp.backup"
-    
+
     def __init__(self, required=False, lock_on_removal=False, mk_homedir=False):
         self._required = required
         self._lock_on_removal = lock_on_removal

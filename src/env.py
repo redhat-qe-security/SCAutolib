@@ -163,6 +163,123 @@ def _create_softhsm2_config():
                 f"objectstore.backend = file\n"
                 f"log.level = INFO")
 
+    usernames = _read_config(conf, items=["variables.local_user.name",
+                                          "variables.krb_user.name"])
+    _create_sssd_config(*usernames)
+    log.debug("SSSD configuration file is updated")
+
+    _create_softhsm2_config()
+    log.debug("SoftHSM2 configuration file is created in the "
+              f"{CONF_DIR}/softhsm2.conf")
+
+    _create_virtcacard_configs()
+    log.debug("Configuration files for virtual smart card are created.")
+    # TODO: create .cnf files for certificates
+
+
+def _load_env(env):
+    if env is None:
+        with open(f"{DIR_PATH}/.env", "w") as f:
+            f.write(f"WORK_DIR = {WORK_DIR}\n")
+            f.write(f"TMP = {WORK_DIR}/tmp\n")
+            f.write(f"CONF_DIR = {WORK_DIR}/conf\n")
+            f.write(f"KEYS = {WORK_DIR}/tmp/keys\n")
+            f.write(f"CERTS = {WORK_DIR}/tmp/certs\n")
+            f.write(f"BACKUP = {WORK_DIR}/tmp/backup\n")
+        env = f"{DIR_PATH}/.env"
+    load_dotenv(env)
+
+
+def _prep_tmp_dirs():
+    if not exists(TMP):
+        mkdir(TMP)
+    if not exists(KEYS):
+        mkdir(KEYS)
+    if not exists(CERTS):
+        mkdir(CERTS)
+    if not exists(BACKUP):
+        mkdir(BACKUP)
+    if not exists(CONF_DIR):
+        mkdir(CONF_DIR)
+
+
+def _create_sssd_config(local_user: str = None, krb_user: str = None):
+    """
+    Update the content of the sssd.conf file. If file exists, it would be store
+    to the backup folder and content in would be edited for testing purposes.
+    If file doesn't exist, it would be created and filled with default options.
+    Args:
+        local_user: username for local user with smart card to add the match rule.
+        krb_user: username for kerberos user with smart card to add the match rule.
+    """
+
+    holder = "#<{holder}>\n"
+    content = []
+    if exists("/etc/sssd/sssd.conf"):
+        utils._backup("/etc/sssd/sssd.conf", name="sssd-original.conf")
+
+        with open("/etc/sssd/sssd.conf", "r") as f:
+            content = f.readlines()
+        for index, line in enumerate(content):
+            if match(r"^\[(.*)]\n$", line):
+                content[index] = line + holder.format(holder=line.rstrip("\n"))
+        if local_user:
+            rule = f"\n[certmap/shadowutils/{local_user}]\n" \
+                   f"matchrule = <SUBJECT>.*CN={local_user}.*\n" \
+                   f"#<[certmap/shadowutils/{local_user}]>\n"
+            content.append(rule)
+        if krb_user:
+            pass
+            # FIXME: add rule for kerberos user
+            # content.append(rule)
+    else:
+        content = ["[sssd]\n",
+                   "debug_level = 9\n",
+                   "services = nss, pam\n",
+                   "domains = shadowutils\n",
+                   "#<[sssd]>\n",
+                   "\n[nss]\n",
+                   "debug_level = 9\n",
+                   "#<[nss]>\n",
+                   "\n[pam]\n",
+                   "debug_level = 9\n",
+                   "pam_cert_auth = True\n",
+                   "#<[pam]>\n",
+
+                   "\n[domain/shadowutils]\n",
+                   "debug_level = 9\n",
+                   "id_provider = files\n",
+                   "#<[domain/shadowutils]>\n"]
+        if local_user:
+            content.append(f"\n[certmap/shadowutils/{local_user}]\n"
+                           f"matchrule = < SUBJECT >.*CN = {local_user}.*\n"
+                           f"#<[certmap/shadowutils/{local_user}]>\n")
+        if krb_user:
+            pass
+        # FIXME: add rule for kerberos user
+
+    with open("/etc/sssd/sssd.conf", "w") as f:
+        f.write("".join(content))
+
+
+def _create_softhsm2_config():
+    """
+    Create SoftHSM2 configuraion file in conf_dir. Same directory has to be used
+    in setup-ca function, otherwise configuraion file wouldn't be found causing
+    the error. conf_dir expected to be in work_dir.
+
+    Args:
+    """
+    hsm_conf = getenv("SOFTHSM2_CONF")
+    if hsm_conf is not None:
+        with open(f"{BACKUP}/SoftHSM2-conf-env-var", "w") as f:
+            f.write(hsm_conf)
+    with open(f"{CONF_DIR}/softhsm2.conf", "w") as f:
+        f.write(f"directories.tokendir = {WORK_DIR}/tokens/\n"
+                f"slots.removable = true\n"
+                f"objectstore.backend = file\n"
+                f"log.level = INFO")
+
 
 def _read_config(config, items: [str] = None) -> dict or list:
     """
@@ -197,7 +314,8 @@ def _read_config(config, items: [str] = None) -> dict or list:
                 if part == parts[-1]:
                     return_list.append(value)
             except KeyError:
-                log.debug(f"Key {part} not present in the configuration file. Skip.")
+                log.debug(
+                    f"Key {part} not present in the configuration file. Skip.")
                 break
     return return_list
 
@@ -229,7 +347,8 @@ KillMode=process
 [Install]
 WantedBy=multi-user.target
 """)
-    log.debug(f"Service file {service_path} for virtual smart card is created.")
+    log.debug(
+        f"Service file {service_path} for virtual smart card is created.")
     with open(module_path, "w") as f:
         f.write("""(allow pcscd_t node_t (tcp_socket (node_bind)));
 
@@ -237,8 +356,6 @@ WantedBy=multi-user.target
 (allow sssd_t named_cache_t (dir """)
 
     log.debug(f"SELinux module create {module_path}")
-
-
 
 
 @click.command()
