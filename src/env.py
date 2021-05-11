@@ -44,6 +44,18 @@ def cli():
               help="Absolute path to .env file with environment varibles to be "
                    "used in the library.")
 def prepair(setup, conf, work_dir, env_file):
+    """
+    Prepair the whole test envrionment including temporary directories, necessary
+    configuration files and services. Also can automaticaly run setup for local
+    CA and virtual smart card.
+
+    Args:
+        setup: if you want to automatically run other setup steps
+        conf: path to configuration file im YAML format
+        work_dir: path to working directory. Can be overwritten
+                  by varible WORK_DIR in confugration file
+        env_file: path to already existing .env file
+    """
     conf_work_dir = _read_config(conf, items=["work_dir"])
     try:
         work_dir = conf_work_dir[0]
@@ -71,12 +83,21 @@ def prepair(setup, conf, work_dir, env_file):
     _creat_cnf(usernames)
 
     if setup:
-        setup_ca()
+        setup_ca(work_dir=WORK_DIR, conf=conf)
 
-        setup_virt_card()
+        setup_virt_card(conf_dir=CONF_DIR, work_dir=WORK_DIR)
 
 
 def _load_env(env_file, work_dir):
+    """
+    Create .env near source files of the libarary. In .env file following
+    variables expected to be present: WORK_DIR, CONF_DIR, TMP, KEYS, CERTS, BACKUP.
+    Deployment process would relay on this variables.
+
+    Args:
+        env_file:  path to already existing .env file. If given, then it would be just copied to the library.
+        work_dir: working directory
+    """
     global WORK_DIR
     global CONF_DIR
     global BACKUP
@@ -111,8 +132,14 @@ def _prep_tmp_dirs():
             mkdir(dir_path)
 
 
-def _creat_cnf(user_list, ca=True):
-
+def _creat_cnf(user_list: [], ca: bool = True):
+    """
+    Create configuration files for OpenSSL to generate certificates and requests.
+    Args:
+        user_list: list of users for which the configuration file for
+                   certificate signing request should be created
+        ca: if configuration file for local CA is need to be generated
+    """
     if ca:
         ca_cnf = """[ ca ]
 default_ca = CA_default
@@ -131,7 +158,7 @@ default_days     = 365
 default_crl_hours = 1
 default_md       = sha256
 
-policy           = policy_any
+policy           = policy_any 
 email_in_dn      = no
 
 name_opt         = ca_default
@@ -314,13 +341,13 @@ WantedBy=multi-user.target
     env.debug(f"SELinux module create {module_path}")
 
 
-def _read_config(config, items: [str] = None) -> dict or list:
+def _read_config(conf, items: [str] = None) -> dict or list:
     """
     Read data from the configuration file and return require items or full
     content.
 
     Args:
-        config: path to configuration file
+        conf: path to configuration file
         items: list of items to extracrt from the configuration file.
                If None, full contant would be returned
 
@@ -328,7 +355,7 @@ def _read_config(config, items: [str] = None) -> dict or list:
     """
     global CONFIG_DATA
     if CONFIG_DATA is None:
-        with open(config, "r") as file:
+        with open(conf, "r") as file:
             CONFIG_DATA = yaml.load(file, Loader=yaml.FullLoader)
             assert CONFIG_DATA, "Data are not loaded correctly."
 
@@ -354,8 +381,10 @@ def _read_config(config, items: [str] = None) -> dict or list:
 
 
 @click.command()
-@click.option("--work-dir", "-w", type=click.Path(), help="Path to working directory")
-@click.option("--conf", "-c", type=click.Path(), help="Path to YAML file with configurations")
+@click.option("--work-dir", "-w", type=click.Path(), rquired=False, default=None,
+              help="Path to working directory")
+@click.option("--conf", "-c", type=click.Path(), required=False,
+              help="Path to YAML file with configurations")
 def setup_ca(work_dir, conf):
     """
     Setup local CA
@@ -363,10 +392,18 @@ def setup_ca(work_dir, conf):
     :param work_dir: Path to working directory
     :param conf: Path to YAML file with configurations
     """
-    assert exists(work_dir), f"Path {work_dir} is not exist"
-    assert isdir(work_dir), f"{work_dir} is not a directory"
-    assert exists(realpath(conf)), f"File {conf} is not exist"
-    assert isfile(realpath(conf)), f"{conf} is not a file"
+    assert exists(realpath(conf)), f"File {conf} is not exist."
+    assert isfile(realpath(conf)), f"{conf} is not a file."
+
+    if work_dir is None:
+        try:
+            work_dir = _read_config(conf, ["work_dir"])[0]
+        except IndexError:
+            msg = "No working directory specified. Nither by paramter " \
+                  f"--work-dir, nor in the configuraion file {conf} by " \
+                  "variable work_dir."
+            env.error(msg)
+            raise IndexError(msg)
 
     env.debug("Start setup of local CA")
 
