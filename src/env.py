@@ -1,4 +1,3 @@
-import logging
 from os.path import (exists, realpath, isdir,
                      isfile, dirname, abspath)
 from os import mkdir
@@ -9,8 +8,7 @@ from shutil import copytree, copy
 from re import match
 from decouple import config
 import SCAutolib.src.utils as utils
-
-log = logging.getLogger("env")
+from SCAutolib import env
 
 # TODO add docs about parameters
 DIR_PATH = dirname(abspath(__file__))
@@ -32,47 +30,60 @@ def cli():
 
 
 @click.command()
+@click.option("--setup", "-s", type=bool, default=False, required=False,
+              help="Flag for automatic execution of local CA and virtual "
+                   "smart card deployment")
 @click.option("--conf", "-c", type=click.Path(),
               help="Path to YAML file with configurations.", required=False)
-@click.option("--work-dir", "-w", type=click.Path(),
-              help="Absolute path to working directory.",
-              required=False, default=DIR_PATH)
-@click.option("--env", "-e", type=click.Path(),
+@click.option("--work-dir", "-w", type=click.Path(), required=False,
+              default=DIR_PATH,
+              help="Absolute path to working directory"
+                   "Value WORK_DIR in configuration file can overwrite "
+                   "this parameter.")
+@click.option("--env-file", "-e", type=click.Path(), required=False, default=None,
               help="Absolute path to .env file with environment varibles to be "
-                   "used in the library.", required=False, default=None)
-def prepair(conf, work_dir, env):
+                   "used in the library.")
+def prepair(setup, conf, work_dir, env_file):
+    conf_work_dir = _read_config(conf, items=["work_dir"])
+    try:
+        work_dir = conf_work_dir[0]
+    except IndexError:
+        env.debug(f"Work directory is not present in the {conf}."
+                  f"Use value {work_dir}")
 
-    _load_env(env, work_dir)
+    _load_env(env_file, work_dir)
 
     _prep_tmp_dirs()
-    log.debug("tmp directories are created")
+    env.debug("tmp directories are created")
 
     usernames = _read_config(conf, items=["variables.local_user.name",
                                           "variables.krb_user.name"])
     _create_sssd_config(*usernames)
-    log.debug("SSSD configuration file is updated")
+    env.debug("SSSD configuration file is updated")
 
     _create_softhsm2_config()
-    log.debug("SoftHSM2 configuration file is created in the "
+    env.debug("SoftHSM2 configuration file is created in the "
               f"{CONF_DIR}/softhsm2.conf")
-    #
-    # _create_virtcacard_configs()
-    # log.debug("Configuration files for virtual smart card are created.")
-    # # TODO: create .cnf files for certificates
 
-    # setup_ca()
-    #
-    # setup_virt_card()
+    _create_virtcacard_configs()
+    env.debug("Configuration files for virtual smart card are created.")
+
+    _creat_cnf(usernames)
+
+    if setup:
+        setup_ca()
+
+        setup_virt_card()
 
 
-def _load_env(env, work_dir):
+def _load_env(env_file, work_dir):
     global WORK_DIR
     global CONF_DIR
     global BACKUP
 
-    if env is None:
-        env = f"{DIR_PATH}/.env"
-        with open(env, "w") as f:
+    if env_file is None:
+        env_file = f"{DIR_PATH}/.env"
+        with open(env_file, "w") as f:
             f.write(f"WORK_DIR = {work_dir}\n")
             f.write(f"TMP = {work_dir}/tmp\n")
             f.write(f"CONF_DIR = {work_dir}/conf\n")
@@ -80,10 +91,10 @@ def _load_env(env, work_dir):
             f.write(f"CERTS = {work_dir}/tmp/certs\n")
             f.write(f"BACKUP = {work_dir}/tmp/backup\n")
     else:
-        # .env file should be near source file because it this env is loaded
-        # in other source files
-        copy(env, DIR_PATH)
-
+        # .env file should be near source file
+        # because this env file is used other source files
+        copy(env_file, DIR_PATH)
+    env.debug("Environment file is created")
     WORK_DIR = work_dir
     CONF_DIR = config("CONF_DIR", cast=str)
     BACKUP = config("BACKUP", cast=str)
@@ -100,6 +111,86 @@ def _prep_tmp_dirs():
             mkdir(dir_path)
 
 
+def _creat_cnf(user_list, ca=True):
+
+    if ca:
+        ca_cnf = """[ ca ]
+default_ca = CA_default
+
+[ CA_default ]
+dir              = .
+database         = $dir/index.txt
+new_certs_dir    = $dir/newcerts
+
+certificate      = $dir/rootCA.crt
+serial           = $dir/serial
+private_key      = $dir/rootCA.key
+RANDFILE         = $dir/rand
+
+default_days     = 365
+default_crl_hours = 1
+default_md       = sha256
+
+policy           = policy_any
+email_in_dn      = no
+
+name_opt         = ca_default
+cert_opt         = ca_default
+copy_extensions  = copy
+
+[ usr_cert ]
+authorityKeyIdentifier = keyid, issuer
+
+[ v3_ca ]
+subjectKeyIdentifier   = hash
+authorityKeyIdentifier = keyid:always,issuer:always
+basicConstraints       = CA:true
+keyUsage               = critical, digitalSignature, cRLSign, keyCertSign
+
+[ policy_any ]
+organizationName       = supplied
+organizationalUnitName = supplied
+commonName             = supplied
+emailAddress           = optional
+
+[ req ]
+distinguished_name = req_distinguished_name
+prompt             = no
+
+[ req_distinguished_name ]
+O  = Example
+OU = Example Test
+CN = Example Test CA
+        """
+        with open(f"{CONF_DIR}/ca.cnf", "w") as f:
+            f.write(ca_cnf)
+            env.debug(f"Confugation file for local CA is created {CONF_DIR}/ca.cnf")
+
+    for user in user_list:
+        user_cnf = f"""[ req ]
+distinguished_name = req_distinguished_name
+prompt = no
+
+[ req_distinguished_name ]
+O = Example
+OU = Example Test
+CN = {user}
+
+[ req_exts ]
+basicConstraints = CA:FALSE
+nsCertType = client, email
+nsComment = "{user}"
+subjectKeyIdentifier = hash
+keyUsage = critical, nonRepudiation, digitalSignature
+extendedKeyUsage = clientAuth, emailProtection, msSmartcardLogin
+subjectAltName = otherName:msUPN;UTF8:{user}@EXAMPLE.COM, email:{user}@example.com
+"""
+        with open(f"{CONF_DIR}/req_{user}.cnf", "w") as f:
+            f.write(user_cnf)
+            env.debug(f"Configuraiton file for CSR for user {user} is created "
+                      f"{CONF_DIR}/req_{user}.cnf")
+
+
 def _create_sssd_config(local_user: str = None, krb_user: str = None):
     """
     Update the content of the sssd.conf file. If file exists, it would be store
@@ -111,10 +202,10 @@ def _create_sssd_config(local_user: str = None, krb_user: str = None):
     """
 
     holder = "#<{holder}>\n"
+    content = []
     if exists("/etc/sssd/sssd.conf"):
         # utils._backup("/etc/sssd/sssd.conf", name="sssd-original.conf", env=True)
         utils._backup("/etc/sssd/sssd.conf", name="sssd-original.conf")
-
         with open("/etc/sssd/sssd.conf", "r") as f:
             content = f.readlines()
         for index, line in enumerate(content):
@@ -125,6 +216,7 @@ def _create_sssd_config(local_user: str = None, krb_user: str = None):
                    f"matchrule = <SUBJECT>.*CN={local_user}.*\n" \
                    f"#<[certmap/shadowutils/{local_user}]>\n"
             content.append(rule)
+
         if krb_user:
             pass
             # FIXME: add rule for kerberos user
@@ -147,6 +239,7 @@ def _create_sssd_config(local_user: str = None, krb_user: str = None):
                    "debug_level = 9\n",
                    "id_provider = files\n",
                    "#<[domain/shadowutils]>\n"]
+
         if local_user:
             content.append(f"\n[certmap/shadowutils/{local_user}]\n"
                            f"matchrule = <SUBJECT>.*CN = {local_user}.*\n"
@@ -157,6 +250,8 @@ def _create_sssd_config(local_user: str = None, krb_user: str = None):
 
     with open("/etc/sssd/sssd.conf", "w") as f:
         f.write("".join(content))
+        env.debug("Configuration file for SSSD is updated "
+                  "in  /etc/sssd/sssd.conf")
 
 
 def _create_softhsm2_config():
@@ -169,11 +264,15 @@ def _create_softhsm2_config():
     if hsm_conf is not None:
         with open(f"{BACKUP}/SoftHSM2-conf-env-var", "w") as f:
             f.write(hsm_conf + "\n")
+        env.debug(f"Original value of SOFTHSM2_CONF is stored into "
+                  f"{BACKUP}/SoftHSM2-conf-env-var file.")
     with open(f"{CONF_DIR}/softhsm2.conf", "w") as f:
         f.write(f"directories.tokendir = {WORK_DIR}/tokens/\n"
                 f"slots.removable = true\n"
                 f"objectstore.backend = file\n"
                 f"log.level = INFO\n")
+        env.debug(f"Configuration file for SoftHSM2 is created "
+                  f"in {CONF_DIR}/softhsm2.conf.")
 
 
 def _create_virtcacard_configs():
@@ -187,7 +286,7 @@ def _create_virtcacard_configs():
     if exists(service_path):
         utils._backup(service_path, "virt_cacard-original.service")
     if exists(module_path):
-        utils._backup(module_path, "virtcacard.cil-original")
+        utils._backup(module_path, "virtcacard-original.cil")
 
     with open(service_path, "w") as f:
         f.write(f"""[Unit]
@@ -203,15 +302,16 @@ KillMode=process
 [Install]
 WantedBy=multi-user.target
 """)
-    log.debug(
+    env.debug(
         f"Service file {service_path} for virtual smart card is created.")
+
     with open(module_path, "w") as f:
         f.write("""(allow pcscd_t node_t (tcp_socket (node_bind)));
 
 ; allow p11_child to read softhsm cache - not present in RHEL by default
 (allow sssd_t named_cache_t (dir """)
 
-    log.debug(f"SELinux module create {module_path}")
+    env.debug(f"SELinux module create {module_path}")
 
 
 def _read_config(config, items: [str] = None) -> dict or list:
@@ -247,7 +347,7 @@ def _read_config(config, items: [str] = None) -> dict or list:
                 if part == parts[-1]:
                     return_list.append(value)
             except KeyError:
-                log.debug(
+                env.debug(
                     f"Key {part} not present in the configuration file. Skip.")
                 break
     return return_list
@@ -268,7 +368,7 @@ def setup_ca(work_dir, conf):
     assert exists(realpath(conf)), f"File {conf} is not exist"
     assert isfile(realpath(conf)), f"{conf} is not a file"
 
-    log.debug("Start setup of local CA")
+    env.debug("Start setup of local CA")
 
     src, user = _read_config(conf, items=["configs.dir", "variables"])
     conf_dir = f"{work_dir}/conf"
@@ -281,7 +381,7 @@ def setup_ca(work_dir, conf):
                     "--pin", user["pin"],
                     "--conf-dir", conf_dir])
     assert out.returncode == 0, "Something break in setup playbook :("
-    log.debug("Setup of local CA is completed")
+    env.debug("Setup of local CA is completed")
 
 
 @click.command()
@@ -299,11 +399,11 @@ def setup_virt_card(conf_dir, work_dir):
     assert exists(work_dir), f"Path {work_dir} is not exist"
     assert isdir(work_dir), f"{work_dir} Not a directory"
 
-    log.debug("Start setup of local CA")
+    env.debug("Start setup of local CA")
     out = subp.run(["bash", SETUP_VSC, "-c", conf_dir, "-w", work_dir])
 
     assert out.returncode == 0, "Something break in setup playbook :("
-    log.debug("Setup of local CA is completed")
+    env.debug("Setup of local CA is completed")
 
 
 @click.command()
@@ -312,7 +412,7 @@ def cleanup_ca(conf):
     """
     Cleanup the host after configuration of the testing environment.
     """
-    log.debug("Start cleanup of local CA")
+    env.debug("Start cleanup of local CA")
     with open(conf, "r") as file:
         data = yaml.load(file, Loader=yaml.FullLoader)
     username = data["variables"]["user"]["name"]
@@ -320,7 +420,7 @@ def cleanup_ca(conf):
         ["bash", CLEANUP_CA, "--username", username])
 
     assert out.returncode == 0, "Something break in setup script :("
-    log.debug("Cleanup of local CA is completed")
+    env.debug("Cleanup of local CA is completed")
 
 
 cli.add_command(setup_ca)
