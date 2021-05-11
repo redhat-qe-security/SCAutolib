@@ -1,6 +1,6 @@
 import datetime
 import subprocess as subp
-from os import path, mkdir, remove
+from os import path, remove
 from random import randint
 from time import sleep
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -11,15 +11,34 @@ from shutil import copy
 
 import SCAutolib.src.virt_card as virt_sc
 import SCAutolib.src.authselect as authselect
-from SCAutolib import log
+from SCAutolib import *
+from decouple import config
+
 
 DIR_PATH = path.realpath(path.dirname(path.abspath(__file__)))
 SERVICES = {"sssd": "/etc/sssd/sssd.conf", "krb": "/etc/krb5.conf"}
-DEFAULTS = {"sssd": f"{DIR_PATH}/env/conf/sssd.conf"}
-TMP = f"{DIR_PATH}/tmp"
-KEYS = f"{TMP}/keys"
-CERTS = f"{TMP}/certs"
-BACKUP = f"{TMP}/backup"
+# DEFAULTS = {"sssd": f"{DIR_PATH}/env/conf/sssd.conf"}  # FIXME: fix default path
+TMP = None
+KEYS = None
+CERTS = None
+BACKUP = None
+
+
+def check_env():
+    def wrapper(fnc):
+        def inner(*args, **kwargs):
+            global BACKUP
+            global KEYS
+            global CERTS
+            if BACKUP is None:
+                BACKUP = config("BACKUP")
+            if KEYS is None:
+                KEYS = config("KEYS")
+            if CERTS is None:
+                KEYS = config("CERTS")
+            fnc(*args, **kwargs)
+        return inner
+    return wrapper
 
 
 def edit_config(service: str, string: str, holder: str, section: bool = True):
@@ -46,6 +65,27 @@ def edit_config(service: str, string: str, holder: str, section: bool = True):
     return wrapper
 
 
+def backup(file_path: str, service: str = None):
+    """
+    Decorator for backingup file. After executing wrapped function, restore
+    given file to the prevrious location.
+
+    :param file_path: path to file to be backuped
+    :param service: service to be restarted after restoring the file.
+                    By default is None - no service is need to be restarted
+    :return: decorated function
+    """
+
+    def wrapper(test):
+        def inner_wrapper(*args, **kwargs):
+            _backup(file_path=file_path, service=service, fnc=test, *args, **kwargs)
+
+        return inner_wrapper
+
+    return wrapper
+
+
+@check_env()
 def _backup(file_path, name=None, service=None, fnc=None, *args, **kwargs):
     # Compose target file. If 'name' is specified, file would have this name,
     # otherwise the name would remain is in the source
@@ -65,26 +105,6 @@ def _backup(file_path, name=None, service=None, fnc=None, *args, **kwargs):
             remove(target)
             if service is not None:
                 restart_service(service)
-
-
-def backup(file_path: str, service: str = None):
-    """
-    Decorator for backingup file. After executing wrapped function, restore
-    given file to the prevrious location.
-
-    :param file_path: path to file to be backuped
-    :param service: service to be restarted after restoring the file.
-                    By default is None - no service is need to be restarted
-    :return: decorated function
-    """
-
-    def wrapper(test):
-        def inner_wrapper(*args, **kwargs):
-            _backup(file_path=file_path, service=service, fnc=test, *args, **kwargs)
-
-        return inner_wrapper
-
-    return wrapper
 
 
 def _edit_config(config: str, string: str, holder: str, section: bool):
@@ -134,6 +154,7 @@ def restart_service(service: str) -> int:
         return e.returncode
 
 
+@check_env()
 def generate_root_ca_crt():
     """
     Function for generating the root CA certificate with keys

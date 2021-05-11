@@ -1,13 +1,13 @@
 import logging
 from os.path import (exists, realpath, isdir,
                      isfile, dirname, abspath)
-from os import mkdir, getenv
+from os import mkdir
 import click
 import yaml
 import subprocess as subp
-from shutil import copytree
+from shutil import copytree, copy
 from re import match
-from dotenv import load_dotenv
+from decouple import config
 import SCAutolib.src.utils as utils
 
 log = logging.getLogger("env")
@@ -32,16 +32,17 @@ def cli():
 
 
 @click.command()
-@click.option("--conf", "-c", type=click.Path(), help="Path to YAML file with "
-                                                      "configurations.")
-@click.option("--work-dir", "-w", type=click.Path(), help="Absolute path to working "
-                                                          "directory.")
-@click.option("--env", "-e", type=click.Path, help="Absolute path to .env file with environment "
-                                                   "varibles to be used in the library.")
+@click.option("--conf", "-c", type=click.Path(),
+              help="Path to YAML file with configurations.", required=False)
+@click.option("--work-dir", "-w", type=click.Path(),
+              help="Absolute path to working directory.",
+              required=False, default=DIR_PATH)
+@click.option("--env", "-e", type=click.Path(),
+              help="Absolute path to .env file with environment varibles to be "
+                   "used in the library.", required=False, default=None)
 def prepair(conf, work_dir, env):
-    global WORK_DIR
-    WORK_DIR = work_dir
-    _load_env(env)
+
+    _load_env(env, work_dir)
 
     _prep_tmp_dirs()
     log.debug("tmp directories are created")
@@ -54,36 +55,49 @@ def prepair(conf, work_dir, env):
     _create_softhsm2_config()
     log.debug("SoftHSM2 configuration file is created in the "
               f"{CONF_DIR}/softhsm2.conf")
+    #
+    # _create_virtcacard_configs()
+    # log.debug("Configuration files for virtual smart card are created.")
+    # # TODO: create .cnf files for certificates
 
-    _create_virtcacard_configs()
-    log.debug("Configuration files for virtual smart card are created.")
-    # TODO: create .cnf files for certificates
+    # setup_ca()
+    #
+    # setup_virt_card()
 
 
-def _load_env(env):
+def _load_env(env, work_dir):
+    global WORK_DIR
+    global CONF_DIR
+    global BACKUP
+
     if env is None:
-        with open(f"{DIR_PATH}/.env", "w") as f:
-            f.write(f"WORK_DIR = {WORK_DIR}\n")
-            f.write(f"TMP = {WORK_DIR}/tmp\n")
-            f.write(f"CONF_DIR = {WORK_DIR}/conf\n")
-            f.write(f"KEYS = {WORK_DIR}/tmp/keys\n")
-            f.write(f"CERTS = {WORK_DIR}/tmp/certs\n")
-            f.write(f"BACKUP = {WORK_DIR}/tmp/backup\n")
         env = f"{DIR_PATH}/.env"
-    load_dotenv(env)
+        with open(env, "w") as f:
+            f.write(f"WORK_DIR = {work_dir}\n")
+            f.write(f"TMP = {work_dir}/tmp\n")
+            f.write(f"CONF_DIR = {work_dir}/conf\n")
+            f.write(f"KEYS = {work_dir}/tmp/keys\n")
+            f.write(f"CERTS = {work_dir}/tmp/certs\n")
+            f.write(f"BACKUP = {work_dir}/tmp/backup\n")
+    else:
+        # .env file should be near source file because it this env is loaded
+        # in other source files
+        copy(env, DIR_PATH)
+
+    WORK_DIR = work_dir
+    CONF_DIR = config("CONF_DIR", cast=str)
+    BACKUP = config("BACKUP", cast=str)
 
 
 def _prep_tmp_dirs():
-    if not exists(TMP):
-        mkdir(TMP)
-    if not exists(KEYS):
-        mkdir(KEYS)
-    if not exists(CERTS):
-        mkdir(CERTS)
-    if not exists(BACKUP):
-        mkdir(BACKUP)
-    if not exists(CONF_DIR):
-        mkdir(CONF_DIR)
+    """
+    Prepair directory structure for test environment. All paths are taken from
+    previously loaded env file.
+    """
+    for dir_env_var in ("WORK_DIR", "TMP", "KEYS", "CERTS", "BACKUP", "CONF_DIR"):
+        dir_path = config(dir_env_var, cast=str)
+        if not exists(dir_path):
+            mkdir(dir_path)
 
 
 def _create_sssd_config(local_user: str = None, krb_user: str = None):
@@ -97,8 +111,8 @@ def _create_sssd_config(local_user: str = None, krb_user: str = None):
     """
 
     holder = "#<{holder}>\n"
-    content = []
     if exists("/etc/sssd/sssd.conf"):
+        # utils._backup("/etc/sssd/sssd.conf", name="sssd-original.conf", env=True)
         utils._backup("/etc/sssd/sssd.conf", name="sssd-original.conf")
 
         with open("/etc/sssd/sssd.conf", "r") as f:
@@ -135,7 +149,7 @@ def _create_sssd_config(local_user: str = None, krb_user: str = None):
                    "#<[domain/shadowutils]>\n"]
         if local_user:
             content.append(f"\n[certmap/shadowutils/{local_user}]\n"
-                           f"matchrule = < SUBJECT >.*CN = {local_user}.*\n"
+                           f"matchrule = <SUBJECT>.*CN = {local_user}.*\n"
                            f"#<[certmap/shadowutils/{local_user}]>\n")
         if krb_user:
             pass
@@ -150,135 +164,54 @@ def _create_softhsm2_config():
     Create SoftHSM2 configuraion file in conf_dir. Same directory has to be used
     in setup-ca function, otherwise configuraion file wouldn't be found causing
     the error. conf_dir expected to be in work_dir.
-
-    Args:
     """
-    hsm_conf = getenv("SOFTHSM2_CONF")
+    hsm_conf = config("SOFTHSM2_CONF", default=None)
     if hsm_conf is not None:
         with open(f"{BACKUP}/SoftHSM2-conf-env-var", "w") as f:
-            f.write(hsm_conf)
+            f.write(hsm_conf + "\n")
     with open(f"{CONF_DIR}/softhsm2.conf", "w") as f:
         f.write(f"directories.tokendir = {WORK_DIR}/tokens/\n"
                 f"slots.removable = true\n"
                 f"objectstore.backend = file\n"
-                f"log.level = INFO")
-
-    usernames = _read_config(conf, items=["variables.local_user.name",
-                                          "variables.krb_user.name"])
-    _create_sssd_config(*usernames)
-    log.debug("SSSD configuration file is updated")
-
-    _create_softhsm2_config()
-    log.debug("SoftHSM2 configuration file is created in the "
-              f"{CONF_DIR}/softhsm2.conf")
-
-    _create_virtcacard_configs()
-    log.debug("Configuration files for virtual smart card are created.")
-    # TODO: create .cnf files for certificates
+                f"log.level = INFO\n")
 
 
-def _load_env(env):
-    if env is None:
-        with open(f"{DIR_PATH}/.env", "w") as f:
-            f.write(f"WORK_DIR = {WORK_DIR}\n")
-            f.write(f"TMP = {WORK_DIR}/tmp\n")
-            f.write(f"CONF_DIR = {WORK_DIR}/conf\n")
-            f.write(f"KEYS = {WORK_DIR}/tmp/keys\n")
-            f.write(f"CERTS = {WORK_DIR}/tmp/certs\n")
-            f.write(f"BACKUP = {WORK_DIR}/tmp/backup\n")
-        env = f"{DIR_PATH}/.env"
-    load_dotenv(env)
-
-
-def _prep_tmp_dirs():
-    if not exists(TMP):
-        mkdir(TMP)
-    if not exists(KEYS):
-        mkdir(KEYS)
-    if not exists(CERTS):
-        mkdir(CERTS)
-    if not exists(BACKUP):
-        mkdir(BACKUP)
-    if not exists(CONF_DIR):
-        mkdir(CONF_DIR)
-
-
-def _create_sssd_config(local_user: str = None, krb_user: str = None):
+def _create_virtcacard_configs():
     """
-    Update the content of the sssd.conf file. If file exists, it would be store
-    to the backup folder and content in would be edited for testing purposes.
-    If file doesn't exist, it would be created and filled with default options.
-    Args:
-        local_user: username for local user with smart card to add the match rule.
-        krb_user: username for kerberos user with smart card to add the match rule.
+    Create systemd service (virt_cacard.service) and semodule (virtcacard.cil)
+    for virtual smart card.
     """
+    # TODO create virt_cacard.service
+    service_path = "/etc/systemd/system/virt_cacard.service"
+    module_path = f"{CONF_DIR}/virtcacard.cil"
+    if exists(service_path):
+        utils._backup(service_path, "virt_cacard-original.service")
+    if exists(module_path):
+        utils._backup(module_path, "virtcacard.cil-original")
 
-    holder = "#<{holder}>\n"
-    content = []
-    if exists("/etc/sssd/sssd.conf"):
-        utils._backup("/etc/sssd/sssd.conf", name="sssd-original.conf")
+    with open(service_path, "w") as f:
+        f.write(f"""[Unit]
+Description=virt_cacard Service
+Requires=pcscd.service
 
-        with open("/etc/sssd/sssd.conf", "r") as f:
-            content = f.readlines()
-        for index, line in enumerate(content):
-            if match(r"^\[(.*)]\n$", line):
-                content[index] = line + holder.format(holder=line.rstrip("\n"))
-        if local_user:
-            rule = f"\n[certmap/shadowutils/{local_user}]\n" \
-                   f"matchrule = <SUBJECT>.*CN={local_user}.*\n" \
-                   f"#<[certmap/shadowutils/{local_user}]>\n"
-            content.append(rule)
-        if krb_user:
-            pass
-            # FIXME: add rule for kerberos user
-            # content.append(rule)
-    else:
-        content = ["[sssd]\n",
-                   "debug_level = 9\n",
-                   "services = nss, pam\n",
-                   "domains = shadowutils\n",
-                   "#<[sssd]>\n",
-                   "\n[nss]\n",
-                   "debug_level = 9\n",
-                   "#<[nss]>\n",
-                   "\n[pam]\n",
-                   "debug_level = 9\n",
-                   "pam_cert_auth = True\n",
-                   "#<[pam]>\n",
+[Service]
+Environment=SOFTHSM2_CONF="{CONF_DIR}/softhsm2.conf"
+WorkingDirectory={WORK_DIR}
+ExecStart=/usr/bin/virt_cacard >> /var/log/virt_cacard.debug 2>&1
+KillMode=process
 
-                   "\n[domain/shadowutils]\n",
-                   "debug_level = 9\n",
-                   "id_provider = files\n",
-                   "#<[domain/shadowutils]>\n"]
-        if local_user:
-            content.append(f"\n[certmap/shadowutils/{local_user}]\n"
-                           f"matchrule = < SUBJECT >.*CN = {local_user}.*\n"
-                           f"#<[certmap/shadowutils/{local_user}]>\n")
-        if krb_user:
-            pass
-        # FIXME: add rule for kerberos user
+[Install]
+WantedBy=multi-user.target
+""")
+    log.debug(
+        f"Service file {service_path} for virtual smart card is created.")
+    with open(module_path, "w") as f:
+        f.write("""(allow pcscd_t node_t (tcp_socket (node_bind)));
 
-    with open("/etc/sssd/sssd.conf", "w") as f:
-        f.write("".join(content))
+; allow p11_child to read softhsm cache - not present in RHEL by default
+(allow sssd_t named_cache_t (dir """)
 
-
-def _create_softhsm2_config():
-    """
-    Create SoftHSM2 configuraion file in conf_dir. Same directory has to be used
-    in setup-ca function, otherwise configuraion file wouldn't be found causing
-    the error. conf_dir expected to be in work_dir.
-
-    Args:
-    """
-    hsm_conf = getenv("SOFTHSM2_CONF")
-    if hsm_conf is not None:
-        with open(f"{BACKUP}/SoftHSM2-conf-env-var", "w") as f:
-            f.write(hsm_conf)
-    with open(f"{CONF_DIR}/softhsm2.conf", "w") as f:
-        f.write(f"directories.tokendir = {WORK_DIR}/tokens/\n"
-                f"slots.removable = true\n"
-                f"objectstore.backend = file\n"
-                f"log.level = INFO")
+    log.debug(f"SELinux module create {module_path}")
 
 
 def _read_config(config, items: [str] = None) -> dict or list:
@@ -318,44 +251,6 @@ def _read_config(config, items: [str] = None) -> dict or list:
                     f"Key {part} not present in the configuration file. Skip.")
                 break
     return return_list
-
-
-def _create_virtcacard_configs():
-    """
-    Create systemd service (virt_cacard.service) and semodule (virtcacard.cil)
-    for virtual smart card.
-    """
-    # TODO create virt_cacard.service
-    service_path = "/etc/systemd/system/virt_cacard.service"
-    module_path = f"{CONF_DIR}/virtcacard.cil"
-    if exists(service_path):
-        utils._backup(service_path, "virt_cacard-original.service")
-    if exists(module_path):
-        utils._backup(module_path, "virtcacard.cil-original")
-
-    with open(service_path, "w") as f:
-        f.write(f"""[Unit]
-Description=virt_cacard Service
-Requires=pcscd.service
-
-[Service]
-Environment=SOFTHSM2_CONF="{CONF_DIR}/softhsm2.conf"
-WorkingDirectory={WORK_DIR}
-ExecStart=/usr/bin/virt_cacard >> /var/log/virt_cacard.debug 2>&1
-KillMode=process
-
-[Install]
-WantedBy=multi-user.target
-""")
-    log.debug(
-        f"Service file {service_path} for virtual smart card is created.")
-    with open(module_path, "w") as f:
-        f.write("""(allow pcscd_t node_t (tcp_socket (node_bind)));
-
-; allow p11_child to read softhsm cache - not present in RHEL by default
-(allow sssd_t named_cache_t (dir """)
-
-    log.debug(f"SELinux module create {module_path}")
 
 
 @click.command()

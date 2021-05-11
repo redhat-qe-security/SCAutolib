@@ -43,6 +43,7 @@
           - click
           - avocado-framework-plugin-varianter-yaml-to-mux
           - pyyaml
+          - python-dotenv
         extra_args: --upgrade -I
 
     - name: Download archive from Lookaside
