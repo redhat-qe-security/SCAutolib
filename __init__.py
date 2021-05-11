@@ -15,7 +15,7 @@ log.setLevel(logging.DEBUG)
 log.addHandler(handler)
 
 # Logger for environment events
-env = logging.getLogger("env")
-env.setLevel(logging.DEBUG)
+env_logger = logging.getLogger("env")
+env_logger.setLevel(logging.DEBUG)
 
-env.addHandler(handler)
+env_logger.addHandler(handler)

@@ -9,11 +9,10 @@ from cryptography.x509.oid import NameOID
 from cryptography import x509
 from shutil import copy
 
-import SCAutolib.src.virt_card as virt_sc
-import SCAutolib.src.authselect as authselect
-from SCAutolib import *
-from decouple import config
-
+import virt_card as virt_sc
+import authselect as authselect
+from env import check_env
+from SCAutolib import env_logger, log
 
 DIR_PATH = path.realpath(path.dirname(path.abspath(__file__)))
 SERVICES = {"sssd": "/etc/sssd/sssd.conf", "krb": "/etc/krb5.conf"}
@@ -22,23 +21,6 @@ TMP = None
 KEYS = None
 CERTS = None
 BACKUP = None
-
-
-def check_env():
-    def wrapper(fnc):
-        def inner(*args, **kwargs):
-            global BACKUP
-            global KEYS
-            global CERTS
-            if BACKUP is None:
-                BACKUP = config("BACKUP")
-            if KEYS is None:
-                KEYS = config("KEYS")
-            if CERTS is None:
-                KEYS = config("CERTS")
-            fnc(*args, **kwargs)
-        return inner
-    return wrapper
 
 
 def edit_config(service: str, string: str, holder: str, section: bool = True):

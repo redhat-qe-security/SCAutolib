@@ -3,4 +3,4 @@ pexpect
 click
 pyyaml
 avocado-framework-plugin-varianter-yaml-to-mux
-python-dotenv
+python-decouple

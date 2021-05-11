@@ -7,8 +7,8 @@ import subprocess as subp
 from shutil import copytree, copy
 from re import match
 from decouple import config
-import SCAutolib.src.utils as utils
-from SCAutolib import env
+import utils as utils
+from SCAutolib import env_logger
 
 # TODO add docs about parameters
 DIR_PATH = dirname(abspath(__file__))
@@ -29,8 +29,27 @@ def cli():
     pass
 
 
+def check_env():
+    def wrapper(fnc):
+        def inner(*args, **kwargs):
+            global BACKUP
+            global KEYS
+            global CERTS
+            if BACKUP is None:
+                BACKUP = config("BACKUP")
+            if KEYS is None:
+                KEYS = config("KEYS")
+            if CERTS is None:
+                KEYS = config("CERTS")
+            fnc(*args, **kwargs)
+
+        return inner
+
+    return wrapper
+
+
 @click.command()
-@click.option("--setup", "-s", type=bool, default=False, required=False,
+@click.option("--setup", "-s", is_flag=True, default=False, required=False,
               help="Flag for automatic execution of local CA and virtual "
                    "smart card deployment")
 @click.option("--conf", "-c", type=click.Path(),
@@ -60,32 +79,32 @@ def prepair(setup, conf, work_dir, env_file):
     try:
         work_dir = conf_work_dir[0]
     except IndexError:
-        env.debug(f"Work directory is not present in the {conf}."
-                  f"Use value {work_dir}")
+        env_logger.debug(f"Work directory is not present in the {conf}."
+                         f"Use value {work_dir}")
 
     _load_env(env_file, work_dir)
 
     _prep_tmp_dirs()
-    env.debug("tmp directories are created")
+    env_logger.debug("tmp directories are created")
 
     usernames = _read_config(conf, items=["variables.local_user.name",
                                           "variables.krb_user.name"])
     _create_sssd_config(*usernames)
-    env.debug("SSSD configuration file is updated")
+    env_logger.debug("SSSD configuration file is updated")
 
     _create_softhsm2_config()
-    env.debug("SoftHSM2 configuration file is created in the "
-              f"{CONF_DIR}/softhsm2.conf")
+    env_logger.debug("SoftHSM2 configuration file is created in the "
+                     f"{CONF_DIR}/softhsm2.conf")
 
     _create_virtcacard_configs()
-    env.debug("Configuration files for virtual smart card are created.")
+    env_logger.debug("Configuration files for virtual smart card are created.")
 
     _creat_cnf(usernames)
 
     if setup:
-        setup_ca(work_dir=WORK_DIR, conf=conf)
+        _setup_ca(work_dir=WORK_DIR, conf=conf)
 
-        setup_virt_card(conf_dir=CONF_DIR, work_dir=WORK_DIR)
+        _setup_virt_card(conf_dir=CONF_DIR, work_dir=WORK_DIR)
 
 
 def _load_env(env_file, work_dir):
@@ -115,7 +134,7 @@ def _load_env(env_file, work_dir):
         # .env file should be near source file
         # because this env file is used other source files
         copy(env_file, DIR_PATH)
-    env.debug("Environment file is created")
+    env_logger.debug("Environment file is created")
     WORK_DIR = work_dir
     CONF_DIR = config("CONF_DIR", cast=str)
     BACKUP = config("BACKUP", cast=str)
@@ -191,7 +210,7 @@ CN = Example Test CA
         """
         with open(f"{CONF_DIR}/ca.cnf", "w") as f:
             f.write(ca_cnf)
-            env.debug(f"Confugation file for local CA is created {CONF_DIR}/ca.cnf")
+            env_logger.debug(f"Confugation file for local CA is created {CONF_DIR}/ca.cnf")
 
     for user in user_list:
         user_cnf = f"""[ req ]
@@ -214,8 +233,8 @@ subjectAltName = otherName:msUPN;UTF8:{user}@EXAMPLE.COM, email:{user}@example.c
 """
         with open(f"{CONF_DIR}/req_{user}.cnf", "w") as f:
             f.write(user_cnf)
-            env.debug(f"Configuraiton file for CSR for user {user} is created "
-                      f"{CONF_DIR}/req_{user}.cnf")
+            env_logger.debug(f"Configuraiton file for CSR for user {user} is created "
+                             f"{CONF_DIR}/req_{user}.cnf")
 
 
 def _create_sssd_config(local_user: str = None, krb_user: str = None):
@@ -277,8 +296,8 @@ def _create_sssd_config(local_user: str = None, krb_user: str = None):
 
     with open("/etc/sssd/sssd.conf", "w") as f:
         f.write("".join(content))
-        env.debug("Configuration file for SSSD is updated "
-                  "in  /etc/sssd/sssd.conf")
+        env_logger.debug("Configuration file for SSSD is updated "
+                         "in  /etc/sssd/sssd.conf")
 
 
 def _create_softhsm2_config():
@@ -291,15 +310,15 @@ def _create_softhsm2_config():
     if hsm_conf is not None:
         with open(f"{BACKUP}/SoftHSM2-conf-env-var", "w") as f:
             f.write(hsm_conf + "\n")
-        env.debug(f"Original value of SOFTHSM2_CONF is stored into "
-                  f"{BACKUP}/SoftHSM2-conf-env-var file.")
+        env_logger.debug(f"Original value of SOFTHSM2_CONF is stored into "
+                         f"{BACKUP}/SoftHSM2-conf-env-var file.")
     with open(f"{CONF_DIR}/softhsm2.conf", "w") as f:
         f.write(f"directories.tokendir = {WORK_DIR}/tokens/\n"
                 f"slots.removable = true\n"
                 f"objectstore.backend = file\n"
                 f"log.level = INFO\n")
-        env.debug(f"Configuration file for SoftHSM2 is created "
-                  f"in {CONF_DIR}/softhsm2.conf.")
+        env_logger.debug(f"Configuration file for SoftHSM2 is created "
+                         f"in {CONF_DIR}/softhsm2.conf.")
 
 
 def _create_virtcacard_configs():
@@ -329,7 +348,7 @@ KillMode=process
 [Install]
 WantedBy=multi-user.target
 """)
-    env.debug(
+    env_logger.debug(
         f"Service file {service_path} for virtual smart card is created.")
 
     with open(module_path, "w") as f:
@@ -338,10 +357,10 @@ WantedBy=multi-user.target
 ; allow p11_child to read softhsm cache - not present in RHEL by default
 (allow sssd_t named_cache_t (dir """)
 
-    env.debug(f"SELinux module create {module_path}")
+    env_logger.debug(f"SELinux module create {module_path}")
 
 
-def _read_config(conf, items: [str] = None) -> dict or list:
+def _read_config(conf, items: [str] = None) -> list:
     """
     Read data from the configuration file and return require items or full
     content.
@@ -374,14 +393,16 @@ def _read_config(conf, items: [str] = None) -> dict or list:
                 if part == parts[-1]:
                     return_list.append(value)
             except KeyError:
-                env.debug(
+                env_logger.debug(
                     f"Key {part} not present in the configuration file. Skip.")
                 break
     return return_list
 
 
 @click.command()
-@click.option("--work-dir", "-w", type=click.Path(), rquired=False, default=None,
+@click.argument('work-dir')
+@click.argument('conf')
+@click.option("--work-dir", "-w", type=click.Path(), required=False, default=None,
               help="Path to working directory")
 @click.option("--conf", "-c", type=click.Path(), required=False,
               help="Path to YAML file with configurations")
@@ -392,6 +413,11 @@ def setup_ca(work_dir, conf):
     :param work_dir: Path to working directory
     :param conf: Path to YAML file with configurations
     """
+    _setup_ca(work_dir, conf)
+
+
+@check_env()
+def _setup_ca(work_dir, conf):
     assert exists(realpath(conf)), f"File {conf} is not exist."
     assert isfile(realpath(conf)), f"{conf} is not a file."
 
@@ -402,28 +428,27 @@ def setup_ca(work_dir, conf):
             msg = "No working directory specified. Nither by paramter " \
                   f"--work-dir, nor in the configuraion file {conf} by " \
                   "variable work_dir."
-            env.error(msg)
+            env_logger.error(msg)
             raise IndexError(msg)
 
-    env.debug("Start setup of local CA")
+    env_logger.debug("Start setup of local CA")
 
-    src, user = _read_config(conf, items=["configs.dir", "variables"])
-    conf_dir = f"{work_dir}/conf"
-    copytree(realpath(src), conf_dir)
-    # user = data["variables"]["user"]
-    print(work_dir)
+    user = _read_config(conf, items=["variables.local_user"])[0]
+
     out = subp.run(["bash", SETUP_CA, "--dir", work_dir,
                     "--username", user["name"],
                     "--userpasswd", user["passwd"],
                     "--pin", user["pin"],
-                    "--conf-dir", conf_dir])
+                    "--conf-dir", CONF_DIR])
     assert out.returncode == 0, "Something break in setup playbook :("
-    env.debug("Setup of local CA is completed")
+    env_logger.debug("Setup of local CA is completed")
 
 
 @click.command()
 @click.option("--conf-dir", "-C", type=click.Path(), help="Directory with configuration files")
 @click.option("--work-dir", "-w", type=click.Path(), help="Working directory")
+@click.argument('conf_dir')
+@click.argument('work_dir')
 def setup_virt_card(conf_dir, work_dir):
     """
     Setup virtual smart card. Has to be run after configuration of the local CA.
@@ -431,16 +456,21 @@ def setup_virt_card(conf_dir, work_dir):
     :param conf_dir: Directory with configuration files
     :param work_dir: Working directory
     """
+    _setup_virt_card(conf_dir, work_dir)
+
+
+@check_env()
+def _setup_virt_card(conf_dir, work_dir):
     assert exists(conf_dir), f"Path {conf_dir} is not exist"
     assert isdir(conf_dir), f"{conf_dir} Not a directory"
     assert exists(work_dir), f"Path {work_dir} is not exist"
     assert isdir(work_dir), f"{work_dir} Not a directory"
 
-    env.debug("Start setup of local CA")
+    env_logger.debug("Start setup of local CA")
     out = subp.run(["bash", SETUP_VSC, "-c", conf_dir, "-w", work_dir])
 
     assert out.returncode == 0, "Something break in setup playbook :("
-    env.debug("Setup of local CA is completed")
+    env_logger.debug("Setup of local CA is completed")
 
 
 @click.command()
@@ -449,7 +479,7 @@ def cleanup_ca(conf):
     """
     Cleanup the host after configuration of the testing environment.
     """
-    env.debug("Start cleanup of local CA")
+    env_logger.debug("Start cleanup of local CA")
     with open(conf, "r") as file:
         data = yaml.load(file, Loader=yaml.FullLoader)
     username = data["variables"]["user"]["name"]
@@ -457,7 +487,7 @@ def cleanup_ca(conf):
         ["bash", CLEANUP_CA, "--username", username])
 
     assert out.returncode == 0, "Something break in setup script :("
-    env.debug("Cleanup of local CA is completed")
+    env_logger.debug("Cleanup of local CA is completed")
 
 
 cli.add_command(setup_ca)
