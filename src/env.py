@@ -1,10 +1,9 @@
-from os.path import (exists, realpath, isdir,
-                     isfile, dirname, abspath)
+from os.path import (exists, realpath, isfile, dirname, abspath, join)
 from os import mkdir
 import click
 import yaml
 import subprocess as subp
-from shutil import copytree, copy
+from shutil import copy
 from re import match
 from decouple import config
 import utils as utils
@@ -15,7 +14,7 @@ DIR_PATH = dirname(abspath(__file__))
 SETUP_CA = f"{DIR_PATH}/env/setup_ca.sh"
 SETUP_VSC = f"{DIR_PATH}/env/setup_virt_card.sh"
 CLEANUP_CA = f"{DIR_PATH}/env/cleanup_ca.sh"
-WORK_DIR = None
+WORK_DIR = f"{DIR_PATH}/virt_card"
 TMP = f"{WORK_DIR}/tmp"
 CONF_DIR = f"{WORK_DIR}/conf"
 KEYS = f"{TMP}/keys"
@@ -75,14 +74,15 @@ def prepair(setup, conf, work_dir, env_file):
                   by varible WORK_DIR in confugration file
         env_file: path to already existing .env file
     """
-    conf_work_dir = _read_config(conf, items=["work_dir"])
-    try:
-        work_dir = conf_work_dir[0]
-    except IndexError:
-        env_logger.debug(f"Work directory is not present in the {conf}."
-                         f"Use value {work_dir}")
+    # conf_work_dir = _read_config(conf, items=["work_dir"])
+    # env_logger.debug("conf work dir from config file is >>>>>> " + str(conf_work_dir))
+    # try:
+    #     work_dir = conf_work_dir[0]
+    # except IndexError:
+    #     env_logger.debug(f"Work directory is not present in the {conf}."
+    #                      f"Use value {work_dir}")
 
-    _load_env(env_file, work_dir)
+    env_file = _load_env(env_file, work_dir)
 
     _prep_tmp_dirs()
     env_logger.debug("tmp directories are created")
@@ -102,12 +102,12 @@ def prepair(setup, conf, work_dir, env_file):
     _creat_cnf(usernames)
 
     if setup:
-        _setup_ca(work_dir=WORK_DIR, conf=conf)
+        _setup_ca(conf, env_file)
 
-        _setup_virt_card(conf_dir=CONF_DIR, work_dir=WORK_DIR)
+        _setup_virt_card(env_file)
 
 
-def _load_env(env_file, work_dir):
+def _load_env(env_file, work_dir=join(DIR_PATH, "virt_card")) -> str:
     """
     Create .env near source files of the libarary. In .env file following
     variables expected to be present: WORK_DIR, CONF_DIR, TMP, KEYS, CERTS, BACKUP.
@@ -116,6 +116,9 @@ def _load_env(env_file, work_dir):
     Args:
         env_file:  path to already existing .env file. If given, then it would be just copied to the library.
         work_dir: working directory
+
+    Returns:
+        Path to .env file.
     """
     global WORK_DIR
     global CONF_DIR
@@ -124,20 +127,22 @@ def _load_env(env_file, work_dir):
     if env_file is None:
         env_file = f"{DIR_PATH}/.env"
         with open(env_file, "w") as f:
-            f.write(f"WORK_DIR = {work_dir}\n")
-            f.write(f"TMP = {work_dir}/tmp\n")
-            f.write(f"CONF_DIR = {work_dir}/conf\n")
-            f.write(f"KEYS = {work_dir}/tmp/keys\n")
-            f.write(f"CERTS = {work_dir}/tmp/certs\n")
-            f.write(f"BACKUP = {work_dir}/tmp/backup\n")
+            f.write(f"WORK_DIR={work_dir}\n")
+            f.write(f"TMP={join(work_dir, 'tmp')}\n")
+            f.write(f"CONF_DIR={join(work_dir, 'conf')}\n")
+            f.write(f"KEYS={join(work_dir, 'tmp','keys')}\n")
+            f.write(f"CERTS={join(work_dir, 'tmp','certs')}\n")
+            f.write(f"BACKUP={join(work_dir, 'tmp','backup')}\n")
     else:
         # .env file should be near source file
         # because this env file is used other source files
         copy(env_file, DIR_PATH)
+        env_file = join(DIR_PATH, ".env")
     env_logger.debug("Environment file is created")
     WORK_DIR = work_dir
     CONF_DIR = config("CONF_DIR", cast=str)
     BACKUP = config("BACKUP", cast=str)
+    return env_file
 
 
 def _prep_tmp_dirs():
@@ -269,27 +274,29 @@ def _create_sssd_config(local_user: str = None, krb_user: str = None):
             # content.append(rule)
     else:
         content = ["[sssd]\n",
+                   "#<[sssd]>\n",
                    "debug_level = 9\n",
                    "services = nss, pam\n",
                    "domains = shadowutils\n",
-                   "#<[sssd]>\n",
+
                    "\n[nss]\n",
-                   "debug_level = 9\n",
                    "#<[nss]>\n",
+                   "debug_level = 9\n",
+
                    "\n[pam]\n",
+                   "#<[pam]>\n",
                    "debug_level = 9\n",
                    "pam_cert_auth = True\n",
-                   "#<[pam]>\n",
 
                    "\n[domain/shadowutils]\n",
+                   "#<[domain/shadowutils]>\n"
                    "debug_level = 9\n",
-                   "id_provider = files\n",
-                   "#<[domain/shadowutils]>\n"]
+                   "id_provider = files\n"]
 
         if local_user:
             content.append(f"\n[certmap/shadowutils/{local_user}]\n"
-                           f"matchrule = <SUBJECT>.*CN = {local_user}.*\n"
-                           f"#<[certmap/shadowutils/{local_user}]>\n")
+                           f"#<[certmap/shadowutils/{local_user}]>\n"
+                           f"matchrule = <SUBJECT>.*CN={local_user}.*\n")
         if krb_user:
             pass
         # FIXME: add rule for kerberos user
@@ -355,7 +362,7 @@ WantedBy=multi-user.target
         f.write("""(allow pcscd_t node_t (tcp_socket (node_bind)));
 
 ; allow p11_child to read softhsm cache - not present in RHEL by default
-(allow sssd_t named_cache_t (dir """)
+(allow sssd_t named_cache_t (dir (read search)));""")
 
     env_logger.debug(f"SELinux module create {module_path}")
 
@@ -400,74 +407,67 @@ def _read_config(conf, items: [str] = None) -> list:
 
 
 @click.command()
-@click.argument('work-dir')
-@click.argument('conf')
-@click.option("--work-dir", "-w", type=click.Path(), required=False, default=None,
-              help="Path to working directory")
-@click.option("--conf", "-c", type=click.Path(), required=False,
+@click.option("--env", type=click.Path(), required=False, default=None,
+              help="Path to .env file with specified variables")
+@click.option("--conf", "-c", type=click.Path(), required=True,
               help="Path to YAML file with configurations")
-def setup_ca(work_dir, conf):
-    """
-    Setup local CA
+@click.option("--work-dir", type=click.Path(), required=False,
+              default=join(DIR_PATH, "virt_card"),
+              help=f"Path to working directory. By default is "
+                   f"{join(DIR_PATH, 'virt_card')}")
+def setup_ca(conf, env_file, work_dir):
+    f"""
+    Setup local CA.
 
-    :param work_dir: Path to working directory
-    :param conf: Path to YAML file with configurations
+    Args:
+        conf: Path to YAML file with configurations
+        work_dir:Path to working directory. By default is {join(DIR_PATH, 'virt_card')}
+        env_file: Path to .env file with specified variables
     """
-    _setup_ca(work_dir, conf)
+
+    env_path = _load_env(env_file, work_dir)
+    _setup_ca(conf, env_path)
 
 
 @check_env()
-def _setup_ca(work_dir, conf):
+def _setup_ca(conf, env_file):
     assert exists(realpath(conf)), f"File {conf} is not exist."
     assert isfile(realpath(conf)), f"{conf} is not a file."
-
-    if work_dir is None:
-        try:
-            work_dir = _read_config(conf, ["work_dir"])[0]
-        except IndexError:
-            msg = "No working directory specified. Nither by paramter " \
-                  f"--work-dir, nor in the configuraion file {conf} by " \
-                  "variable work_dir."
-            env_logger.error(msg)
-            raise IndexError(msg)
 
     env_logger.debug("Start setup of local CA")
 
     user = _read_config(conf, items=["variables.local_user"])[0]
-
-    out = subp.run(["bash", SETUP_CA, "--dir", work_dir,
+    out = subp.run(["bash", SETUP_CA,
                     "--username", user["name"],
                     "--userpasswd", user["passwd"],
                     "--pin", user["pin"],
-                    "--conf-dir", CONF_DIR])
+                    "--env", env_file])
     assert out.returncode == 0, "Something break in setup playbook :("
     env_logger.debug("Setup of local CA is completed")
 
 
 @click.command()
-@click.option("--conf-dir", "-C", type=click.Path(), help="Directory with configuration files")
-@click.option("--work-dir", "-w", type=click.Path(), help="Working directory")
-@click.argument('conf_dir')
-@click.argument('work_dir')
-def setup_virt_card(conf_dir, work_dir):
+@click.option("--env", type=click.Path(), required=False, default=None,
+              help="Path to .env file with specified variables")
+# @click.option("--conf-dir", "-c", type=click.Path(), required=True)
+@click.option("--work-dir", type=click.Path(), required=False,
+              default=join(DIR_PATH, "virt_card"))
+def setup_virt_card(env, work_dir):
     """
     Setup virtual smart card. Has to be run after configuration of the local CA.
 
     :param conf_dir: Directory with configuration files
     :param work_dir: Working directory
     """
-    _setup_virt_card(conf_dir, work_dir)
+    env_path = _load_env(env, work_dir)
+    _setup_virt_card(env_path)
 
 
 @check_env()
-def _setup_virt_card(conf_dir, work_dir):
-    assert exists(conf_dir), f"Path {conf_dir} is not exist"
-    assert isdir(conf_dir), f"{conf_dir} Not a directory"
-    assert exists(work_dir), f"Path {work_dir} is not exist"
-    assert isdir(work_dir), f"{work_dir} Not a directory"
+def _setup_virt_card(env_file):
 
     env_logger.debug("Start setup of local CA")
-    out = subp.run(["bash", SETUP_VSC, "-c", conf_dir, "-w", work_dir])
+    out = subp.run(["bash", SETUP_VSC, "-c", CONF_DIR, "-e", env_file])
 
     assert out.returncode == 0, "Something break in setup playbook :("
     env_logger.debug("Setup of local CA is completed")

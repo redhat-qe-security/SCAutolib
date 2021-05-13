@@ -4,7 +4,6 @@ import pexpect
 import subprocess as subp
 from SCAutolib import log
 
-
 class VirtCard:
     """
     Class that represents virtual smart card in the tests.
@@ -48,6 +47,7 @@ class VirtCard:
     def insert(self):
         """Simulate inserting of the smart card by starting the systemd service."""
         rc = subp.run(["systemctl", "start", "virt_cacard.service"])
+
         time.sleep(2)
         msg = "Smart card insert failed"
         assert rc.returncode == 0, msg
@@ -57,7 +57,7 @@ class VirtCard:
         """Upload new certificates to the virtual smart card. TO BE DONE"""
         pass
 
-    def run_cmd(self, cmd: str, expect: str = None, pin: bool = True, passwd: str = None, shell=None):
+    def run_cmd(self, cmd: str = None, expect: str = None, pin: bool = True, passwd: str = None, shell=None):
         """
         Run the create a child from current shell to run cmd. Try to assert
         expect pattern in the output of the cmd. If cmd require, provide
@@ -73,13 +73,12 @@ class VirtCard:
         :return: child of current shell with given command
         """
         try:
-            if shell is None:
+            if shell is None and cmd is not None:
                 shell = pexpect.spawn(cmd, encoding='utf-8')
             shell.logfile = sys.stdout
 
             if passwd is not None:
                 pattern = "PIN for " if pin else "Password"
-                time.sleep(1)
                 out = shell.expect([pexpect.TIMEOUT, pattern], timeout=10)
 
                 if out != 1:

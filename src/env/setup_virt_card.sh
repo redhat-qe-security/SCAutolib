@@ -5,25 +5,29 @@ set -x -e
 bold=$(tput bold)
 normal=$(tput sgr0)
 
-CONF=""
-VIRT=""
-
+CONF_DIR=""
+WORK_DIR=""
+ENV_PATH=""
 function log() {
   echo -e "${bold}[LOG $(date +"%T")]${normal} $1"
 }
 
-while getopts c:w: flag
+while getopts c:w:e: flag
 do
     case "$flag" in
-        c) CONF=$OPTARG;;
-        w) VIRT=$OPTARG;;
+        c) CONF_DIR=$OPTARG;;
+        w) WORK_DIR=$OPTARG;;
+        e) ENV_PATH=$OPTARG;;
         *) echo "Invalid flag is used: $flag";;
     esac
 done
 
 dnf -y install virt_cacard
-cp $CONF/virt_cacard.service /etc/systemd/system/virt_cacard.service
-sed -i "s,<TESTDIR>,$VIRT,g" /etc/systemd/system/virt_cacard.service
+#cp $CONF_DIR/virt_cacard.service /etc/systemd/system/virt_cacard.service
+#sed -i "s,<TESTDIR>,$WORK_DIR,g" /etc/systemd/system/virt_cacard.service
+
+export $(grep -v '^#' $ENV_PATH | xargs)
+
 systemctl daemon-reload
 echo 'disable-in: virt_cacard' >> /usr/share/p11-kit/modules/opensc.module
 systemctl restart pcscd virt_cacard
@@ -35,9 +39,7 @@ chown -R localuser1:localuser1 ~localuser1/.ssh/
 chmod 700 ~localuser1/.ssh/
 chmod 600 ~localuser1/.ssh/authorized_keys
 
-cp $CONF/sssd.conf /etc/sssd/sssd.conf
 chmod 600 /etc/sssd/sssd.conf
-cat $VIRT/rootCA.crt > /etc/sssd/pki/sssd_auth_ca_db.pem
 
 systemctl stop pcscd.service pcscd.socket virt_cacard sssd
 rm -rf /var/lib/sss/{db,mc}/*
