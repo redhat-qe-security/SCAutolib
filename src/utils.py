@@ -16,7 +16,6 @@ from SCAutolib import env_logger, log
 
 DIR_PATH = path.realpath(path.dirname(path.abspath(__file__)))
 SERVICES = {"sssd": "/etc/sssd/sssd.conf", "krb": "/etc/krb5.conf"}
-# DEFAULTS = {"sssd": f"{DIR_PATH}/env/conf/sssd.conf"}  # FIXME: fix default path
 TMP = None
 KEYS = None
 CERTS = None
@@ -27,13 +26,15 @@ def check_env():
     global BACKUP
     global KEYS
     global CERTS
+    global TMP
     if BACKUP is None:
         BACKUP = config("BACKUP")
     if KEYS is None:
         KEYS = config("KEYS")
     if CERTS is None:
         CERTS = config("CERTS")
-
+    if TMP is None:
+        CERTS = config("TMP")
 
 def edit_config(service: str, string: str, holder: str, section: bool = True):
     """
@@ -48,7 +49,7 @@ def edit_config(service: str, string: str, holder: str, section: bool = True):
     """
 
     def wrapper(test):
-        @backup(SERVICES[service], service)
+        @backup(SERVICES[service], service, restore=True)
         def inner_wrapper(*args, **kwargs):
             _edit_config(SERVICES[service], string, holder, section)
             restart_service(service)
@@ -81,16 +82,18 @@ def backup(file_path: str, service: str = None, name: str = None, restore=True):
             _backup(file_path=file_path, service=service, name=name)
             test(*args, **kwargs)
             if restore:
-                _restore_file(file_path, name)
+                _restore_file(target=file_path, name=name, service=service)
         return inner_wrapper
 
     return wrapper
 
 
-def _restore_file(target, name):
+def _restore_file(target, name, service=None):
     check_env()
     source = path.join(BACKUP, name)
-    copy(target, source)
+    copy(source, target)
+    subp.run(["restorecon", "-v", target])
+    restart_service(service)
     log.debug(f"File from {source} is restored to {target}")
 
 
