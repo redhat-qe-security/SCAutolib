@@ -4,6 +4,7 @@ import pexpect
 import subprocess as subp
 from SCAutolib import log
 
+
 class VirtCard:
     """
     Class that represents virtual smart card in the tests.
@@ -17,8 +18,9 @@ class VirtCard:
         """
         Constructor for virtual smart card.
 
-        :param insert: specify if virtual smart card should be automatically
-                       inserted in the context manager
+        Args:
+            insert: specify if virtual smart card should be automatically
+                    inserted in the context manager
         """
         self._insert = insert
         log.debug("Smart card initialized")
@@ -63,14 +65,17 @@ class VirtCard:
         expect pattern in the output of the cmd. If cmd require, provide
         login wth given PIN or password.
 
-        :param cmd: shell command to be executed
-        :param expect: pattern to match in the output. Can be empty string ("")
-        :param pin: specify if passwd is a smart card PIN or a password for the
+        Args:
+            cmd: shell command to be executed
+            expect: pattern to match in the output. Can be empty string ("")
+            pin: specify if passwd is a smart card PIN or a password for the
                     user. Base on this, corresnpondign pattern would be matched
                     in login output.
-        :param passwd: smart card PIN or user password if login is needed
-        :param shell: shell child where command need to be execute.
-        :return: child of current shell with given command
+            passwd: smart card PIN or user password if login is needed
+            shell: shell child where command need to be execute.
+
+        Returns:
+            child of current shell with given command
         """
         try:
             if shell is None and cmd is not None:

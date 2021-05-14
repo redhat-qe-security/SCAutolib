@@ -29,24 +29,21 @@ def cli():
 
 
 def check_env():
-    def wrapper(fnc):
-        def inner(*args, **kwargs):
-            global BACKUP
-            global KEYS
-            global CERTS
-            if BACKUP is None:
-                BACKUP = config("BACKUP")
-            if KEYS is None:
-                KEYS = config("KEYS")
-            if CERTS is None:
-                KEYS = config("CERTS")
-            if TMP is None:
-                KEYS = config("TMP")
-            fnc(*args, **kwargs)
-
-        return inner
-
-    return wrapper
+    """
+    Insure that environment variables are loaded from .env file.
+    """
+    global BACKUP
+    global KEYS
+    global CERTS
+    global TMP
+    if BACKUP is None:
+        BACKUP = config("BACKUP")
+    if KEYS is None:
+        KEYS = config("KEYS")
+    if CERTS is None:
+        CERTS = config("CERTS")
+    if TMP is None:
+        CERTS = config("TMP")
 
 
 @click.command()
@@ -242,6 +239,7 @@ def _create_sssd_config(local_user: str = None, krb_user: str = None):
     Update the content of the sssd.conf file. If file exists, it would be store
     to the backup folder and content in would be edited for testing purposes.
     If file doesn't exist, it would be created and filled with default options.
+
     Args:
         local_user: username for local user with smart card to add the match rule.
         krb_user: username for kerberos user with smart card to add the match rule.
@@ -370,7 +368,8 @@ def _read_config(conf, items: [str] = None) -> list:
         items: list of items to extracrt from the configuration file.
                If None, full contant would be returned
 
-    Returns: dictionary with full contant or list with required items
+    Returns:
+        list with required items
     """
     global CONFIG_DATA
     if CONFIG_DATA is None:
@@ -409,12 +408,13 @@ def _read_config(conf, items: [str] = None) -> list:
               help=f"Path to working directory. By default is "
                    f"{join(DIR_PATH, 'virt_card')}")
 def setup_ca(conf, env_file, work_dir):
-    f"""
-    Setup local CA.
+    """
+    CLI command for setup the local CA.
 
     Args:
         conf: Path to YAML file with configurations
-        work_dir:Path to working directory. By default is {join(DIR_PATH, 'virt_card')}
+        work_dir: Path to working directory. By default working directory is 
+                  in the source directory of the library
         env_file: Path to .env file with specified variables
     """
 
@@ -422,8 +422,8 @@ def setup_ca(conf, env_file, work_dir):
     _setup_ca(conf, env_path)
 
 
-@check_env()
 def _setup_ca(conf, env_file):
+    check_env()
     assert exists(realpath(conf)), f"File {conf} is not exist."
     assert isfile(realpath(conf)), f"{conf} is not a file."
 
@@ -443,21 +443,30 @@ def _setup_ca(conf, env_file):
 @click.option("--env", type=click.Path(), required=False, default=None,
               help="Path to .env file with specified variables")
 @click.option("--work-dir", type=click.Path(), required=False,
-              default=join(DIR_PATH, "virt_card"))
+              default=join(DIR_PATH, "virt_card"),
+              help="Working directory where all necessary files and directories "
+                   "are/will be stored")
 def setup_virt_card(env, work_dir):
     """
     Setup virtual smart card. Has to be run after configuration of the local CA.
 
-    :param conf_dir: Directory with configuration files
-    :param work_dir: Working directory
+    Args:
+        env: Path to .env file with specified variables
+        work_dir: Working directory where all necessary files and directories
+                  are/will be stored
     """
     env_path = _load_env(env, work_dir)
     _setup_virt_card(env_path)
 
 
-@check_env()
 def _setup_virt_card(env_file):
+    """
+    Call setup scritp fro virtual smart card
 
+    Args:
+        env_file: Path to .env file
+    """
+    check_env()
     env_logger.debug("Start setup of local CA")
     out = subp.run(["bash", SETUP_VSC, "-c", CONF_DIR, "-e", env_file])
 
