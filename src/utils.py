@@ -1,9 +1,6 @@
-# author: Pavel Yadlouski
-# Part of SCAutolib
-
 import datetime
 import subprocess as subp
-from os import path, mkdir, remove
+from os import path
 from random import randint
 from time import sleep
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -11,88 +8,142 @@ from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.x509.oid import NameOID
 from cryptography import x509
 from shutil import copy
+from decouple import config
 
 import SCAutolib.src.virt_card as virt_sc
 import SCAutolib.src.authselect as authselect
-from SCAutolib import log
+from SCAutolib import env_logger, log
 
-
-DIR_PATH = path.dirname(path.abspath(__file__))
-DIR_PATH = "/root"
+DIR_PATH = path.realpath(path.dirname(path.abspath(__file__)))
 SERVICES = {"sssd": "/etc/sssd/sssd.conf", "krb": "/etc/krb5.conf"}
-DEFAULTS = {"sssd": f"{DIR_PATH}/env/conf/sssd.conf"}
-TMP = f"{DIR_PATH}/tmp"
-KEYS = f"{TMP}/keys"
-CERTS = f"{TMP}/certs"
-BACKUP = f"{TMP}/backup"
+TMP = None
+KEYS = None
+CERTS = None
+BACKUP = None
+
+
+def check_env():
+    """
+    Insure that environment variables are loaded from .env file.
+    """
+    global BACKUP
+    global KEYS
+    global CERTS
+    global TMP
+    if BACKUP is None:
+        BACKUP = config("BACKUP")
+    if KEYS is None:
+        KEYS = config("KEYS")
+    if CERTS is None:
+        CERTS = config("CERTS")
+    if TMP is None:
+        CERTS = config("TMP")
 
 
 def edit_config(service: str, string: str, holder: str, section: bool = True):
     """
     Decorator for editing config file. Before editing, config file is backuped.
 
-    :param service: service for which config file will be edited
-    :param string: string to add or replace
-    :param holder: what is need to be replace. In case of adding the string to
-                   the file, specify section where string should be added
-    :param section: specify if holder is a name of a section in the config file
-    :return: decorated function
+    Args:
+        service: service for which config file will be edited
+        string: string to add or replace
+        holder: what is need to be replace. In case of adding the string to
+                the file, specify section where string should be added
+                section: specify if holder is a name of a section in the config file
+        section: specifies if holder is a section or a substring in the file
+
+    Returns:
+        decorated function
     """
+
     def wrapper(test):
-        @backup(SERVICES[service], service)
-        def inner_wrapper(*args):
+        @backup(SERVICES[service], service, restore=True)
+        def inner_wrapper(*args, **kwargs):
             _edit_config(SERVICES[service], string, holder, section)
             restart_service(service)
-            test(args)
+            test(*args, **kwargs)
 
         return inner_wrapper
 
     return wrapper
 
 
-def backup(file_path: str, service: str = None):
+def backup(file_path: str, service: str = None, name: str = None, restore=True):
     """
-    Decorator for backingup file. After executing wrapped function, restore
-    given file to the prevrious location.
+    Decorator for backup the file into BACKUP directory. Can restor the file
+    after execution of function and restart given service.
 
-    :param file_path: path to file to be backuped
-    :param service: service to be restarted after restoring the file.
-                    By default is None - no service is need to be restarted
-    :return: decorated function
+    Args:
+        file_path: path to file to be backuped
+        service: service to be restarted after restoring the file.
+                 By default is None - no service is need to be
+                 restarted (optional).
+        name: name for backup file (optional)
+        restore: specifies if given file should be restored after function execution
+
+    Returns:
+        decorated function
     """
+    if name is None:
+        # if no name is given, than original name of the file would be used
+        name = path.split(file_path)[1]
+
     def wrapper(test):
-        def inner_wrapper(*args):
-            if not path.exists(BACKUP):
-                mkdir(BACKUP)
-            target = f"{BACKUP}/{path.split(file_path)[1]}"
-            copy(file_path, target)
-            log.debug(f"File from {file_path} is copied to {target}")
-
-            try:
-                test(args)
-            except Exception as e:
-                raise e
-            finally:
-                copy(target, file_path)
-                log.debug(f"File from {target} is restored to {file_path}")
-                remove(target)
-                if service is not None:
-                    restart_service(service)
+        def inner_wrapper(*args, **kwargs):
+            _backup(file_path=file_path, name=name)
+            test(*args, **kwargs)
+            if restore:
+                _restore_file(target=file_path, name=name, service=service)
+                restart_service(service)
         return inner_wrapper
 
     return wrapper
+
+
+def _restore_file(target, name, service=None):
+    """
+    Restoring file from BACKUP directory to target. Target has to be a file.
+
+    Args:
+        target: target path
+        name: name of the file in BACKUP directory
+        service: service which should be restarted after file is restored.
+                 By default is None (no need to restart any services).
+    """
+    check_env()
+    source = path.join(BACKUP, name)
+    copy(source, target)
+    subp.run(["restorecon", "-v", target])
+    restart_service(service)
+    log.debug(f"File from {source} is restored to {target}")
+
+
+def _backup(file_path, name=None):
+    """
+    Backup the file given in file_path to BACKUP directory.
+
+    Args:
+        file_path: path to fle
+        name: file name in BACKUP directory
+    """
+    check_env()
+    target = f"{BACKUP}/{name}"
+    copy(file_path, target)
+
+    log.debug(f"File from {file_path} is copied to {target}")
 
 
 def _edit_config(config: str, string: str, holder: str, section: bool):
     """
     Funcion for actual editing the config file.
 
-    :param config: path to config file
-    :param string: string to be add
-    :param holder: section or substinrg to update
-    :param section: specify if holder is a section
+    Args:
+        config: path to config file
+        string: string to be add
+        holder: section or substinrg to update
+        section: specify if holder is a section
     """
-    old = f"#<{holder}>" if section else holder
+    old = f"#<[{holder}]>" if section else holder
     new = f"{string}\n{old}" if section else string
 
     with open(config, "r") as file:
@@ -115,33 +166,37 @@ def restart_service(service: str) -> int:
     """
     Restart given service and wait 5 sec
 
-    :param service: service name
-    :return: return code of systemcrt restart
+    Args:
+        service: service name
+
+    Returns:
+        return code of systemcrt restart
     """
-    try:
-        result = subp.run(["systemctl", "restart", f"{service}"], check=True, encoding="utf8")
-        sleep(5)
-        log.debug(f"Service {service} is restarted")
-        return result.returncode
-    except subp.CalledProcessError as e:
-        log.error(f"Command {' '.join(e.cmd)} is ended with non-zero return code ({e.returncode})")
-        log.error(f"stdout:\n{e.stdout}")
-        log.error(f"stderr:\n{e.stderr}")
-        return e.returncode
+    if service is not None:
+        try:
+            result = subp.run(["systemctl", "restart", f"{service}"], check=True, encoding="utf8")
+            sleep(5)
+            env_logger.debug(f"Service {service} is restarted")
+            return result.returncode
+        except subp.CalledProcessError as e:
+            env_logger.error(f"Command {' '.join(e.cmd)} is ended with non-zero return code ({e.returncode})")
+            env_logger.error(f"stdout:\n{e.stdout}")
+            env_logger.error(f"stderr:\n{e.stderr}")
+            return e.returncode
+    return 0
 
 
-def generate_root_ca_crt():
+def generate_cert(root: bool = True):
     """
     Function for generating the root CA certificate with keys
 
-    :return: tuple with path to the certificate and to the key files.
+    Returns:
+        tuple with path to the certificate and to the key files.
     """
+    check_env()
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     serial = randint(1, 1000)
-    if not path.exists(TMP):
-        mkdir(TMP)
-        mkdir(KEYS)
-        mkdir(CERTS)
+
     key_path = f"{KEYS}/private-key-{serial}.pem"
     with open(key_path, "wb") as f:
         f.write(key.private_bytes(
@@ -189,9 +244,10 @@ def check_su_login_with_sc(pin=True, passwd="123456", username="localuser1"):
     """
     Function for common use case - su loging.
 
-    :param pin: Specif is PIN or password is used for login
-    :param passwd: PIN or password for login
-    :param username: username to login
+    Args:
+        pin: Specif is PIN or password is used for login
+        passwd: PIN or password for login
+        username: username to login
     """
     with authselect.Authselect():
         with virt_sc.VirtCard(insert=True) as sc:

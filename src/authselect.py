@@ -1,26 +1,33 @@
-# author: Pavel Yadlouski
-# Part of SCAutolib
-
 from SCAutolib import log
 import subprocess as subp
-from os import path
-
-
-CUR_PATH = path.dirname(path.abspath(__file__))
 
 
 class Authselect:
 
     backup_name = "tmp.backup"
-    
-    def __init__(self, required=False, lock_on_removal=False, mk_homedir=False, path_=CUR_PATH):
+
+    def __init__(self, required=False, lock_on_removal=False, mk_homedir=False):
+        """
+        Construcotr for Authselect class. By default only with-smartcard option
+        is used. When setting the SSSD profile, also --force is used. Previous
+        configuration would be store into backup file and restored on exiting
+        the context manager.
+
+        Args:
+            required: specifies with-smartcard-required option
+            lock_on_removal: specifies with-smartcard-lock-on-removal option
+            mk_homedir: specifies with-mkhomedir option
+        """
         self._required = required
         self._lock_on_removal = lock_on_removal
         self._mk_homedir = mk_homedir
-        self._backup = path.join(path_, self.backup_name)
 
     def _set(self):
-        args = ["authselect", "select", "sssd", "--backup", self._backup,
+        """
+        Set authselect with SSSD profile and use given options. Options are
+        passed into the constructor.
+        """
+        args = ["authselect", "select", "sssd", "--backup", self.backup_name,
                 "with-smartcard"]
 
         if self._required:
@@ -36,9 +43,11 @@ class Authselect:
         assert rc.returncode == 0, msg
         log.debug(f"SSSD is set to: {' '.join(args)}")
         log.debug(f"Backupfile: {self.backup_name}")
-        return rc.returncode
 
     def _reset(self):
+        """
+        Restore the previous configuration of authselect.
+        """
         rc = subp.run(["authselect", "backup-restore", self.backup_name,
                        "--debug"], stdout=subp.DEVNULL, stderr=subp.STDOUT)
         msg = f"Authselect backup-restore failed. Output: {rc.returncode}"

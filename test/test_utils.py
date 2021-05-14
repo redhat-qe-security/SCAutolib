@@ -32,7 +32,7 @@ def test_service_restart_fail():
 
 def test_gen_cer():
     """Test for generating correct root certificate."""
-    cert, key = utils.generate_root_ca_crt()
+    cert, key = utils.generate_cert()
     assert path.exists(key)
     assert path.exists(cert)
     remove(key)
