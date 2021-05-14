@@ -23,8 +23,6 @@ do
 done
 
 dnf -y install virt_cacard
-#cp $CONF_DIR/virt_cacard.service /etc/systemd/system/virt_cacard.service
-#sed -i "s,<TESTDIR>,$WORK_DIR,g" /etc/systemd/system/virt_cacard.service
 
 export $(grep -v '^#' $ENV_PATH | xargs)
 

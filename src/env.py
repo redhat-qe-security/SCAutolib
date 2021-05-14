@@ -40,6 +40,8 @@ def check_env():
                 KEYS = config("KEYS")
             if CERTS is None:
                 KEYS = config("CERTS")
+            if TMP is None:
+                KEYS = config("TMP")
             fnc(*args, **kwargs)
 
         return inner
@@ -74,21 +76,14 @@ def prepair(setup, conf, work_dir, env_file):
                   by varible WORK_DIR in confugration file
         env_file: path to already existing .env file
     """
-    # conf_work_dir = _read_config(conf, items=["work_dir"])
-    # env_logger.debug("conf work dir from config file is >>>>>> " + str(conf_work_dir))
-    # try:
-    #     work_dir = conf_work_dir[0]
-    # except IndexError:
-    #     env_logger.debug(f"Work directory is not present in the {conf}."
-    #                      f"Use value {work_dir}")
-
+    # TODO: add geting of work_dir from configuraion file
     env_file = _load_env(env_file, work_dir)
 
     _prep_tmp_dirs()
     env_logger.debug("tmp directories are created")
 
-    usernames = _read_config(conf, items=["variables.local_user.name",
-                                          "variables.krb_user.name"])
+    usernames = _read_config(conf, items=["local_user.name",
+                                          "krb_user.name"])
     _create_sssd_config(*usernames)
     env_logger.debug("SSSD configuration file is updated")
 
@@ -255,7 +250,6 @@ def _create_sssd_config(local_user: str = None, krb_user: str = None):
     holder = "#<{holder}>\n"
     content = []
     if exists("/etc/sssd/sssd.conf"):
-        # utils._backup("/etc/sssd/sssd.conf", name="sssd-original.conf", env=True)
         utils._backup("/etc/sssd/sssd.conf", name="sssd-original.conf")
         with open("/etc/sssd/sssd.conf", "r") as f:
             content = f.readlines()
@@ -270,8 +264,7 @@ def _create_sssd_config(local_user: str = None, krb_user: str = None):
 
         if krb_user:
             pass
-            # FIXME: add rule for kerberos user
-            # content.append(rule)
+            # TODO: add rule for kerberos user
     else:
         content = ["[sssd]\n",
                    "#<[sssd]>\n",
@@ -299,7 +292,7 @@ def _create_sssd_config(local_user: str = None, krb_user: str = None):
                            f"matchrule = <SUBJECT>.*CN={local_user}.*\n")
         if krb_user:
             pass
-        # FIXME: add rule for kerberos user
+            # TODO: add rule for kerberos user
 
     with open("/etc/sssd/sssd.conf", "w") as f:
         f.write("".join(content))
@@ -436,7 +429,7 @@ def _setup_ca(conf, env_file):
 
     env_logger.debug("Start setup of local CA")
 
-    user = _read_config(conf, items=["variables.local_user"])[0]
+    user = _read_config(conf, items=["local_user"])[0]
     out = subp.run(["bash", SETUP_CA,
                     "--username", user["name"],
                     "--userpasswd", user["passwd"],
@@ -449,7 +442,6 @@ def _setup_ca(conf, env_file):
 @click.command()
 @click.option("--env", type=click.Path(), required=False, default=None,
               help="Path to .env file with specified variables")
-# @click.option("--conf-dir", "-c", type=click.Path(), required=True)
 @click.option("--work-dir", type=click.Path(), required=False,
               default=join(DIR_PATH, "virt_card"))
 def setup_virt_card(env, work_dir):
@@ -478,15 +470,18 @@ def _setup_virt_card(env_file):
 def cleanup_ca(conf):
     """
     Cleanup the host after configuration of the testing environment.
+
+    Args:
+        conf: path to configuraion file in YAML format
     """
     env_logger.debug("Start cleanup of local CA")
-    with open(conf, "r") as file:
-        data = yaml.load(file, Loader=yaml.FullLoader)
-    username = data["variables"]["user"]["name"]
+
+    username = _read_config(conf, ["local_user.name"])[0]
+    # TODO: check after adding kerberos user that everything is also OK
     out = subp.run(
         ["bash", CLEANUP_CA, "--username", username])
 
-    assert out.returncode == 0, "Something break in setup script :("
+    assert out.returncode == 0, "Something break in cleanup script :("
     env_logger.debug("Cleanup of local CA is completed")
 
 

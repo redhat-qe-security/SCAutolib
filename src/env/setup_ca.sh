@@ -70,15 +70,6 @@ while (("$#")); do
       exit 1
     fi
     ;;
-#  --conf-dir)
-#    if [ -n "$2" ] && [ "${2:0:1}" != "-" ]; then
-#      CONF=$2
-#      shift 2
-#    else
-#      echo "Error: Argument for $1 is missing" >&2
-#      exit 1
-#    fi
-#    ;;
   -h | --help)
     help
     shift
@@ -89,26 +80,6 @@ while (("$#")); do
     ;;
   esac
 done
-
-#if [[ ! -f "$CONF/softhsm2.conf" ]]; then
-#  echo "File $CONF/softhsm2.conf does not exist"
-#  exit 1
-#elif [[ ! -f "$CONF/ca.cnf" ]]; then
-#  echo "File $CONF/ca.cnf does not exist"
-#  exit
-#elif [[ ! -f "$CONF/req_${NAME}.cnf" ]]; then
-#  echo "File $CONF/req_${NAME}.cnf does not exist"
-#  exit 1
-#elif [[ ! -f "$CONF/virtcacard.cil" ]]; then
-#  echo "File $CONF/virtcacard.cil does not exist"
-#  exit 1
-#elif [[ ! -f "$CONF/virt_cacard.service" ]]; then
-#  echo "File $CONF/virt_cacard.service does not exist"
-#  exit 1
-#elif [[ ! -f "$CONF/sssd.conf" ]]; then
-#  echo "File $CONF/sssd.conf does not exist"
-#  exit 1
-#fi
 
 RELEASE=$(cat /etc/redhat-release)
 if [[ $RELEASE != *"Red Hat Enterprise Linux release 9"*  ]]
