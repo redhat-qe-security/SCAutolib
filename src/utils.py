@@ -1,9 +1,6 @@
-# author: Pavel Yadlouski
-# Part of SCAutolib
-
 import datetime
 import subprocess as subp
-from os import path, mkdir, remove
+from os import path
 from random import randint
 from time import sleep
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -11,21 +8,33 @@ from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.x509.oid import NameOID
 from cryptography import x509
 from shutil import copy
+from decouple import config
 
 import SCAutolib.src.virt_card as virt_sc
 import SCAutolib.src.authselect as authselect
-from SCAutolib import log
+from SCAutolib import env_logger, log
 
-
-DIR_PATH = path.dirname(path.abspath(__file__))
-DIR_PATH = "/root"
+DIR_PATH = path.realpath(path.dirname(path.abspath(__file__)))
 SERVICES = {"sssd": "/etc/sssd/sssd.conf", "krb": "/etc/krb5.conf"}
-DEFAULTS = {"sssd": f"{DIR_PATH}/env/conf/sssd.conf"}
-TMP = f"{DIR_PATH}/tmp"
-KEYS = f"{TMP}/keys"
-CERTS = f"{TMP}/certs"
-BACKUP = f"{TMP}/backup"
+TMP = None
+KEYS = None
+CERTS = None
+BACKUP = None
 
+
+def check_env():
+    global BACKUP
+    global KEYS
+    global CERTS
+    global TMP
+    if BACKUP is None:
+        BACKUP = config("BACKUP")
+    if KEYS is None:
+        KEYS = config("KEYS")
+    if CERTS is None:
+        CERTS = config("CERTS")
+    if TMP is None:
+        CERTS = config("TMP")
 
 def edit_config(service: str, string: str, holder: str, section: bool = True):
     """
@@ -38,49 +47,77 @@ def edit_config(service: str, string: str, holder: str, section: bool = True):
     :param section: specify if holder is a name of a section in the config file
     :return: decorated function
     """
+
     def wrapper(test):
-        @backup(SERVICES[service], service)
-        def inner_wrapper(*args):
+        @backup(SERVICES[service], service, restore=True)
+        def inner_wrapper(*args, **kwargs):
             _edit_config(SERVICES[service], string, holder, section)
             restart_service(service)
-            test(args)
+            test(*args, **kwargs)
 
         return inner_wrapper
 
     return wrapper
 
 
-def backup(file_path: str, service: str = None):
+def backup(file_path: str, service: str = None, name: str = None, restore=True):
     """
     Decorator for backingup file. After executing wrapped function, restore
     given file to the prevrious location.
 
-    :param file_path: path to file to be backuped
-    :param service: service to be restarted after restoring the file.
-                    By default is None - no service is need to be restarted
     :return: decorated function
-    """
-    def wrapper(test):
-        def inner_wrapper(*args):
-            if not path.exists(BACKUP):
-                mkdir(BACKUP)
-            target = f"{BACKUP}/{path.split(file_path)[1]}"
-            copy(file_path, target)
-            log.debug(f"File from {file_path} is copied to {target}")
 
-            try:
-                test(args)
-            except Exception as e:
-                raise e
-            finally:
-                copy(target, file_path)
-                log.debug(f"File from {target} is restored to {file_path}")
-                remove(target)
-                if service is not None:
-                    restart_service(service)
+    Args:
+        name: name for backup file (optional)
+        file_path: path to file to be backuped
+        service: service to be restarted after restoring the file.
+                 By default is None - no service is need to be
+                 restarted (optional).
+    """
+    if name is None:
+        name = path.split(file_path)[1]
+
+    def wrapper(test):
+        def inner_wrapper(*args, **kwargs):
+            _backup(file_path=file_path, service=service, name=name)
+            test(*args, **kwargs)
+            if restore:
+                _restore_file(target=file_path, name=name, service=service)
         return inner_wrapper
 
     return wrapper
+
+
+def _restore_file(target, name, service=None):
+    check_env()
+    source = path.join(BACKUP, name)
+    copy(source, target)
+    subp.run(["restorecon", "-v", target])
+    restart_service(service)
+    log.debug(f"File from {source} is restored to {target}")
+
+
+def _backup(file_path, name=None, service=None):
+    # Compose target file. If 'name' is specified, file would have this name,
+    # otherwise the name would remain is in the source
+    check_env()
+    target = f"{BACKUP}/{name}"
+    copy(file_path, target)
+
+    log.debug(f"File from {file_path} is copied to {target}")
+    restart_service(service)
+    #
+    # if fnc is not None:
+    #     try:
+    #         fnc(*args, **kwargs)
+    #     except Exception as e:
+    #         raise e
+    #     finally:
+    #         copy(target, file_path)
+    #         log.debug(f"File from {target} is restored to {file_path}")
+    #         remove(target)
+    #         if service is not None:
+    #             restart_service(service)
 
 
 def _edit_config(config: str, string: str, holder: str, section: bool):
@@ -92,7 +129,7 @@ def _edit_config(config: str, string: str, holder: str, section: bool):
     :param holder: section or substinrg to update
     :param section: specify if holder is a section
     """
-    old = f"#<{holder}>" if section else holder
+    old = f"#<[{holder}]>" if section else holder
     new = f"{string}\n{old}" if section else string
 
     with open(config, "r") as file:
@@ -118,16 +155,18 @@ def restart_service(service: str) -> int:
     :param service: service name
     :return: return code of systemcrt restart
     """
-    try:
-        result = subp.run(["systemctl", "restart", f"{service}"], check=True, encoding="utf8")
-        sleep(5)
-        log.debug(f"Service {service} is restarted")
-        return result.returncode
-    except subp.CalledProcessError as e:
-        log.error(f"Command {' '.join(e.cmd)} is ended with non-zero return code ({e.returncode})")
-        log.error(f"stdout:\n{e.stdout}")
-        log.error(f"stderr:\n{e.stderr}")
-        return e.returncode
+    if service is not None:
+        try:
+            result = subp.run(["systemctl", "restart", f"{service}"], check=True, encoding="utf8")
+            sleep(5)
+            env_logger.debug(f"Service {service} is restarted")
+            return result.returncode
+        except subp.CalledProcessError as e:
+            env_logger.error(f"Command {' '.join(e.cmd)} is ended with non-zero return code ({e.returncode})")
+            env_logger.error(f"stdout:\n{e.stdout}")
+            env_logger.error(f"stderr:\n{e.stderr}")
+            return e.returncode
+    return 0
 
 
 def generate_root_ca_crt():
@@ -136,12 +175,10 @@ def generate_root_ca_crt():
 
     :return: tuple with path to the certificate and to the key files.
     """
+    check_env()
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     serial = randint(1, 1000)
-    if not path.exists(TMP):
-        mkdir(TMP)
-        mkdir(KEYS)
-        mkdir(CERTS)
+
     key_path = f"{KEYS}/private-key-{serial}.pem"
     with open(key_path, "wb") as f:
         f.write(key.private_bytes(

@@ -1,26 +1,18 @@
-# author: Pavel Yadlouski
-# Part of SCAutolib
-
 from SCAutolib import log
 import subprocess as subp
-from os import path
-
-
-CUR_PATH = path.dirname(path.abspath(__file__))
 
 
 class Authselect:
 
     backup_name = "tmp.backup"
-    
-    def __init__(self, required=False, lock_on_removal=False, mk_homedir=False, path_=CUR_PATH):
+
+    def __init__(self, required=False, lock_on_removal=False, mk_homedir=False):
         self._required = required
         self._lock_on_removal = lock_on_removal
         self._mk_homedir = mk_homedir
-        self._backup = path.join(path_, self.backup_name)
 
     def _set(self):
-        args = ["authselect", "select", "sssd", "--backup", self._backup,
+        args = ["authselect", "select", "sssd", "--backup", self.backup_name,
                 "with-smartcard"]
 
         if self._required:
@@ -36,7 +28,6 @@ class Authselect:
         assert rc.returncode == 0, msg
         log.debug(f"SSSD is set to: {' '.join(args)}")
         log.debug(f"Backupfile: {self.backup_name}")
-        return rc.returncode
 
     def _reset(self):
         rc = subp.run(["authselect", "backup-restore", self.backup_name,
