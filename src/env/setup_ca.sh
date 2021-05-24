@@ -97,8 +97,6 @@ yum groupinstall "Smart Card Support" -y
 
 # Configuring softhm2
 P11LIB='/usr/lib64/pkcs11/libsofthsm2.so'
-sed -i "s,<TESTDIR>,$WORK_DIR,g" $CONF_DIR/softhsm2.conf
-cat $CONF_DIR/softhsm2.conf
 pushd $WORK_DIR || exit
 
 mkdir tokens

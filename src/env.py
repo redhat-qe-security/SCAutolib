@@ -1,4 +1,4 @@
-from os.path import (exists, realpath, isfile, dirname, abspath, join)
+from os.path import (exists, realpath, isfile, dirname, abspath, join, split)
 from os import mkdir
 import click
 import yaml
@@ -7,43 +7,30 @@ from shutil import copy
 from re import match
 from decouple import config
 import utils as utils
+from time import sleep
 from SCAutolib import env_logger
+import paramiko
+from pysftp import Connection
+from configparser import ConfigParser
 
 # TODO add docs about parameters
 DIR_PATH = dirname(abspath(__file__))
 SETUP_CA = f"{DIR_PATH}/env/setup_ca.sh"
 SETUP_VSC = f"{DIR_PATH}/env/setup_virt_card.sh"
 CLEANUP_CA = f"{DIR_PATH}/env/cleanup_ca.sh"
-WORK_DIR = f"{DIR_PATH}/virt_card"
-TMP = f"{WORK_DIR}/tmp"
-CONF_DIR = f"{WORK_DIR}/conf"
-KEYS = f"{TMP}/keys"
-CERTS = f"{TMP}/certs"
-BACKUP = f"{TMP}/backup"
+WORK_DIR = None
+TMP = None
+CONF_DIR = None
+KEYS = None
+CERTS = None
+BACKUP = None
 CONFIG_DATA = None  # for caching configuration data
+KRB_IP = None
 
 
 @click.group()
 def cli():
     pass
-
-
-def check_env():
-    """
-    Insure that environment variables are loaded from .env file.
-    """
-    global BACKUP
-    global KEYS
-    global CERTS
-    global TMP
-    if BACKUP is None:
-        BACKUP = config("BACKUP")
-    if KEYS is None:
-        KEYS = config("KEYS")
-    if CERTS is None:
-        CERTS = config("CERTS")
-    if TMP is None:
-        CERTS = config("TMP")
 
 
 @click.command()
@@ -60,13 +47,16 @@ def check_env():
 @click.option("--env-file", "-e", type=click.Path(), required=False, default=None,
               help="Absolute path to .env file with environment varibles to be "
                    "used in the library.")
-def prepair(setup, conf, work_dir, env_file):
+@click.option("--krb", "-k", is_flag=True, required=False, default=False,
+              help="Flag for setup of kerberos cleint.")
+def prepair(setup, conf, work_dir, env_file, krb):
     """
     Prepair the whole test envrionment including temporary directories, necessary
     configuration files and services. Also can automaticaly run setup for local
     CA and virtual smart card.
 
     Args:
+        krb: if you want to deploy kerberos server and client
         setup: if you want to automatically run other setup steps
         conf: path to configuration file im YAML format
         work_dir: path to working directory. Can be overwritten
@@ -80,7 +70,7 @@ def prepair(setup, conf, work_dir, env_file):
     env_logger.debug("tmp directories are created")
 
     usernames = _read_config(conf, items=["local_user.name",
-                                          "krb_user.name"])
+                                          "krb.name"])
     _create_sssd_config(*usernames)
     env_logger.debug("SSSD configuration file is updated")
 
@@ -93,10 +83,313 @@ def prepair(setup, conf, work_dir, env_file):
 
     _creat_cnf(usernames)
 
+    _create_krb_config(conf)
+
     if setup:
         _setup_ca(conf, env_file)
-
         _setup_virt_card(env_file)
+
+    if krb:
+        setup_krb_server(conf)
+        setup_krb_client(env_file, conf)
+
+
+@click.command()
+@click.option("--env", type=click.Path(), required=False, default=None,
+              help="Path to .env file with specified variables")
+@click.option("--conf", "-c", type=click.Path(), required=True,
+              help="Path to YAML file with configurations")
+@click.option("--work-dir", type=click.Path(), required=False,
+              default=join(DIR_PATH, "virt_card"),
+              help=f"Path to working directory. By default is "
+                   f"{join(DIR_PATH, 'virt_card')}")
+def setup_ca(conf, env_file, work_dir):
+    """
+    CLI command for setup the local CA.
+
+    Args:
+        conf: Path to YAML file with configurations
+        work_dir: Path to working directory. By default working directory is
+                  in the source directory of the library
+        env_file: Path to .env file with specified variables
+    """
+    # TODO: generate certs for Kerberos
+    env_path = _load_env(env_file, work_dir)
+    _setup_ca(conf, env_path)
+
+
+@click.command()
+@click.option("--env", type=click.Path(), required=False, default=None,
+              help="Path to .env file with specified variables")
+@click.option("--work-dir", type=click.Path(), required=False,
+              default=join(DIR_PATH, "virt_card"),
+              help="Working directory where all necessary files and directories "
+                   "are/will be stored")
+def setup_virt_card(env, work_dir):
+    """
+    Setup virtual smart card. Has to be run after configuration of the local CA.
+
+    Args:
+        env: Path to .env file with specified variables
+        work_dir: Working directory where all necessary files and directories
+                  are/will be stored
+    """
+    env_path = _load_env(env, work_dir)
+    _setup_virt_card(env_path)
+
+
+@click.command()
+@click.option("--conf", "-c", type=click.Path(), required=True,
+              help="Path to YAML file with configurations")
+def setup_krb_client(conf):
+    # TODO: check certs from KRB server and client
+    check_env()
+    pkgs = ["krb5-libs", "krb5-workstation", "ccid", "opensc", "esc", "pcsc-lite",
+            "pcsc-lite-libs", "authconfig", "gdm", "nss-pam-ldapd", "oddjob",
+            "oddjob-mkhomedir"]
+    subp.run(["dnf", "install", *pkgs, "-y"], check=True)
+    env_logger.debug(f"Packages for Kerberos client are installed")
+
+    subp.run(["yum", "groupinstall", "'Smart Card Support'", "-y"])
+    env_logger.debug(f"Smart Card Support group is installed")
+
+    if exists("/etc/krb5.conf"):
+        utils._backup("/etc/krb5.conf", "krb5-original.conf")
+
+    with open("/etc/krb5.conf", "w") as f:
+        f.write("""# Configuration snippets may be placed in this directory as well
+includedir /etc/krb5.conf.d/
+
+[logging]
+    default = FILE:/var/log/krb5libs.log
+    kdc = FILE:/var/log/krb5kdc.log
+    admin_server = FILE:/var/log/kadmind.log
+
+
+[libdefaults]
+    dns_lookup_realm = false
+    ticket_lifetime = 24h
+    renew_lifetime = 7d
+    forwardable = true
+    rdns = false
+    default_ccache_name = KEYRING:persistent:%{uid}
+    default_realm = EXAMPLE.COM
+    dns_lookup_kdc = false
+
+[realms]
+EXAMPLE.COM = {
+    pkinit_anchors = FILE:/etc/sssd/pki/sssd_auth_ca_db.pem
+    pkinit_cert_match = <KU>digitalSignature
+    kdc = krb-server.sctesting.redhat.com
+    admin_server = krb-server.sctesting.redhat.com
+    pkinit_kdc_hostname = krb-server.sctesting.redhat.com
+}
+
+[domain_realm]
+    .sctesting.redhat.com = EXAMPLE.COM
+    sctesting.redhat.com= EXAMPLE.COM
+
+
+[appdefaults]
+pam = {
+    debug = true
+    ticket_lifetime = 1h
+    renew_lifetime = 3h
+    forwardable = true
+    krb4_convert = false
+}""")
+    env_logger.debug("File /etc/krb5.conf is updated.")
+
+    subp.run(["setsebool", "-P", "sssd_connect_all_unreserved_ports", "on"], check=True)
+    env_logger.debug("SELinux boolean sssd_connect_all_unreserved_ports is set to ON")
+
+    krb_ip_addr = _read_config(conf, ["krb.ip"])
+    with open("/etc/hosts", "a") as f:
+        f.write(f"{krb_ip_addr} krb-server.sctesting.redhat.com\n")
+        env_logger.debug("IP address of kerberos server is added to /etc/hosts file")
+    sleep(3)
+    utils.restart_service("sssd")
+    sleep(3)
+    subp.run(["systemctl", "enable", "--now", "oddjobd.service"], check=True)
+
+
+@click.command()
+@click.option("--conf", "-c", type=click.Path(), required=True)
+def setup_krb_server(conf):
+    check_env()
+    _create_krb_config(conf)
+
+    cert, key = _generate_krb_certs()
+    krb_ip, krb_root_passwd = _read_config(conf, ["krb.ip", "krb.root_passwd"])
+
+    with Connection(krb_ip, "root", password=krb_root_passwd) as sftp:
+        paths = ({"original": "/var/kerberos/krb5kdc/kdc.pem", "new": cert},
+                 {"original": "/var/kerberos/krb5kdc/kdckey.pem", "new": key},
+                 {"original": "/var/kerberos/krb5kdc/kdc-ca.pem", "new": f"{WORK_DIR}/rootCA.crt"})
+        for item in paths:
+            name = split(item["original"])[1]
+            name = name.replace(".", "-original.")
+            if sftp.exists(item["original"]):
+                sftp.get(item["original"], f"{BACKUP}/{name}")
+            sftp.put(item["new"], item["original"])
+
+        _create_kdc_config(sftp)
+
+    ssh = paramiko.SSHClient()
+    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    ssh.connect(krb_ip, 22, "root", krb_root_passwd)
+    stdin, stdout, stderr = ssh.exec_command("systemctl restart krb5kdc")
+    # TODO: check on errors
+
+
+@click.command()
+@click.option("--conf", "-c", type=click.Path(), help="Path to YAML file with configurations")
+def cleanup_ca(conf):
+    """
+    Cleanup the host after configuration of the testing environment.
+
+    Args:
+        conf: path to configuraion file in YAML format
+    """
+    env_logger.debug("Start cleanup of local CA")
+
+    username = _read_config(conf, ["local_user.name"])
+    # TODO: check after adding kerberos user that everything is also OK
+    # TODO: clean kerberos info
+    out = subp.run(
+        ["bash", CLEANUP_CA, "--username", username])
+
+    assert out.returncode == 0, "Something break in cleanup script :("
+    env_logger.debug("Cleanup of local CA is completed")
+
+
+def _create_kdc_config(sftp):
+    check_env()
+    realm = _read_config(config, ["krb.realm_name"])
+    kdc_conf = "/var/kerberos/krb5kdc/kdc.conf"
+
+    # with Connection(krb_ip, "root", password=passwd) as sftp:
+    sftp.get(kdc_conf, f"{BACKUP}/kdc-original.conf")
+    cnf = ConfigParser()
+    cnf.optionxform = str
+    with sftp.open(kdc_conf, "r") as f:
+        cnf.read_file(f, source="kdc.conf")
+
+        for sec in ["kdcdefaults", "realms"]:
+            if not cnf.has_section(sec):
+                cnf.add_section(sec)
+
+        if not cnf.has_option("realms", realm):
+            cnf.set("realms", realm, "{}")
+
+        # Parse options for realm in {...}
+        tmp = cnf.get("realms", realm).replace("{", "").replace("}", "").split("\n")
+        tmp = list(filter(None, tmp))
+
+        d = {}
+        for i in tmp:
+            key, value = [a.strip() for a in i.split("=")]
+            d[key] = value
+
+        d["pkinit_anchors"] = "FILE:/var/kerberos/krb5kdc/kdc-ca.pem"
+        d["pkinit_identity"] = "FILE:/var/kerberos/krb5kdc/kdc.pem,/var/kerberos/krb5kdc/kdckey.pem"
+
+        options = [f"{key} = {value}\n" for key, value in d.items()]
+        val = "{\n"
+        for opt in options:
+            val += opt
+        val += "}\n"
+
+        cnf.set("realms", realm, val)
+
+    with sftp.open(kdc_conf, "w") as f:
+        cnf.write(f)
+
+
+def check_env():
+    """
+    Insure that environment variables are loaded from .env file.
+    """
+    global BACKUP
+    global KEYS
+    global CERTS
+    global TMP
+    global CONF_DIR
+    global WORK_DIR
+
+    if WORK_DIR is None:
+        WORK_DIR = config("WORK_DIR")
+    if BACKUP is None:
+        BACKUP = config("BACKUP")
+    if KEYS is None:
+        KEYS = config("KEYS")
+    if CERTS is None:
+        CERTS = config("CERTS")
+    if TMP is None:
+        CERTS = config("TMP")
+    if CONF_DIR is None:
+        CONF_DIR = config("CONF_DIR")
+
+
+def _create_krb_config(conf):
+    check_env()
+    realm, username = _read_config(conf, ["krb.realm_name", "krb.name"])
+
+    with open(f"{CONF_DIR}/extensions.kdc", "w") as f:
+        f.write(f"""[kdc_cert]
+basicConstraints=CA:FALSE
+keyUsage=nonRepudiation,digitalSignature,keyEncipherment,keyAgreement
+extendedKeyUsage=1.3.6.1.5.2.3.5
+subjectKeyIdentifier=hash
+authorityKeyIdentifier=keyid,issuer
+issuerAltName=issuer:copy
+subjectAltName=otherName:1.3.6.1.5.2.2;SEQUENCE:kdc_princ_name
+
+[kdc_princ_name]
+realm=EXP:0,GeneralString:{realm}
+principal_name=EXP:1,SEQUENCE:kdc_principal_seq
+
+[kdc_principal_seq]
+name_type=EXP:0,INTEGER:1
+name_string=EXP:1,SEQUENCE:kdc_principals
+
+[kdc_principals]
+princ1=GeneralString:krbtgt
+princ2=GeneralString:{realm}""")
+
+    with open(f"{CONF_DIR}/extensions.client", "w") as f:
+        f.write(f"""[client_cert]
+basicConstraints=CA:FALSE
+keyUsage=digitalSignature,keyEncipherment,keyAgreement
+extendedKeyUsage=1.3.6.1.5.2.3.4
+subjectKeyIdentifier=hash
+authorityKeyIdentifier=keyid,issuer
+issuerAltName=issuer:copy
+subjectAltName=otherName:1.3.6.1.5.2.2;SEQUENCE:princ_name
+
+[princ_name]
+realm=EXP:0,GeneralString:{realm}
+principal_name=EXP:1,SEQUENCE:principal_seq
+
+[principal_seq]
+name_type=EXP:0,INTEGER:1
+name_string=EXP:1,SEQUENCE:principals
+
+[principals]
+princ1=GeneralString:{username}""")
+
+
+def _generate_krb_certs():
+    check_env()
+    # TODO: add temaplate file for generatng the certificate
+    key_path = f"{KEYS}/kdckey.pem"
+    crt_path = f"{CERTS}/kdc.pem"
+    subp.run(["openssl", "genrsa", "-out", key_path, "2048"], check=True)
+    subp.run(["openssl", "req", "-new", "-out", "kdc.req", "-key", key_path], check=True)
+    subp.run(["openssl", "x509", "-req", "-in", "kdc.req", "-CAkey",
+              f"{WORK_DIR}/rootCA.key", "-CA", f"{WORK_DIR}/rootCA.crt", "-out", crt_path, "-days", "365",
+              "-extfile", f"{CONF_DIR}/extensions.kdc", "-extensions", "kdc_cert", "-CAcreateserial"], check=True)
+    return crt_path, key_path
 
 
 def _load_env(env_file, work_dir=join(DIR_PATH, "virt_card")) -> str:
@@ -106,7 +399,8 @@ def _load_env(env_file, work_dir=join(DIR_PATH, "virt_card")) -> str:
     Deployment process would relay on this variables.
 
     Args:
-        env_file:  path to already existing .env file. If given, then it would be just copied to the library.
+        env_file:  path to already existing .env file. If given, then it would
+                   be just copied to the library.
         work_dir: working directory
 
     Returns:
@@ -249,20 +543,12 @@ def _create_sssd_config(local_user: str = None, krb_user: str = None):
     content = []
     if exists("/etc/sssd/sssd.conf"):
         utils._backup("/etc/sssd/sssd.conf", name="sssd-original.conf")
+        # TODO: make more strict checking of the content in the file
         with open("/etc/sssd/sssd.conf", "r") as f:
             content = f.readlines()
         for index, line in enumerate(content):
             if match(r"^\[(.*)]\n$", line):
                 content[index] = line + holder.format(holder=line.rstrip("\n"))
-        if local_user:
-            rule = f"\n[certmap/shadowutils/{local_user}]\n" \
-                   f"matchrule = <SUBJECT>.*CN={local_user}.*\n" \
-                   f"#<[certmap/shadowutils/{local_user}]>\n"
-            content.append(rule)
-
-        if krb_user:
-            pass
-            # TODO: add rule for kerberos user
     else:
         content = ["[sssd]\n",
                    "#<[sssd]>\n",
@@ -283,17 +569,21 @@ def _create_sssd_config(local_user: str = None, krb_user: str = None):
                    "#<[domain/shadowutils]>\n"
                    "debug_level = 9\n",
                    "id_provider = files\n"]
+    content = "".join(content)
 
-        if local_user:
-            content.append(f"\n[certmap/shadowutils/{local_user}]\n"
-                           f"#<[certmap/shadowutils/{local_user}]>\n"
-                           f"matchrule = <SUBJECT>.*CN={local_user}.*\n")
-        if krb_user:
-            pass
-            # TODO: add rule for kerberos user
+    if local_user:
+        if f"[certmap/shadowutils/{local_user}]\n" not in content:
+            content = content + f"\n[certmap/shadowutils/{local_user}]\n" + \
+                                f"#<[certmap/shadowutils/{local_user}]>\n" + \
+                                f"matchrule = <SUBJECT>.*CN={local_user}.*\n"
+    if krb_user:
+        if f"[certmap/ldap/{krb_user}]\n" not in content:
+            content = content + f"\n[certmap/ldap/{krb_user}]\n" + \
+                                f"#<[certmap/ldap/{krb_user}]>\n" + \
+                                f"maprule = (uid={krb_user})\n"
 
     with open("/etc/sssd/sssd.conf", "w") as f:
-        f.write("".join(content))
+        f.write(content)
         env_logger.debug("Configuration file for SSSD is updated "
                          "in  /etc/sssd/sssd.conf")
 
@@ -358,7 +648,7 @@ WantedBy=multi-user.target
     env_logger.debug(f"SELinux module create {module_path}")
 
 
-def _read_config(conf, items: [str] = None) -> list:
+def _read_config(conf, items: [str] = None) -> list or str:
     """
     Read data from the configuration file and return require items or full
     content.
@@ -384,42 +674,16 @@ def _read_config(conf, items: [str] = None) -> list:
         parts = item.split(".")
         value = CONFIG_DATA
         for part in parts:
-            try:
-                if value is None:
-                    raise KeyError
-                value = value.get(part)
-
-                if part == parts[-1]:
-                    return_list.append(value)
-            except KeyError:
+            if value is None:
                 env_logger.debug(
                     f"Key {part} not present in the configuration file. Skip.")
                 break
-    return return_list
 
+            value = value.get(part)
+            if part == parts[-1]:
+                return_list.append(value)
 
-@click.command()
-@click.option("--env", type=click.Path(), required=False, default=None,
-              help="Path to .env file with specified variables")
-@click.option("--conf", "-c", type=click.Path(), required=True,
-              help="Path to YAML file with configurations")
-@click.option("--work-dir", type=click.Path(), required=False,
-              default=join(DIR_PATH, "virt_card"),
-              help=f"Path to working directory. By default is "
-                   f"{join(DIR_PATH, 'virt_card')}")
-def setup_ca(conf, env_file, work_dir):
-    """
-    CLI command for setup the local CA.
-
-    Args:
-        conf: Path to YAML file with configurations
-        work_dir: Path to working directory. By default working directory is 
-                  in the source directory of the library
-        env_file: Path to .env file with specified variables
-    """
-
-    env_path = _load_env(env_file, work_dir)
-    _setup_ca(conf, env_path)
+    return return_list if len(items) > 1 else return_list[0]
 
 
 def _setup_ca(conf, env_file):
@@ -429,7 +693,7 @@ def _setup_ca(conf, env_file):
 
     env_logger.debug("Start setup of local CA")
 
-    user = _read_config(conf, items=["local_user"])[0]
+    user = _read_config(conf, items=["local_user"])
     out = subp.run(["bash", SETUP_CA,
                     "--username", user["name"],
                     "--userpasswd", user["passwd"],
@@ -437,26 +701,6 @@ def _setup_ca(conf, env_file):
                     "--env", env_file])
     assert out.returncode == 0, "Something break in setup playbook :("
     env_logger.debug("Setup of local CA is completed")
-
-
-@click.command()
-@click.option("--env", type=click.Path(), required=False, default=None,
-              help="Path to .env file with specified variables")
-@click.option("--work-dir", type=click.Path(), required=False,
-              default=join(DIR_PATH, "virt_card"),
-              help="Working directory where all necessary files and directories "
-                   "are/will be stored")
-def setup_virt_card(env, work_dir):
-    """
-    Setup virtual smart card. Has to be run after configuration of the local CA.
-
-    Args:
-        env: Path to .env file with specified variables
-        work_dir: Working directory where all necessary files and directories
-                  are/will be stored
-    """
-    env_path = _load_env(env, work_dir)
-    _setup_virt_card(env_path)
 
 
 def _setup_virt_card(env_file):
@@ -474,30 +718,12 @@ def _setup_virt_card(env_file):
     env_logger.debug("Setup of local CA is completed")
 
 
-@click.command()
-@click.option("--conf", "-c", type=click.Path(), help="Path to YAML file with configurations")
-def cleanup_ca(conf):
-    """
-    Cleanup the host after configuration of the testing environment.
-
-    Args:
-        conf: path to configuraion file in YAML format
-    """
-    env_logger.debug("Start cleanup of local CA")
-
-    username = _read_config(conf, ["local_user.name"])[0]
-    # TODO: check after adding kerberos user that everything is also OK
-    out = subp.run(
-        ["bash", CLEANUP_CA, "--username", username])
-
-    assert out.returncode == 0, "Something break in cleanup script :("
-    env_logger.debug("Cleanup of local CA is completed")
-
-
 cli.add_command(setup_ca)
 cli.add_command(setup_virt_card)
+cli.add_command(setup_krb_client)
 cli.add_command(cleanup_ca)
 cli.add_command(prepair)
+cli.add_command(setup_krb_server)
 
 if __name__ == "__main__":
     cli()

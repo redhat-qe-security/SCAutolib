@@ -186,7 +186,7 @@ def restart_service(service: str) -> int:
     return 0
 
 
-def generate_root_ca_crt():
+def generate_cert(root: bool = True):
     """
     Function for generating the root CA certificate with keys
 
