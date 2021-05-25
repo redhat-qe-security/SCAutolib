@@ -10,7 +10,7 @@ import utils as utils
 from time import sleep
 from SCAutolib import env_logger
 import paramiko
-from pysftp import Connection
+from pysftp import Connection, CnOpts
 from configparser import ConfigParser
 
 # TODO add docs about parameters
@@ -91,7 +91,7 @@ def prepair(setup, conf, work_dir, env_file, krb):
 
     if krb:
         setup_krb_server(conf)
-        setup_krb_client(env_file, conf)
+        setup_krb_client(conf)
 
 
 @click.command()
@@ -142,7 +142,6 @@ def setup_virt_card(env, work_dir):
 @click.option("--conf", "-c", type=click.Path(), required=True,
               help="Path to YAML file with configurations")
 def setup_krb_client(conf):
-    # TODO: check certs from KRB server and client
     check_env()
     pkgs = ["krb5-libs", "krb5-workstation", "ccid", "opensc", "esc", "pcsc-lite",
             "pcsc-lite-libs", "authconfig", "gdm", "nss-pam-ldapd", "oddjob",
@@ -217,12 +216,19 @@ pam = {
 @click.option("--conf", "-c", type=click.Path(), required=True)
 def setup_krb_server(conf):
     check_env()
+
     _create_krb_config(conf)
 
     cert, key = _generate_krb_certs()
+    env_logger.debug(f"KDC certificat: {cert}")
+    env_logger.debug(f"KDC private key: {key}")
     krb_ip, krb_root_passwd = _read_config(conf, ["krb.ip", "krb.root_passwd"])
 
-    with Connection(krb_ip, "root", password=krb_root_passwd) as sftp:
+    # Need for strcit host key cheking disabled
+    cnopts = CnOpts()
+    cnopts.hostkeys = None
+    with Connection(krb_ip, "root", password=krb_root_passwd, cnopts=cnopts) as sftp:
+        env_logger.debug(f"SFTP with server {krb_ip} connection established")
         paths = ({"original": "/var/kerberos/krb5kdc/kdc.pem", "new": cert},
                  {"original": "/var/kerberos/krb5kdc/kdckey.pem", "new": key},
                  {"original": "/var/kerberos/krb5kdc/kdc-ca.pem", "new": f"{WORK_DIR}/rootCA.crt"})
@@ -231,14 +237,20 @@ def setup_krb_server(conf):
             name = name.replace(".", "-original.")
             if sftp.exists(item["original"]):
                 sftp.get(item["original"], f"{BACKUP}/{name}")
+                env_logger.debug(f"File {item['original']} from Kerberos server "
+                                 f"({krb_ip}) is backuped to {BACKUP}/{name}")
             sftp.put(item["new"], item["original"])
+            env_logger.debug(f"File {item['new']} from localhost is copied to "
+                             f"Kerberos server ({krb_ip}) to {item['original']}")
 
         _create_kdc_config(sftp)
 
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     ssh.connect(krb_ip, 22, "root", krb_root_passwd)
+    env_logger.debug(f"SSH connectin to {krb_ip} is istablished")
     stdin, stdout, stderr = ssh.exec_command("systemctl restart krb5kdc")
+    env_logger.debug(f"Service krb5kdc on {krb_ip} is restarted")
     # TODO: check on errors
 
 
@@ -267,9 +279,11 @@ def _create_kdc_config(sftp):
     check_env()
     realm = _read_config(config, ["krb.realm_name"])
     kdc_conf = "/var/kerberos/krb5kdc/kdc.conf"
+    env_logger.debug(f"Realm name: {realm}")
 
-    # with Connection(krb_ip, "root", password=passwd) as sftp:
     sftp.get(kdc_conf, f"{BACKUP}/kdc-original.conf")
+    env_logger.debug(f"File {kdc_conf} is copied to {BACKUP}/kdc-original.conf")
+
     cnf = ConfigParser()
     cnf.optionxform = str
     with sftp.open(kdc_conf, "r") as f:
@@ -277,33 +291,52 @@ def _create_kdc_config(sftp):
 
         for sec in ["kdcdefaults", "realms"]:
             if not cnf.has_section(sec):
+                env_logger.debug(f"Section {sec} is not present in {kdc_conf}.")
                 cnf.add_section(sec)
-
+                env_logger.debug(f"Section {sec} in {kdc_conf} is created.")
+        present = True
         if not cnf.has_option("realms", realm):
+            env_logger.debug(f"Option {realm} is not present in realms section in {kdc_conf}.")
             cnf.set("realms", realm, "{}")
-
+            env_logger.debug(f"Option {realm} is created in realms section in {kdc_conf}.")
+            present = False
         # Parse options for realm in {...}
-        tmp = cnf.get("realms", realm).replace("{", "").replace("}", "").split("\n")
-        tmp = list(filter(None, tmp))
 
-        d = {}
-        for i in tmp:
-            key, value = [a.strip() for a in i.split("=")]
-            d[key] = value
+        d = {"acl_file": "/var/kerberos/krb5kdc/kadm5.acl",
+             "dict_file": "/usr/share/dict/words",
+             "admin_keytab": "/var/kerberos/krb5kdc/kadm5.keytab",
+             "supported_enctypes": "aes256-cts:normal aes128-cts:normal "
+                                   "arcfour-hmac:normal camellia256-cts:normal "
+                                   "camellia128-cts:normal",
+             "pkinit_allow_upn": "on",
+             "pkinit_eku_checking": "scLogin",
+             "max_renewable_life": "7d"}
+
+        if present:
+            env_logger.debug(f"Option {realm} presents in realms section in {kdc_conf}.")
+            d = {}
+            tmp = cnf.get("realms", realm)\
+                .replace("{", "").replace("}", "").split("\n")
+            tmp = list(filter(None, tmp))
+            for i in tmp:
+                key, value = [a.strip() for a in i.split("=")]
+                d[key] = value
 
         d["pkinit_anchors"] = "FILE:/var/kerberos/krb5kdc/kdc-ca.pem"
-        d["pkinit_identity"] = "FILE:/var/kerberos/krb5kdc/kdc.pem,/var/kerberos/krb5kdc/kdckey.pem"
+        d["pkinit_identity"] = "FILE:/var/kerberos/krb5kdc/kdc.pem," \
+                               "/var/kerberos/krb5kdc/kdckey.pem"
 
         options = [f"{key} = {value}\n" for key, value in d.items()]
         val = "{\n"
         for opt in options:
             val += opt
         val += "}\n"
-
         cnf.set("realms", realm, val)
+        env_logger.debug(f"Value for option {realm} is {value}")
 
     with sftp.open(kdc_conf, "w") as f:
         cnf.write(f)
+        env_logger.debug(f"File {kdc_conf} is updated")
 
 
 def check_env():
@@ -356,6 +389,7 @@ name_string=EXP:1,SEQUENCE:kdc_principals
 [kdc_principals]
 princ1=GeneralString:krbtgt
 princ2=GeneralString:{realm}""")
+        env_logger.debug(f"Extensions file for KDC is created {CONF_DIR}/extensions.kdc")
 
     with open(f"{CONF_DIR}/extensions.client", "w") as f:
         f.write(f"""[client_cert]
@@ -377,6 +411,8 @@ name_string=EXP:1,SEQUENCE:principals
 
 [principals]
 princ1=GeneralString:{username}""")
+        env_logger.debug(f"Extensions file for KDC client is created "
+                         f"{CONF_DIR}/extensions.client")
 
 
 def _generate_krb_certs():
@@ -416,9 +452,9 @@ def _load_env(env_file, work_dir=join(DIR_PATH, "virt_card")) -> str:
             f.write(f"WORK_DIR={work_dir}\n")
             f.write(f"TMP={join(work_dir, 'tmp')}\n")
             f.write(f"CONF_DIR={join(work_dir, 'conf')}\n")
-            f.write(f"KEYS={join(work_dir, 'tmp','keys')}\n")
-            f.write(f"CERTS={join(work_dir, 'tmp','certs')}\n")
-            f.write(f"BACKUP={join(work_dir, 'tmp','backup')}\n")
+            f.write(f"KEYS={join(work_dir, 'tmp', 'keys')}\n")
+            f.write(f"CERTS={join(work_dir, 'tmp', 'certs')}\n")
+            f.write(f"BACKUP={join(work_dir, 'tmp', 'backup')}\n")
     else:
         # .env file should be near source file
         # because this env file is used other source files
@@ -574,13 +610,13 @@ def _create_sssd_config(local_user: str = None, krb_user: str = None):
     if local_user:
         if f"[certmap/shadowutils/{local_user}]\n" not in content:
             content = content + f"\n[certmap/shadowutils/{local_user}]\n" + \
-                                f"#<[certmap/shadowutils/{local_user}]>\n" + \
-                                f"matchrule = <SUBJECT>.*CN={local_user}.*\n"
+                      f"#<[certmap/shadowutils/{local_user}]>\n" + \
+                      f"matchrule = <SUBJECT>.*CN={local_user}.*\n"
     if krb_user:
         if f"[certmap/ldap/{krb_user}]\n" not in content:
             content = content + f"\n[certmap/ldap/{krb_user}]\n" + \
-                                f"#<[certmap/ldap/{krb_user}]>\n" + \
-                                f"maprule = (uid={krb_user})\n"
+                      f"#<[certmap/ldap/{krb_user}]>\n" + \
+                      f"maprule = (uid={krb_user})\n"
 
     with open("/etc/sssd/sssd.conf", "w") as f:
         f.write(content)
