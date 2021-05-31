@@ -100,16 +100,6 @@ P11LIB='/usr/lib64/pkcs11/libsofthsm2.so'
 pushd $WORK_DIR || exit
 
 mkdir tokens
-export SOFTHSM2_CONF="$CONF_DIR/softhsm2.conf" # Should I save previous value of
-softhsm2-util --init-token --slot 0 --label "SC test" --so-pin="$SOPIN" --pin="$PIN"
-
-# Creating NSS database
-mkdir $NSSDB
-modutil -create -dbdir sql:$NSSDB -force
-modutil -list -dbdir sql:$NSSDB | grep 'library name: p11-kit-proxy.so'
-if [ "$?" = "1" ]; then
-  modutil -force -add 'SoftHSM PKCS#11' -dbdir sql:$NSSDB -libfile $P11LIB
-fi
 
 # Setup local openssl CA
 mkdir {certs,crl,newcerts}
@@ -130,8 +120,6 @@ openssl genrsa -out ${NAME}.key 2048
 openssl req -new -nodes -key ${NAME}.key -reqexts req_exts -config $CONF_DIR/req_${NAME}.cnf -out ${NAME}.csr
 openssl ca -config $CONF_DIR/ca.cnf -batch -notext -keyfile rootCA.key -in ${NAME}.csr -days 365 -extensions usr_cert -out ${NAME}.crt
 
-pkcs11-tool --module libsofthsm2.so --slot-index 0 -w ${NAME}.key -y privkey --label ${NAME} -p $PIN --set-id 0 -d 0
-pkcs11-tool --module libsofthsm2.so --slot-index 0 -w ${NAME}.crt -y cert --label ${NAME} -p $PIN --set-id 0 -d 0
 ######################################
 # Setup SELinux module
 ######################################
