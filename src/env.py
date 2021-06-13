@@ -1,32 +1,17 @@
-from os.path import (exists, realpath, isfile, dirname, abspath, join, split)
-from os import mkdir
 import yaml
-import subprocess as subp
-from decouple import config
 import utils as utils
+import subprocess as subp
+from os.path import (exists, realpath, isfile, split)
+from os import mkdir
+from pysftp import Connection
+from decouple import config
 from configparser import ConfigParser
-
 from SCAutolib import env_logger
-from SCAutolib.src import check_env, KEYS, CERTS, WORK_DIR, CONF_DIR, BACKUP, \
-    CONF, SETUP_CA, SETUP_VSC
-
-# TODO add docs about parameters
-# DIR_PATH = dirname(abspath(__file__))
-# SETUP_CA = f"{DIR_PATH}/env/setup_ca.sh"
-# SETUP_VSC = f"{DIR_PATH}/env/setup_virt_card.sh"
-# CLEANUP_CA = f"{DIR_PATH}/env/cleanup_ca.sh"
-# WORK_DIR = None
-# TMP = None
-# CONF_DIR = None
-# KEYS = None
-# CERTS = None
-# BACKUP = None
-# CONFIG_DATA = None  # for caching configuration data
-# KRB_IP = None
-# CONF = None
+from SCAutolib.src import (check_env, KEYS, CERTS, WORK_DIR, CONF_DIR, BACKUP,
+                           CONF, CONFIG_DATA, SETUP_CA, SETUP_VSC)
 
 
-def create_kdc_config(sftp):
+def create_kdc_config(sftp: Connection):
     check_env()
     realm = read_config("krb.realm_name")
     kdc_conf = "/var/kerberos/krb5kdc/kdc.conf"
@@ -89,38 +74,10 @@ def create_kdc_config(sftp):
         cnf.write(f)
         env_logger.debug(f"File {kdc_conf} is updated")
 
-#
-# def check_env():
-#     """
-#     Insure that environment variables are loaded from .env file.
-#     """
-#     global BACKUP
-#     global KEYS
-#     global CERTS
-#     global TMP
-#     global CONF_DIR
-#     global WORK_DIR
-#     global CONF
-#
-#     if WORK_DIR is None:
-#         WORK_DIR = config("WORK_DIR")
-#     if BACKUP is None:
-#         BACKUP = config("BACKUP")
-#     if KEYS is None:
-#         KEYS = config("KEYS")
-#     if CERTS is None:
-#         CERTS = config("CERTS")
-#     if TMP is None:
-#         CERTS = config("TMP")
-#     if CONF_DIR is None:
-#         CONF_DIR = config("CONF_DIR")
-#     if CONF is None:
-#         CONF = config("CONF")
 
-
-def create_krb_config():
+def create_krb_config(sftp: Connection = None):
     check_env()
-    realm, username = read_config("krb.realm_name", "krb.name")
+    realm, username, ip_addr = read_config("krb.realm_name", "krb.name", "krb.ip")
 
     with open(f"{CONF_DIR}/extensions.kdc", "w") as f:
         f.write(f"""[kdc_cert]
@@ -168,60 +125,84 @@ princ1=GeneralString:{username}""")
         env_logger.debug(f"Extensions file for KDC client is created "
                          f"{CONF_DIR}/extensions.client")
 
-    if exists("/etc/krb5.conf"):
-        utils._backup("/etc/krb5.conf", "krb5-original.conf")
+    krb_conf = "/etc/krb5.conf"
+    exist = sftp.exists(krb_conf) if sftp is not None else exists(krb_conf)
+    if exist:
+        utils.backup_(krb_conf, "krb5-original.conf", sftp)
 
-    with open("/etc/krb5.conf", "w") as f:
-        f.write("""# Configuration snippets may be placed in this directory as well
-includedir /etc/krb5.conf.d/
+    cnf = ConfigParser()
+    cnf.optionxform = str
+    content = {
+        "logging": {
+            "default": "FILE:/var/log/krb5libs.log",
+            "kdc": "FILE:/var/log/krb5kdc.log",
+            "admin_server": "FILE:/var/log/kadmind.log"
+        },
+        "libdefaults": {
+            "dns_lookup_realm": "false",
+            "dns_lookup_kdc": "false",
+            "rdns": "false",
+            "ticket_lifetime": "24h",
+            "renew_lifetime": "7d",
+            "forwardable": "true",
+            "default_ccache_name": "KEYRING:persistent: % {uid}",
+            "default_realm": realm,
+        },
+        "realms": {
+            realm: """{
+        pkinit_anchors = FILE:/etc/sssd/pki/sssd_auth_ca_db.pem
+        pkinit_cert_match = <KU>digitalSignature
+        kdc = krb-server.sctesting.redhat.com
+        admin_server = krb-server.sctesting.redhat.com
+        pkinit_kdc_hostname = krb-server.sctesting.redhat.com
+        }"""
+        },
+        "domain_realm": {
+            ".sctesting.redhat.com": realm,
+            ".ctesting.redhat.com": realm,
+        },
+    }
+    if sftp:
+        hostname = read_config("krb.server_name")
+        domain_name = hostname.split(".", 1)[1]
 
-[logging]
-    default = FILE:/var/log/krb5libs.log
-    kdc = FILE:/var/log/krb5kdc.log
-    admin_server = FILE:/var/log/kadmind.log
+        content["realms"] = {realm: "{\n"
+                                    f"""kdc = {hostname}:88
+                                        admin_server = {hostname}"
+                                        default_domain = {domain_name}"
+                                        pkinit_anchors = FILE:/var/kerberos/krb5kdc/kdc-ca.pem\n"""
+                                    "\t}\n"}
+    else:
+        content["appdefaults"] = {
+            "pam": """{
+        debug = true
+        ticket_lifetime = 1h
+        renew_lifetime = 3h
+        forwardable = true
+        krb4_convert = false
+        }"""
+        }
 
+    cnf.read_dict(content)
 
-[libdefaults]
-    dns_lookup_realm = false
-    ticket_lifetime = 24h
-    renew_lifetime = 7d
-    forwardable = true
-    rdns = false
-    default_ccache_name = KEYRING:persistent:%{uid}
-    default_realm = EXAMPLE.COM
-    dns_lookup_kdc = false
+    if sftp:
+        with sftp.open(krb_conf, "w") as f:
+            f.write("includedir /etc/krb5.conf.d/")
+            cnf.write(f)
+            env_logger.debug("File /etc/krb5.conf is updated.")
+    else:
+        with open(krb_conf, "w") as f:
+            f.write("includedir /etc/krb5.conf.d/")
+            cnf.write(f)
+            env_logger.debug("File /etc/krb5.conf is updated.")
 
-[realms]
-EXAMPLE.COM = {
-    pkinit_anchors = FILE:/etc/sssd/pki/sssd_auth_ca_db.pem
-    pkinit_cert_match = <KU>digitalSignature
-    kdc = krb-server.sctesting.redhat.com
-    admin_server = krb-server.sctesting.redhat.com
-    pkinit_kdc_hostname = krb-server.sctesting.redhat.com
-}
+        subp.run(["setsebool", "-P", "sssd_connect_all_unreserved_ports", "on"], check=True)
+        env_logger.debug("SELinux boolean sssd_connect_all_unreserved_ports is set to ON")
 
-[domain_realm]
-    .sctesting.redhat.com = EXAMPLE.COM
-    sctesting.redhat.com= EXAMPLE.COM
-
-
-[appdefaults]
-pam = {
-    debug = true
-    ticket_lifetime = 1h
-    renew_lifetime = 3h
-    forwardable = true
-    krb4_convert = false
-}""")
-    env_logger.debug("File /etc/krb5.conf is updated.")
-
-    subp.run(["setsebool", "-P", "sssd_connect_all_unreserved_ports", "on"], check=True)
-    env_logger.debug("SELinux boolean sssd_connect_all_unreserved_ports is set to ON")
-
-    krb_ip_addr = read_config("krb.ip")
-    with open("/etc/hosts", "a") as f:
-        f.write(f"{krb_ip_addr} krb-server.sctesting.redhat.com\n")
-        env_logger.debug("IP address of kerberos server is added to /etc/hosts file")
+        krb_ip_addr = read_config("krb.ip")
+        with open("/etc/hosts", "a") as f:
+            f.write(f"{krb_ip_addr} krb-server.sctesting.redhat.com\n")
+            env_logger.debug("IP address of kerberos server is added to /etc/hosts file")
 
 
 def generate_krb_certs():
@@ -362,7 +343,7 @@ def create_sssd_config(local_user: str = None, krb_user: str = None):
     }
 
     if exists("/etc/sssd/sssd.conf"):
-        utils._backup("/etc/sssd/sssd.conf", name="sssd-original.conf")
+        utils.backup_("/etc/sssd/sssd.conf", name="sssd-original.conf")
         # TODO: make more strict checking of the content in the file
         cnf.read("etc/sssd/sssd.conf")
         for section in cnf.sections():
@@ -455,7 +436,7 @@ def create_virtcacard_configs():
         if exists(path):
             name = split(path)[1].split(".", 1)
             name = name[0] + "-original." + name[1]
-            utils._backup(path, name)
+            utils.backup_(path, name)
 
     for item in items:
         with open(item["path"], "w") as f:
@@ -489,10 +470,8 @@ def read_config(*items) -> list or str:
     Returns:
         list with required items
     """
-    global CONFIG_DATA
-    global CONF
     check_env()
-
+    global CONFIG_DATA
     if CONFIG_DATA is None:
         with open(CONF, "r") as file:
             CONFIG_DATA = yaml.load(file, Loader=yaml.FullLoader)
@@ -546,7 +525,7 @@ def setup_virt_card(env_file):
     """
     check_env()
     env_logger.debug("Start setup of local CA")
-    out = subp.run(["bash", SETUP_VSC, "-c", CONF_DIR, "-e", env_file])
+    out = subp.run(["bash", SETUP_VSC, "-c", CONF_DIR, "-e", env_file], check=True)
 
-    assert out.returncode == 0, "Something break in setup playbook :("
+    assert out.returncode == 0, "Something break in setup script :("
     env_logger.debug("Setup of local CA is completed")

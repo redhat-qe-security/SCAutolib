@@ -2,7 +2,7 @@ import click
 from time import sleep
 import paramiko
 from pysftp import Connection, CnOpts
-
+from os.path import join
 from SCAutolib.src import load_env, DIR_PATH, CLEANUP_CA
 from SCAutolib.src.env import *
 
@@ -27,8 +27,10 @@ def cli():
               help="Absolute path to .env file with environment varibles to be "
                    "used in the library.")
 @click.option("--krb", "-k", is_flag=True, required=False, default=False,
-              help="Flag for setup of kerberos cleint.")
-def prepair(setup, conf, work_dir, env_file, krb):
+              help="Flag for setup of kerberos client.")
+@click.option("--new-srv", "-N", is_flag=True, required=False, default=False,
+              help="Indicates that given server is an clean machine that need to be configured from the scartch")
+def prepair(setup, conf, work_dir, env_file, krb, new_srv):
     """
     Prepair the whole test envrionment including temporary directories, necessary
     configuration files and services. Also can automaticaly run setup for local
@@ -69,8 +71,8 @@ def prepair(setup, conf, work_dir, env_file, krb):
         setup_virt_card(env_file)
 
     if krb:
-        # setup_krb_server(conf)
-        setup_krb_client(conf)
+        setup_krb_server(new_srv)
+        setup_krb_client()
 
 
 @click.command()
@@ -118,8 +120,6 @@ def setup_virt_card(env, work_dir):
 
 
 @click.command()
-# @click.option("--conf", "-c", type=click.Path(), required=True,
-#               help="Path to YAML file with configurations")
 def setup_krb_client():
     check_env()
     pkgs = ["krb5-libs", "krb5-workstation", "ccid", "opensc", "esc", "pcsc-lite",
@@ -139,16 +139,29 @@ def setup_krb_client():
 
 
 @click.command()
-@click.option("--conf", "-c", type=click.Path(), required=True)
-def setup_krb_server(conf):
+def setup_krb_server(new):
     check_env()
-
-    create_krb_config()
 
     cert, key = generate_krb_certs()
     env_logger.debug(f"KDC certificat: {cert}")
     env_logger.debug(f"KDC private key: {key}")
-    krb_ip, krb_root_passwd = read_config("krb.ip", "krb.root_passwd")
+    krb_ip, krb_root_passwd, krb_srv_name = read_config("krb.ip", "krb.root_passwd", "krb.server_name")
+
+    ssh = paramiko.SSHClient()
+    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    ssh.connect(krb_ip, 22, "root", krb_root_passwd)
+    env_logger.debug(f"SSH connectin to {krb_ip} is istablished")
+    if new:
+        # Install required pakcages on fresh machine
+        pkgs = ["ccid", "opensc", "esc", "pcsc-lite", "pcsc-lite-libs", "gdm",
+                "nss-pam-ldapd", "krb5-workstation", "krb5-libs", "krb5-pkinit",
+                "krb5-server", "krb5-pkinit-openssl", "nss-tools", "python3-ldap"]
+        ssh.exec_command(f"dnf install -y {' '.join(pkgs)}")
+
+        # Change host name from configuration file
+        _, stdout, _ = ssh.exec_command("hostname")
+        if krb_srv_name not in stdout:
+            ssh.exec_command(f"hostnamectl set-hostaname {krb_srv_name}")
 
     # Need for strcit host key cheking disabled
     cnopts = CnOpts()
@@ -159,9 +172,8 @@ def setup_krb_server(conf):
                  {"original": "/var/kerberos/krb5kdc/kdckey.pem", "new": key},
                  {"original": "/var/kerberos/krb5kdc/kdc-ca.pem", "new": f"{WORK_DIR}/rootCA.crt"})
         for item in paths:
-            name = split(item["original"])[1]
-            name = name.replace(".", "-original.")
             if sftp.exists(item["original"]):
+                name = split(item["original"])[1].replace(".", "-original.")
                 sftp.get(item["original"], f"{BACKUP}/{name}")
                 env_logger.debug(f"File {item['original']} from Kerberos server "
                                  f"({krb_ip}) is backuped to {BACKUP}/{name}")
@@ -170,12 +182,10 @@ def setup_krb_server(conf):
                              f"Kerberos server ({krb_ip}) to {item['original']}")
 
         create_kdc_config(sftp)
+        create_krb_config(sftp)
 
-    ssh = paramiko.SSHClient()
-    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    ssh.connect(krb_ip, 22, "root", krb_root_passwd)
-    env_logger.debug(f"SSH connectin to {krb_ip} is istablished")
     ssh.exec_command("systemctl restart krb5kdc")
+    ssh.close()
     env_logger.debug(f"Service krb5kdc on {krb_ip} is restarted")
     # TODO: check on errors
 
@@ -197,6 +207,7 @@ def cleanup_ca():
 
     assert out.returncode == 0, "Something break in cleanup script :("
     env_logger.debug("Cleanup of local CA is completed")
+
 
 cli.add_command(setup_ca)
 cli.add_command(setup_virt_card)
