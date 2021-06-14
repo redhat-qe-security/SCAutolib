@@ -1,10 +1,21 @@
 import click
-from time import sleep
 import paramiko
+import yaml
+from time import sleep
 from pysftp import Connection, CnOpts
-from os.path import join
+from os.path import join, exists
 from SCAutolib.src import load_env, DIR_PATH, CLEANUP_CA
 from SCAutolib.src.env import *
+
+
+def check_conf(ctx, param, value):
+    if not exists(value):
+        click.echo(f"File {value} does not exists. Please provide correct path"
+                   " to the configuration file.")
+        ctx.exit()
+    with open(value, "r") as file:
+        data = yaml.load(file, Loader=yaml.FullLoader)
+        # TODO check that all required configurations are set
 
 
 @click.group()
@@ -17,7 +28,8 @@ def cli():
               help="Flag for automatic execution of local CA and virtual "
                    "smart card deployment")
 @click.option("--conf", "-c", type=click.Path(),
-              help="Path to YAML file with configurations.", required=False)
+              help="Path to YAML file with configurations.", required=False, 
+              callback=check_conf)
 @click.option("--work-dir", "-w", type=click.Path(), required=False,
               default=DIR_PATH,
               help="Absolute path to working directory"
@@ -32,8 +44,8 @@ def cli():
               help="Indicates that given server is an clean machine that need to be configured from the scartch")
 def prepair(setup, conf, work_dir, env_file, krb, new_srv):
     """
-    Prepair the whole test envrionment including temporary directories, necessary
-    configuration files and services. Also can automaticaly run setup for local
+    Prepare the whole test environment including temporary directories, necessary
+    configuration files and services. Also can automatically run setup for local
     CA and virtual smart card.
 
     Args:
@@ -41,10 +53,10 @@ def prepair(setup, conf, work_dir, env_file, krb, new_srv):
         setup: if you want to automatically run other setup steps
         conf: path to configuration file im YAML format
         work_dir: path to working directory. Can be overwritten
-                  by varible WORK_DIR in confugration file
+                  by variable WORK_DIR in configuration file
         env_file: path to already existing .env file
     """
-    # TODO: add geting of work_dir from configuraion file
+    # TODO: add getting of work_dir from configuration file
     env_file = load_env(env_file, conf, work_dir)
     print("Path to config file is: ", conf)
 
@@ -59,15 +71,15 @@ def prepair(setup, conf, work_dir, env_file, krb, new_srv):
     env_logger.debug("SoftHSM2 configuration file is created in the "
                      f"{CONF_DIR}/softhsm2.conf")
 
-    create_virtcacard_configs()
+    create_virt_cacard_configs()
     env_logger.debug("Configuration files for virtual smart card are created.")
 
-    creat_cnf(usernames)
+    create_cnf(usernames)
 
     create_krb_config()
 
     if setup:
-        setup_ca(conf, env_file)
+        setup_ca_(env_file)
         setup_virt_card(env_file)
 
     if krb:
@@ -79,7 +91,7 @@ def prepair(setup, conf, work_dir, env_file, krb, new_srv):
 @click.option("--env", type=click.Path(), required=False, default=None,
               help="Path to .env file with specified variables")
 @click.option("--conf", "-c", type=click.Path(), required=True,
-              help="Path to YAML file with configurations")
+              help="Path to YAML file with configurations", callback=check_conf)
 @click.option("--work-dir", type=click.Path(), required=False,
               default=join(DIR_PATH, "virt_card"),
               help=f"Path to working directory. By default is "
@@ -191,7 +203,8 @@ def setup_krb_server(new):
 
 
 @click.command()
-@click.option("--conf", "-c", type=click.Path(), help="Path to YAML file with configurations")
+@click.option("--conf", "-c", type=click.Path(), callback=check_conf,
+                help="Path to YAML file with configurations" )
 def cleanup_ca():
     """
     Cleanup the host after configuration of the testing environment.

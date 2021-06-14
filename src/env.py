@@ -1,5 +1,5 @@
 import yaml
-import utils as utils
+import utils
 import subprocess as subp
 from os.path import (exists, realpath, isfile, split)
 from os import mkdir
@@ -207,7 +207,7 @@ princ1=GeneralString:{username}""")
 
 def generate_krb_certs():
     check_env()
-    # TODO: add temaplate file for generatng the certificate
+    # TODO: add template file for generating the certificate
     key_path = f"{KEYS}/kdckey.pem"
     crt_path = f"{CERTS}/kdc.pem"
     subp.run(["openssl", "genrsa", "-out", key_path, "2048"], check=True)
@@ -229,7 +229,7 @@ def prep_tmp_dirs():
             mkdir(dir_path)
 
 
-def creat_cnf(user_list: [], ca: bool = True):
+def create_cnf(user_list: list, ca: bool = True):
     """
     Create configuration files for OpenSSL to generate certificates and requests.
     Args:
@@ -311,7 +311,7 @@ subjectAltName = otherName:msUPN;UTF8:{user}@EXAMPLE.COM, email:{user}@example.c
 """
         with open(f"{CONF_DIR}/req_{user}.cnf", "w") as f:
             f.write(user_cnf)
-            env_logger.debug(f"Configuraiton file for CSR for user {user} is created "
+            env_logger.debug(f"Configuration file for CSR for user {user} is created "
                              f"{CONF_DIR}/req_{user}.cnf")
 
 
@@ -326,7 +326,7 @@ def create_sssd_config(local_user: str = None, krb_user: str = None):
         krb_user: username for kerberos user with smart card to add the match rule.
     """
     cnf = ConfigParser(allow_no_value=True)
-    cnf.optionxform = str  # Needed for correct parsing of upercase words
+    cnf.optionxform = str  # Needed for correct parsing of uppercase words
     default = {
         "sssd": {"#<[sssd]>": None,
                  "debug_level": "9",
@@ -382,8 +382,8 @@ def create_sssd_config(local_user: str = None, krb_user: str = None):
 
 def create_softhsm2_config():
     """
-    Create SoftHSM2 configuraion file in conf_dir. Same directory has to be used
-    in setup-ca function, otherwise configuraion file wouldn't be found causing
+    Create SoftHSM2 configuration file in conf_dir. Same directory has to be used
+    in setup-ca function, otherwise configuration file wouldn't be found causing
     the error. conf_dir expected to be in work_dir.
     """
     hsm_conf = config("SOFTHSM2_CONF", default=None)
@@ -401,7 +401,7 @@ def create_softhsm2_config():
                          f"in {CONF_DIR}/softhsm2.conf.")
 
 
-def create_virtcacard_configs():
+def create_virt_cacard_configs():
     """
     Create systemd service (virt_cacard.service) and semodule (virtcacard.cil)
     for virtual smart card.
@@ -496,10 +496,8 @@ def read_config(*items) -> list or str:
     return return_list if len(items) > 1 else return_list[0]
 
 
-def _setup_ca(conf, env_file):
+def setup_ca_(env_file):
     check_env()
-    assert exists(realpath(conf)), f"File {conf} is not exist."
-    assert isfile(realpath(conf)), f"{conf} is not a file."
 
     env_logger.debug("Start setup of local CA")
 
