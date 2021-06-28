@@ -1,9 +1,14 @@
 #!/usr/bin/bash
+# author: Pavel Yadlouski <pyadlous@redhat.com>
+#!/usr/bin/bash
 set -e
 #trap read debug
 
 bold=$(tput bold)
 normal=$(tput sgr0)
+RED='\033[0;31m'
+NC='\033[0m' # No Color
+GREEN='\033[0;32m'
 rx='([1-9]?[0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])'
 
 NAME='default-name'
@@ -13,6 +18,7 @@ SCRIPT=""
 LOCAL=0
 KEY=""
 RUN=0
+FILE_PATH=$(dirname $(realpath "$0"))
 
 function help() {
   echo "Script for deploying local VM"
@@ -26,7 +32,12 @@ function help() {
 }
 
 function log() {
-  echo -e "${bold}[LOG $(date +"%T")]${normal} $1"
+  echo -e "${GREEN}${bold}[LOG $(date +"%T")]${normal}${NC} $1"
+}
+
+function err() {
+  echo -e "${RED}${bold}[ERROR $(date +"%T")]${normal}${NC} $1"
+  exit 1
 }
 
 while getopts i:n:s:l:k:hr flag; do
@@ -70,14 +81,32 @@ virt-install \
   --name $NAME \
   --check all=off \
   --disk path=$IMG_PATH/$IMG_NAME
-sleep 15
-# virsh domifaddr $NAME
+
+log "Whating for VM start"
+for _ in {1..10}
+do
+  echo -n "."
+  sleep 1
+done
+echo
+
 ip_rhel8=$(virsh domifaddr "$NAME" | grep -o -E "$rx\.$rx\.$rx\.$rx")
 log "IP address of the VM: ${bold}${ip_rhel8}${normal}"
 
-# scp krb_server:/var/kerberos/krb5kdc/kdc-ca.pem ./
-# scp -o StrictHostKeyChecking=no -i $KEY ./kdc-ca.pem root@$ip_rhel8:/etc/sssd/pki/sssd_auth_ca_db.pem
-# echo "[LOG] sssd_auth_ca_db.pem file is copied"
+scp -o StrictHostKeyChecking=no -i "$KEY" "$FILE_PATH/redhat.repo" root@"$ip_rhel8":/etc/yum.repos.d/redhat.repo
+log "Repo file for RHEL 8.5 is copied"
+
+ssh -o StrictHostKeyChecking=no -i "$KEY" root@"$ip_rhel8" "dnf update -y"
+log "Updating system complete"
+
+ssh -o StrictHostKeyChecking=no -i "$KEY" root@"$ip_rhel8" "dnf install vim -y "
+log "VIM installed"
+
+ssh -o StrictHostKeyChecking=no -i "$KEY" root@"$ip_rhel8" "mkdir /root/sc && mount.nfs 192.168.122.1:/home/pyadlous/work/crypto/sc/Sanity/basics /root/sc"
+log "NFS is mounted into /root/sc"
+
+ssh -o StrictHostKeyChecking=no -i "$KEY" root@"$ip_rhel8" "hostnamectl set-hostname $NAME"
+log "Hostname is set to $NAME"
 
 # if $LOCAL != 0
 # then
@@ -96,11 +125,13 @@ log "IP address of the VM: ${bold}${ip_rhel8}${normal}"
 #     ssh -o StrictHostKeyChecking=no -i vm_key root@$ip_rhel8 bash /root/$SCRIPT
 # fi
 
-if [ "$SCRIPT" != "" ]; then
-  scp -o StrictHostKeyChecking=no -i $KEY $SCRIPT root@$ip_rhel8:/root/
+if [[ ! "$SCRIPT" = "" ]]; then
+  scp -o StrictHostKeyChecking=no -i "$KEY" "$SCRIPT" root@"$ip_rhel8":/root/
   log "Script $SCRIPT is copied to /root/$SCRIPT"
   if [ $RUN = 1 ]; then
     ssh -o StrictHostKeyChecking=no -i "$KEY" root@$ip_rhel8 bash /root/$SCRIPT
     log "Script ${SCRIPT} for ${ip_rhel8} is finished"
   fi
 fi
+
+ssh -i "$KEY" root@"$ip_rhel8"

@@ -78,15 +78,6 @@ while (("$#")); do
       exit 1
     fi
     ;;
-#  --userpasswd)
-#    if [ -n "$2" ] && [ "${2:0:1}" != "-" ]; then
-#      USER_PASSWD=$2
-#      shift 2
-#    else
-#      echo "Error: Argument for $1 is missing" >&2
-#      exit 1
-#    fi
-#    ;;
   --pin)
     if [ -n "$2" ] && [ "${2:0:1}" != "-" ]; then
       PIN=$2
@@ -111,7 +102,8 @@ if [ "$ENV_PATH" != "" ]
 then
   export $(grep -v '^#' $ENV_PATH | xargs)
 fi
-NSSDB=$CARD_DIR/db
+
+NSSDB="$CARD_DIR/db"
 P11LIB='/usr/lib64/pkcs11/libsofthsm2.so'
 CONF_DIR="$CARD_DIR/conf"
 

@@ -207,7 +207,7 @@ princ1=GeneralString:{username}""")
 
 def generate_krb_certs():
     check_env()
-    # TODO: add template file for generating the certificate
+    # TODO: add temaplate file for generatng the certificate
     key_path = f"{KEYS}/kdckey.pem"
     crt_path = f"{CERTS}/kdc.pem"
     subp.run(["openssl", "genrsa", "-out", key_path, "2048"], check=True)
@@ -229,7 +229,7 @@ def prep_tmp_dirs():
             mkdir(dir_path)
 
 
-def create_cnf(user_list: list, ca: bool = True):
+def create_cnf(user_list: [], ca: bool = True):
     """
     Create configuration files for OpenSSL to generate certificates and requests.
     Args:
@@ -311,7 +311,7 @@ subjectAltName = otherName:msUPN;UTF8:{user}@EXAMPLE.COM, email:{user}@example.c
 """
         with open(f"{CONF_DIR}/req_{user}.cnf", "w") as f:
             f.write(user_cnf)
-            env_logger.debug(f"Configuration file for CSR for user {user} is created "
+            env_logger.debug(f"Configuraiton file for CSR for user {user} is created "
                              f"{CONF_DIR}/req_{user}.cnf")
 
 
@@ -326,7 +326,7 @@ def create_sssd_config(local_user: str = None, krb_user: str = None):
         krb_user: username for kerberos user with smart card to add the match rule.
     """
     cnf = ConfigParser(allow_no_value=True)
-    cnf.optionxform = str  # Needed for correct parsing of uppercase words
+    cnf.optionxform = str  # Needed for correct parsing of upercase words
     default = {
         "sssd": {"#<[sssd]>": None,
                  "debug_level": "9",
@@ -380,20 +380,21 @@ def create_sssd_config(local_user: str = None, krb_user: str = None):
                          "in  /etc/sssd/sssd.conf")
 
 
-def create_softhsm2_config():
+def create_softhsm2_config(card_dir):
     """
     Create SoftHSM2 configuration file in conf_dir. Same directory has to be used
     in setup-ca function, otherwise configuration file wouldn't be found causing
     the error. conf_dir expected to be in work_dir.
     """
     hsm_conf = config("SOFTHSM2_CONF", default=None)
+    conf_dir = f"{card_dir}/conf"
     if hsm_conf is not None:
         with open(f"{BACKUP}/SoftHSM2-conf-env-var", "w") as f:
             f.write(hsm_conf + "\n")
         env_logger.debug(f"Original value of SOFTHSM2_CONF is stored into "
                          f"{BACKUP}/SoftHSM2-conf-env-var file.")
-    with open(f"{CONF_DIR}/softhsm2.conf", "w") as f:
-        f.write(f"directories.tokendir = {WORK_DIR}/tokens/\n"
+    with open(f"{conf_dir}/softhsm2.conf", "w") as f:
+        f.write(f"directories.tokendir = {card_dir}/tokens/\n"
                 f"slots.removable = true\n"
                 f"objectstore.backend = file\n"
                 f"log.level = INFO\n")
@@ -401,28 +402,21 @@ def create_softhsm2_config():
                          f"in {CONF_DIR}/softhsm2.conf.")
 
 
-def create_virt_cacard_configs():
+def create_virt_card_config(username, card_dir):
     """
     Create systemd service (virt_cacard.service) and semodule (virtcacard.cil)
     for virtual smart card.
     """
     # TODO create virt_cacard.service
-    items = [
-        {"path": "/etc/systemd/system/virt_cacard.service",
-         "user": "local_user",
-         "work_dir": WORK_DIR,
-         "conf_dir": CONF_DIR},
-        {"path": "/etc/systemd/system/virt_krb.service",
-         "user": "krb_user",
-         "work_dir": WORK_DIR,
-         "conf_dir": CONF_DIR}]
+    path = "/etc/systemd/system/virt_cacard.service"
+    conf_dir = f"{card_dir}/conf"
     default = {
         "Unit": {
-            "Description": "virtual card for {name}",
+            "Description": f"virtual card for {username}",
             "Requires": "pcscd.service"},
         "Service": {
-            "Environment": 'SOFTHSM2_CONF="{conf_dir}/softhsm2.conf"',
-            "WorkingDirectory": "{work_dir}",
+            "Environment": f'SOFTHSM2_CONF="{conf_dir}/softhsm2.conf"',
+            "WorkingDirectory": card_dir,
             "ExecStart": "/usr/bin/virt_cacard >> /var/log/virt_cacard.debug 2>&1",
             "KillMode": "process"
         },
@@ -430,32 +424,19 @@ def create_virt_cacard_configs():
     }
     cnf = ConfigParser()
     cnf.optionxform = str
-    module_path = f"{CONF_DIR}/virtcacard.cil"
 
-    for path in [items[0]["path"], items[1]["path"], module_path]:
-        if exists(path):
-            name = split(path)[1].split(".", 1)
-            name = name[0] + "-original." + name[1]
-            utils.backup_(path, name)
+    if exists(path):
+        name = split(path)[1].split(".", 1)
+        name = name[0] + "-original." + name[1]
+        utils.backup_(path, name)
 
-    for item in items:
-        with open(item["path"], "w") as f:
-            cnf.read_dict(default)
-            cnf["Unit"]["Description"] = cnf["Unit"]["Description"].format(name=item["user"])
-            cnf["Service"]["Environment"] = cnf["Service"]["Environment"].format(conf_dir=item["conf_dir"])
-            cnf["Service"]["WorkingDirectory"] = cnf["Service"]["WorkingDirectory"].format(work_dir=item["work_dir"])
-            cnf.write(f)
-            env_logger.debug(
-                f"Service file {item['path']} for virtual smart card with {item['user']} is created.")
+    with open(path, "w") as f:
+        cnf.read_dict(default)
+        cnf.write(f)
+        env_logger.debug(
+            f"Service file {path} for virtual smart card with {username} is created.")
+
     # TODO: Create service for krb user
-
-    with open(module_path, "w") as f:
-        f.write("""(allow pcscd_t node_t (tcp_socket (node_bind)));
-
-; allow p11_child to read softhsm cache - not present in RHEL by default
-(allow sssd_t named_cache_t (dir (read search)));""")
-
-    env_logger.debug(f"SELinux module create {module_path}")
 
 
 def read_config(*items) -> list or str:
@@ -470,19 +451,17 @@ def read_config(*items) -> list or str:
     Returns:
         list with required items
     """
-    check_env()
-    global CONFIG_DATA
-    if CONFIG_DATA is None:
-        with open(CONF, "r") as file:
-            CONFIG_DATA = yaml.load(file, Loader=yaml.FullLoader)
-            assert CONFIG_DATA, "Data are not loaded correctly."
+    with open(config("CONF"), "r") as file:  # FIXME: check what is variable for configuration file
+        config_data = yaml.load(file, Loader=yaml.FullLoader)
+        assert config_data, "Data are not loaded correctly."
 
     if items is None:
-        return CONFIG_DATA
+        return config_data
+
     return_list = []
     for item in items:
         parts = item.split(".")
-        value = CONFIG_DATA
+        value = config_data
         for part in parts:
             if value is None:
                 env_logger.debug(
@@ -496,25 +475,19 @@ def read_config(*items) -> list or str:
     return return_list if len(items) > 1 else return_list[0]
 
 
-def setup_ca_(env_file):
-    check_env()
-
+def setup_ca_(conf, env_file):
+    assert exists(realpath(conf)), f"File {conf} is not exist."
+    assert isfile(realpath(conf)), f"{conf} is not a file."
+    work_dir = read_config("work_dir")
     env_logger.debug("Start setup of local CA")
-
-    user = read_config("local_user")
-    if user is not dict:
-        raise Exception("Field 'local_user' is not present in the configuraion "
-                        "file or it is not a dictionary")
     out = subp.run(["bash", SETUP_CA,
-                    "--username", user["name"],
-                    "--userpasswd", user["passwd"],
-                    "--pin", user["pin"],
+                    "--dir", work_dir,
                     "--env", env_file])
     assert out.returncode == 0, "Something break in setup playbook :("
     env_logger.debug("Setup of local CA is completed")
 
 
-def setup_virt_card(env_file):
+def setup_virt_card_(user):
     """
     Call setup scritp fro virtual smart card
 
@@ -522,8 +495,14 @@ def setup_virt_card(env_file):
         env_file: Path to .env file
     """
     check_env()
+    ca_dir = read_config("work_dir")
+    cmd = ["bash", SETUP_VSC]
+    username = read_config(f"{user}.name")
+    if user == "local_user":
+        cmd += ["--ca", ca_dir, "--username", username]
+
     env_logger.debug("Start setup of local CA")
-    out = subp.run(["bash", SETUP_VSC, "-c", CONF_DIR, "-e", env_file], check=True)
+    out = subp.run(cmd, check=True)
 
     assert out.returncode == 0, "Something break in setup script :("
     env_logger.debug("Setup of local CA is completed")

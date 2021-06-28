@@ -87,7 +87,7 @@ log "Necessary packages are installed"
 
 pushd "$WORK_DIR" || exit
 
-if [[ $(semodule -l | grep virtcacard) = "0" ]]
+if [[ $(semodule -l | grep virtcacard) == "0" ]]
 then
   log "SELinux module for virt_card is not installed"
   [ -f "$CONF_DIR/virtcacard.cil" ] && err "No $CONF_DIR/virtcacard.cil file"
