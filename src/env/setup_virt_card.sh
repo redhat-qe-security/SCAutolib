@@ -60,6 +60,24 @@ while (("$#")); do
       exit 1
     fi
     ;;
+  --cert)
+    if [ -n "$2" ] && [ ${2:0:1} != "-" ]; then
+      CERT_PATH=$2
+      shift 2
+    else
+      echo "Error: Argument for $1 is missing" >&2
+      exit 1
+    fi
+    ;;
+  --key)
+    if [ -n "$2" ] && [ ${2:0:1} != "-" ]; then
+      KEY_PATH=$2
+      shift 2
+    else
+      echo "Error: Argument for $1 is missing" >&2
+      exit 1
+    fi
+    ;;
 #  --userpasswd)
 #    if [ -n "$2" ] && [ "${2:0:1}" != "-" ]; then
 #      USER_PASSWD=$2
@@ -170,14 +188,6 @@ systemctl restart pcscd virt_cacard
 log "Waiting 10 seconds"
 for _ in {1..10}; do echo -n "."; sleep 1; done
 echo
-#if [ $LOCAL_USER ]
-#then
-#  mkdir /home/"$USERNAME"/.ssh
-#  ssh-keygen -D /usr/lib64/pkcs11/opensc-pkcs11.so > ~"$USERNAME"/.ssh/authorized_keys
-#  chown -R "$USERNAME":"$USERNAME" ~"$USERNAME"/.ssh/
-#  chmod 700 ~"$USERNAME"/.ssh/
-#  chmod 600 ~"$USERNAME"/.ssh/authorized_keys
-#fi
 
 systemctl stop pcscd.service pcscd.socket virt_cacard sssd
 rm -rf /var/lib/sss/{db,mc}/*
