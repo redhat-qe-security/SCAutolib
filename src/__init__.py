@@ -1,12 +1,14 @@
+from os.path import (dirname, abspath, join, exists)
+
+import yaml
 from decouple import config
-from os.path import (dirname, abspath, join)
-from shutil import copy
-from SCAutolib import env_logger
+from dotenv import load_dotenv
 
 DIR_PATH = dirname(abspath(__file__))
 SETUP_CA = f"{DIR_PATH}/env/setup_ca.sh"
 SETUP_VSC = f"{DIR_PATH}/env/setup_virt_card.sh"
 CLEANUP_CA = f"{DIR_PATH}/env/cleanup_ca.sh"
+DOTENV = f"{DIR_PATH}/.env"
 WORK_DIR = None
 TMP = None
 CONF_DIR = None
@@ -18,27 +20,26 @@ KRB_IP = None
 CONF = None
 
 
-def load_env(env_file, conf_file, work_dir=join(DIR_PATH, "virt_card")) -> str:
+def load_env(conf_file: str) -> str:
     """
-    Create .env near source files of the libarary. In .env file following
+    Create .env near source files of the library. In .env file following
     variables expected to be present: WORK_DIR, CONF_DIR, TMP, KEYS, CERTS, BACKUP.
     Deployment process would relay on this variables.
 
     Args:
         conf_file: path to YAML configuration file
-        env_file:  path to already existing .env file. If given, then it would
-                   be just copied to the library.
-        work_dir: working directory
-
     Returns:
         Path to .env file.
     """
-    global WORK_DIR
-    global CONF
-    global CONF_DIR
-    global BACKUP
-    if env_file is None:
-        env_file = f"{DIR_PATH}/.env"
+
+    env_file = f"{DIR_PATH}/.env"
+    if exists(env_file):
+        load_dotenv(env_file)
+    else:
+        with open(conf_file, "r") as f:
+            data = yaml.load(f, Loader=yaml.FullLoader)
+            work_dir = data["work_dir"]
+        conf_file = conf_file.split("/")[-1]
         with open(env_file, "w") as f:
             f.write(f"WORK_DIR={work_dir}\n")
             f.write(f"TMP={join(work_dir, 'tmp')}\n")
@@ -46,18 +47,7 @@ def load_env(env_file, conf_file, work_dir=join(DIR_PATH, "virt_card")) -> str:
             f.write(f"KEYS={join(work_dir, 'tmp', 'keys')}\n")
             f.write(f"CERTS={join(work_dir, 'tmp', 'certs')}\n")
             f.write(f"BACKUP={join(work_dir, 'tmp', 'backup')}\n")
-            f.write(f"CONF={conf_file}")
-    else:
-        # .env file should be near source file
-        # because this env file is used other source files
-        copy(env_file, DIR_PATH)
-        env_file = join(DIR_PATH, ".env")
-    env_logger.debug("Environment file is created")
-    WORK_DIR = work_dir
-    CONF_DIR = config("CONF_DIR", cast=str)
-    BACKUP = config("BACKUP", cast=str)
-    CONF = conf_file
-
+            f.write(f"CONF={join(work_dir, 'conf', conf_file)}\n")
     return env_file
 
 
