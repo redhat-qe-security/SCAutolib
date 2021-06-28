@@ -270,3 +270,5 @@ src/env/keys*
 .vscode/
 src/env/krb-server-client-setup-rhel8.sh
 src/env/conf*
+*.yml
+*.yaml

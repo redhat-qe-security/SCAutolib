@@ -6,3 +6,4 @@ avocado-framework-plugin-varianter-yaml-to-mux
 python-decouple
 paramiko
 pysftp
+python-dotenv

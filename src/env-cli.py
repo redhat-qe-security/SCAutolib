@@ -1,21 +1,11 @@
 import click
 import paramiko
-import yaml
 from time import sleep
-from pysftp import Connection, CnOpts
-from os.path import join, exists
+from pysftp import CnOpts
+
+
 from SCAutolib.src import load_env, DIR_PATH, CLEANUP_CA
 from SCAutolib.src.env import *
-
-
-def check_conf(ctx, param, value):
-    if not exists(value):
-        click.echo(f"File {value} does not exists. Please provide correct path"
-                   " to the configuration file.")
-        ctx.exit()
-    with open(value, "r") as file:
-        data = yaml.load(file, Loader=yaml.FullLoader)
-        # TODO check that all required configurations are set
 
 
 @click.group()
@@ -28,8 +18,7 @@ def cli():
               help="Flag for automatic execution of local CA and virtual "
                    "smart card deployment")
 @click.option("--conf", "-c", type=click.Path(),
-              help="Path to YAML file with configurations.", required=False, 
-              callback=check_conf)
+              help="Path to YAML file with configurations.", required=False)
 @click.option("--work-dir", "-w", type=click.Path(), required=False,
               default=DIR_PATH,
               help="Absolute path to working directory"
@@ -42,7 +31,7 @@ def cli():
               help="Flag for setup of kerberos client.")
 @click.option("--new-srv", "-N", is_flag=True, required=False, default=False,
               help="Indicates that given server is an clean machine that need to be configured from the scartch")
-def prepair(setup, conf, work_dir, env_file, krb, new_srv):
+def prepare(setup, conf, work_dir, env_file, krb, new_srv):
     """
     Prepare the whole test environment including temporary directories, necessary
     configuration files and services. Also can automatically run setup for local
@@ -53,30 +42,29 @@ def prepair(setup, conf, work_dir, env_file, krb, new_srv):
         setup: if you want to automatically run other setup steps
         conf: path to configuration file im YAML format
         work_dir: path to working directory. Can be overwritten
-                  by variable WORK_DIR in configuration file
+                  by variable WORK_DIR in confugration file
         env_file: path to already existing .env file
     """
     # TODO: add getting of work_dir from configuration file
-    env_file = load_env(env_file, conf, work_dir)
-    print("Path to config file is: ", conf)
+    env_file = load_env(conf)
 
     prep_tmp_dirs()
     env_logger.debug("tmp directories are created")
 
-    usernames = read_config("local_user.name", "krb.name")
-    create_sssd_config(*usernames)
+    username, card_dir = read_config("local_user.name", "local_user.card_dir")
+    create_sssd_config(username)
     env_logger.debug("SSSD configuration file is updated")
 
     create_softhsm2_config()
     env_logger.debug("SoftHSM2 configuration file is created in the "
                      f"{CONF_DIR}/softhsm2.conf")
 
-    create_virt_cacard_configs()
+    create_virt_card_config()
     env_logger.debug("Configuration files for virtual smart card are created.")
 
-    create_cnf(usernames)
+    check_semodule()
 
-    create_krb_config()
+    create_cnf(username, card_dir)
 
     if setup:
         setup_ca_(env_file)
@@ -88,15 +76,9 @@ def prepair(setup, conf, work_dir, env_file, krb, new_srv):
 
 
 @click.command()
-@click.option("--env", type=click.Path(), required=False, default=None,
-              help="Path to .env file with specified variables")
 @click.option("--conf", "-c", type=click.Path(), required=True,
-              help="Path to YAML file with configurations", callback=check_conf)
-@click.option("--work-dir", type=click.Path(), required=False,
-              default=join(DIR_PATH, "virt_card"),
-              help=f"Path to working directory. By default is "
-                   f"{join(DIR_PATH, 'virt_card')}")
-def setup_ca(conf, env_file, work_dir):
+              help="Path to YAML file with configurations")
+def setup_ca(conf):
     """
     CLI command for setup the local CA.
 
@@ -107,28 +89,31 @@ def setup_ca(conf, env_file, work_dir):
         env_file: Path to .env file with specified variables
     """
     # TODO: generate certs for Kerberos
-    env_path = load_env(env_file, work_dir)
-    setup_ca(conf, env_path)
+    env_path = load_env(conf)
+    mkdir(config("CA_DIR"))
+    mkdir(config("CONF_DIR"))
+    create_cnf('ca')
+    # prepare_ca_configs()
+    # prepare_general_configs()
+
+    setup_ca_(conf, env_path)
 
 
 @click.command()
-@click.option("--env", type=click.Path(), required=False, default=None,
-              help="Path to .env file with specified variables")
-@click.option("--work-dir", type=click.Path(), required=False,
-              default=join(DIR_PATH, "virt_card"),
-              help="Working directory where all necessary files and directories "
-                   "are/will be stored")
-def setup_virt_card(env, work_dir):
+@click.option("-u", "--user", type=click.STRING, required=True)
+def setup_virt_card(user):
     """
     Setup virtual smart card. Has to be run after configuration of the local CA.
 
     Args:
-        env: Path to .env file with specified variables
         work_dir: Working directory where all necessary files and directories
                   are/will be stored
     """
-    env_path = load_env(env, work_dir)
-    setup_virt_card(env_path)
+    # env_path = load_env(env, work_dir)
+    username, card_dir = read_config(f'{user}.name', f'{user}.card_dir')
+    create_softhsm2_config(card_dir)
+    create_virt_card_config(username, card_dir)
+    # setup_virt_card_()
 
 
 @click.command()
@@ -203,8 +188,7 @@ def setup_krb_server(new):
 
 
 @click.command()
-@click.option("--conf", "-c", type=click.Path(), callback=check_conf,
-                help="Path to YAML file with configurations" )
+@click.option("--conf", "-c", type=click.Path(), help="Path to YAML file with configurations")
 def cleanup_ca():
     """
     Cleanup the host after configuration of the testing environment.
@@ -226,7 +210,7 @@ cli.add_command(setup_ca)
 cli.add_command(setup_virt_card)
 cli.add_command(setup_krb_client)
 cli.add_command(cleanup_ca)
-cli.add_command(prepair)
+cli.add_command(prepare)
 cli.add_command(setup_krb_server)
 
 if __name__ == "__main__":
