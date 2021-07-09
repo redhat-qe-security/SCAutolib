@@ -495,8 +495,8 @@ def setup_virt_card_(user):
         env_file: Path to .env file
     """
     check_env()
-    ca_dir = read_config("work_dir")
-    cmd = ["bash", SETUP_VSC]
+    ca_dir, card_dir = read_config("work_dir", f"{user}.card_dir")
+    cmd = ["bash", SETUP_VSC, "--dir", f"/root/{user}"]
     username = read_config(f"{user}.name")
     if user == "local_user":
         cmd += ["--ca", ca_dir, "--username", username]

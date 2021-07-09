@@ -138,7 +138,7 @@ mkdir -p "$CARD_DIR/tokens" "$NSSDB"
 log "Directories for tokens and NSS database are created"
 
 softhsm2-util --init-token --slot 0 --label "SC test" --so-pin="$SOPIN" --pin="$PIN"
-log "SoftHSM token is initialized with lavel 'SC test'"
+log "SoftHSM token is initialized with label 'SC test'"
 
 modutil -create -dbdir sql:"$NSSDB" -force
 log "NSS database is created"
@@ -175,11 +175,32 @@ log "User certificate $CERT_PATH is added to SoftHSM token"
 systemctl daemon-reload
 echo 'disable-in: virt_cacard' >> /usr/share/p11-kit/modules/opensc.module
 log "opensc.module is updated"
-[ ! -f /etc/systemd/system/virt_cacard.service ] && err "No service for virt_cacard (/etc/systemd/system/virt_cacard.service)"
-systemctl restart pcscd virt_cacard
+#[ ! -f /etc/systemd/system/virt_cacard.service ] && err "No service for virt_cacard (/etc/systemd/system/virt_cacard.service)"
+systemctl restart pcscd
 log "Waiting 10 seconds"
 for _ in {1..10}; do echo -n "."; sleep 1; done
 echo
+
+chmod 600 /etc/sssd/sssd.conf
+
+if [ ! -f /etc/sytemd/system/virt_cacard.service ]
+then
+  echo \
+  "[Unit]
+  Description = virtual card for $USERNAME
+  Requires = pcscd.service
+
+  [Service]
+  Environment = SOFTHSM2_CONF=\"/root/$USERNAME/conf/softhsm2.conf\"
+  WorkingDirectory = /root/$USERNAME
+  ExecStart = /usr/bin/virt_cacard >> /var/log/virt_cacard.debug 2>&1
+  KillMode = process
+
+  [Install]
+  WantedBy = multi-user.target" > /etc/systemd/system/virt_cacard.service
+  systemctl daemon-reload
+  log "virt_cacard service is crated"
+fi
 
 systemctl stop pcscd.service pcscd.socket virt_cacard sssd
 rm -rf /var/lib/sss/{db,mc}/*
