@@ -85,6 +85,9 @@ dnf -y install vpcd softhsm python3-pip sssd-tools httpd virt_cacard sssd
 yum groupinstall "Smart Card Support" -y
 log "Necessary packages are installed"
 
+semodule -i "$CONF_DIR/virtcacard.cil" -v
+log "SELinux module for virtual smart card is installed"
+
 pushd "$WORK_DIR" || exit
 
 if [[ $(semodule -l | grep virtcacard) == "0" ]]
@@ -114,7 +117,7 @@ log "Certificate for local CA is created"
 openssl ca -config "$CONF_DIR"/ca.cnf -gencrl -out crl/root.crl
 log "CRL is created"
 #cp "$WORK_DIR"/rootCA.crt "$WORK_DIR"/rootCA.pem
-cp "$WORK_DIR"/rootCA.crt /etc/sssd/pki/sssd_auth_ca_db.pem
+cp "$WORK_DIR/rootCA.crt" /etc/sssd/pki/sssd_auth_ca_db.pem
 log "Root certificate is copied to /etc/sssd/pki/sssd_auth_ca_db.pem"
 
 log "End of setup-ca script"

@@ -191,4 +191,6 @@ echo \
     IdentityFile $KEY" >> "$(dirname $KEY)"/config
 log "New entry is created in the $(dirname $KEY)/config for address $ip_rhel8 with name $NAME"
 
+virsh snapshot-create-as --domain "$NAME" --name "initial"
+
 ssh -i "$KEY" root@"$ip_rhel8"

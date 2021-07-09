@@ -47,7 +47,7 @@ def load_env(conf_file: str) -> str:
             f.write(f"KEYS={join(work_dir, 'tmp', 'keys')}\n")
             f.write(f"CERTS={join(work_dir, 'tmp', 'certs')}\n")
             f.write(f"BACKUP={join(work_dir, 'tmp', 'backup')}\n")
-            f.write(f"CONF={join(work_dir, 'conf', conf_file)}\n")
+            f.write(f"CONF={conf_file}\n")
     return env_file
 
 

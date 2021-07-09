@@ -26,11 +26,7 @@ def cli():
 @click.option("--env-file", "-e", type=click.Path(), required=False, default=None,
               help="Absolute path to .env file with environment varibles to be "
                    "used in the library.")
-@click.option("--krb", "-k", is_flag=True, required=False, default=False,
-              help="Flag for setup of kerberos client.")
-@click.option("--new-srv", "-N", is_flag=True, required=False, default=False,
-              help="Indicates that given server is an clean machine that need to be configured from the scartch")
-def prepair(setup, conf, work_dir, env_file, krb, new_srv):
+def prepare(setup, conf, work_dir, env_file,):
     """
     Prepair the whole test envrionment including temporary directories, necessary
     configuration files and services. Also can automaticaly run setup for local
@@ -45,8 +41,7 @@ def prepair(setup, conf, work_dir, env_file, krb, new_srv):
         env_file: path to already existing .env file
     """
     # TODO: add getting of work_dir from configuration file
-    env_file = load_env(env_file, conf, work_dir)
-    print("Path to config file is: ", conf)
+    env_file = load_env(conf)
 
     prep_tmp_dirs()
     env_logger.debug("tmp directories are created")
@@ -54,12 +49,13 @@ def prepair(setup, conf, work_dir, env_file, krb, new_srv):
     usernames = read_config("local_user.name", "krb.name")
     create_sssd_config(*usernames)
     env_logger.debug("SSSD configuration file is updated")
-
-    create_softhsm2_config()
+    card_dir = read_config("local_user.card_dir")
+    create_softhsm2_config(card_dir)
     env_logger.debug("SoftHSM2 configuration file is created in the "
                      f"{CONF_DIR}/softhsm2.conf")
 
-    create_virt_card_config()
+    username = read_config("local_user.name")
+    create_virt_card_config(username, card_dir)
     env_logger.debug("Configuration files for virtual smart card are created.")
 
     create_cnf(usernames)
@@ -67,12 +63,8 @@ def prepair(setup, conf, work_dir, env_file, krb, new_srv):
     create_krb_config()
 
     if setup:
-        setup_ca_(env_file)
-        setup_virt_card(env_file)
-
-    if krb:
-        setup_krb_server(new_srv)
-        setup_krb_client()
+        setup_ca_(conf, env_file)
+        setup_virt_card_("local_user")
 
 
 @click.command()
@@ -96,6 +88,10 @@ def setup_ca(conf, env_file, work_dir):
     """
     # TODO: generate certs for Kerberos
     env_path = load_env(env_file, work_dir)
+    # prepare_ca_dirs()
+    # prepare_ca_configs()
+    # prepare_general_configs()
+
     setup_ca_(conf, env_path)
 
 
@@ -210,7 +206,7 @@ cli.add_command(setup_ca)
 cli.add_command(setup_virt_card)
 cli.add_command(setup_krb_client)
 cli.add_command(cleanup_ca)
-cli.add_command(prepair)
+cli.add_command(prepare)
 cli.add_command(setup_krb_server)
 
 if __name__ == "__main__":
