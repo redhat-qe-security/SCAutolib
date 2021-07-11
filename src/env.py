@@ -223,13 +223,13 @@ def prep_tmp_dirs():
     Prepair directory structure for test environment. All paths are taken from
     previously loaded env file.
     """
-    for dir_env_var in ("WORK_DIR", "TMP", "KEYS", "CERTS", "BACKUP", "CONF_DIR"):
+    for dir_env_var in ("WORK_DIR", "TMP", "BACKUP", "CONF_DIR"):
         dir_path = config(dir_env_var, cast=str)
         if not exists(dir_path):
             mkdir(dir_path)
 
 
-def create_cnf(user_list: [], ca: bool = True):
+def create_cnf(user: str, dir: str):
     """
     Create configuration files for OpenSSL to generate certificates and requests.
     Args:
@@ -237,8 +237,9 @@ def create_cnf(user_list: [], ca: bool = True):
                    certificate signing request should be created
         ca: if configuration file for local CA is need to be generated
     """
-    if ca:
-        ca_cnf = """[ ca ]
+    if user == "root":
+        ca_cnf = """
+[ ca ]
 default_ca = CA_default
 
 [ CA_default ]
@@ -286,12 +287,14 @@ O  = Example
 OU = Example Test
 CN = Example Test CA
         """
-        with open(f"{CONF_DIR}/ca.cnf", "w") as f:
+        with open(f"{dir}/conf/ca.cnf", "w") as f:
             f.write(ca_cnf)
-            env_logger.debug(f"Confugation file for local CA is created {CONF_DIR}/ca.cnf")
+            env_logger.debug(f"Configuration file for local CA is created {CONF_DIR}/ca.cnf")
+            return
 
-    for user in user_list:
-        user_cnf = f"""[ req ]
+    
+    user_cnf = f"""
+[ req ]
 distinguished_name = req_distinguished_name
 prompt = no
 
@@ -309,10 +312,10 @@ keyUsage = critical, nonRepudiation, digitalSignature
 extendedKeyUsage = clientAuth, emailProtection, msSmartcardLogin
 subjectAltName = otherName:msUPN;UTF8:{user}@EXAMPLE.COM, email:{user}@example.com
 """
-        with open(f"{CONF_DIR}/req_{user}.cnf", "w") as f:
-            f.write(user_cnf)
-            env_logger.debug(f"Configuraiton file for CSR for user {user} is created "
-                             f"{CONF_DIR}/req_{user}.cnf")
+    with open(f"{dir}/conf/req_{user}.cnf", "w") as f:
+        f.write(user_cnf)
+        env_logger.debug(f"Configuration file for CSR for user {user} is created "
+                             f"{dir}/conf/req_{user}.cnf")
 
 
 def create_sssd_config(local_user: str = None, krb_user: str = None):
@@ -331,7 +334,7 @@ def create_sssd_config(local_user: str = None, krb_user: str = None):
         "sssd": {"#<[sssd]>": None,
                  "debug_level": "9",
                  "services": "nss, pam",
-                 "domains": "shadowutils,ldap"},
+                 "domains": "shadowutils"},
         "nss": {"#<[nss]>": None,
                 "debug_level": "9"},
         "pam": {"#<[pam]>": None,
@@ -342,37 +345,15 @@ def create_sssd_config(local_user: str = None, krb_user: str = None):
                                "id_provider": "files"},
     }
 
+    cnf.read_dict(default)
+
     if exists("/etc/sssd/sssd.conf"):
         utils.backup_("/etc/sssd/sssd.conf", name="sssd-original.conf")
-        # TODO: make more strict checking of the content in the file
-        cnf.read("etc/sssd/sssd.conf")
-        for section in cnf.sections():
-            cnf.set(section, f"#<[{section}]>")
-    else:
-        cnf.read_dict(default)
 
     if local_user:
         cnf[f"certmap/shadowutils/{local_user}"] = {
             f"#<[certmap/shadowutils/{local_user}]>": None,
             "matchrule": f"<SUBJECT>.*CN={local_user}.*"}
-
-    if krb_user:
-        try:
-            krb_server_name, krb_realm = read_config("krb.server_name", "krb.realm_name")
-        except Exception as e:
-            env_logger.error(e)
-            raise Exception("Can't get server_name and realm_name fields from "
-                            "krb section. Check parent exception in logs")
-
-        if "krb5" not in cnf["sssd"]["domains"].replace(" ", "").split(","):
-            cnf["sssd"]["domains"] = cnf["sssd"]["domains"] + ",krb5"
-
-        cnf["domain/krb5"] = {"id_provider": "ldap",
-                              "auth_provider": "krb5",
-                              "krb5_server": krb_server_name,
-                              "krb5_realm": krb_realm}
-        cnf[f"certmap/krb5/{krb_user}"] = {f"#<[certmap/krb5/{krb_user}]>": None,
-                                           "maprule": f"(uid={krb_user})"}
 
     with open("/etc/sssd/sssd.conf", "w") as f:
         cnf.write(f)
@@ -386,13 +367,8 @@ def create_softhsm2_config(card_dir):
     in setup-ca function, otherwise configuration file wouldn't be found causing
     the error. conf_dir expected to be in work_dir.
     """
-    hsm_conf = config("SOFTHSM2_CONF", default=None)
     conf_dir = f"{card_dir}/conf"
-    if hsm_conf is not None:
-        with open(f"{BACKUP}/SoftHSM2-conf-env-var", "w") as f:
-            f.write(hsm_conf + "\n")
-        env_logger.debug(f"Original value of SOFTHSM2_CONF is stored into "
-                         f"{BACKUP}/SoftHSM2-conf-env-var file.")
+    
     with open(f"{conf_dir}/softhsm2.conf", "w") as f:
         f.write(f"directories.tokendir = {card_dir}/tokens/\n"
                 f"slots.removable = true\n"
@@ -404,8 +380,7 @@ def create_softhsm2_config(card_dir):
 
 def create_virt_card_config(username, card_dir):
     """
-    Create systemd service (virt_cacard.service) and semodule (virtcacard.cil)
-    for virtual smart card.
+    Create systemd service (virt_cacard.service) for virtual smart card.
     """
     # TODO create virt_cacard.service
     path = "/etc/systemd/system/virt_cacard.service"
@@ -475,34 +450,49 @@ def read_config(*items) -> list or str:
     return return_list if len(items) > 1 else return_list[0]
 
 
-def setup_ca_(conf, env_file):
-    assert exists(realpath(conf)), f"File {conf} is not exist."
-    assert isfile(realpath(conf)), f"{conf} is not a file."
-    work_dir = read_config("work_dir")
+def setup_ca_(env_file):
+    work_dir = read_config("ca_dir")
     env_logger.debug("Start setup of local CA")
+
     out = subp.run(["bash", SETUP_CA,
                     "--dir", work_dir,
                     "--env", env_file])
-    assert out.returncode == 0, "Something break in setup playbook :("
+    assert out.returncode == 0, "Something break in setup script"
+
     env_logger.debug("Setup of local CA is completed")
 
 
-def setup_virt_card_(user):
+def setup_virt_card_(user, env_file):
     """
-    Call setup scritp fro virtual smart card
+    Call setup script fot virtual smart card
 
     Args:
         env_file: Path to .env file
     """
     check_env()
-    ca_dir, card_dir = read_config("work_dir", f"{user}.card_dir")
-    cmd = ["bash", SETUP_VSC, "--dir", f"/root/{user}"]
+    ca_dir, card_dir = read_config("ca_dir", f"{user}.card_dir")
     username = read_config(f"{user}.name")
+    cmd = ["bash", SETUP_VSC, "--dir", card_dir]
     if user == "local_user":
         cmd += ["--ca", ca_dir, "--username", username]
 
-    env_logger.debug("Start setup of local CA")
+    env_logger.debug(f"Start setup of virtual smart card for user {username}")
     out = subp.run(cmd, check=True)
 
     assert out.returncode == 0, "Something break in setup script :("
     env_logger.debug("Setup of local CA is completed")
+
+
+def check_semodule()
+    result = subp.run(["semodule", "-l"], capture_output=True)
+    if "virtcacard" not in result.output:
+        work_dir = config("WORK_DIR")
+        module = """
+(allow pcscd_t node_t(tcp_socket(node_bind)))
+
+allow p11_child to read softhsm cache - not present in RHEL by default
+(allow sssd_t named_cache_t(dir(read search)))  """
+        with open(f"{work_dir}/conf/virtcacard.cil", "w") as f:
+            f.write(module)
+    
+

@@ -32,8 +32,8 @@ def cli():
               help="Indicates that given server is an clean machine that need to be configured from the scartch")
 def prepare(setup, conf, work_dir, env_file, krb, new_srv):
     """
-    Prepair the whole test envrionment including temporary directories, necessary
-    configuration files and services. Also can automaticaly run setup for local
+    Prepare the whole test environment including temporary directories, necessary
+    configuration files and services. Also can automatically run setup for local
     CA and virtual smart card.
 
     Args:
@@ -41,7 +41,7 @@ def prepare(setup, conf, work_dir, env_file, krb, new_srv):
         setup: if you want to automatically run other setup steps
         conf: path to configuration file im YAML format
         work_dir: path to working directory. Can be overwritten
-                  by varible WORK_DIR in confugration file
+                  by variable WORK_DIR in confugration file
         env_file: path to already existing .env file
     """
     # TODO: add getting of work_dir from configuration file
@@ -50,29 +50,24 @@ def prepare(setup, conf, work_dir, env_file, krb, new_srv):
     prep_tmp_dirs()
     env_logger.debug("tmp directories are created")
 
-    usernames = read_config("local_user.name", "krb.name")
-    create_sssd_config(*usernames)
+    username, card_dir = read_config("local_user.name", "local_user.card_dir")
+    create_sssd_config(username)
     env_logger.debug("SSSD configuration file is updated")
-    card_dir = read_config("local_user.card_dir")
+
     create_softhsm2_config(card_dir)
     env_logger.debug("SoftHSM2 configuration file is created in the "
                      f"{CONF_DIR}/softhsm2.conf")
 
-    username = read_config("local_user.name")
     create_virt_card_config(username, card_dir)
-    env_logger.debug("Configuration files for virtual smart card are created.")
+    env_logger.debug("Service files for virtual smart card is created.")
 
-    create_cnf(usernames)
+    check_semodule()
 
-    create_krb_config()
+    create_cnf(username, card_dir)
 
     if setup:
-        setup_ca_(conf, env_file)
+        setup_ca_(env_file)
         setup_virt_card_("local_user")
-
-    if krb:
-        setup_krb_server(new_srv)
-        setup_krb_client()
 
 
 @click.command()
