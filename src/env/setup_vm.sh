@@ -1,8 +1,6 @@
-# author: Pavel Yadlouski
-# Part of SCAutolib
-
 #!/usr/bin/bash
-set -ex
+set -e
+#trap read debug
 
 bold=$(tput bold)
 normal=$(tput sgr0)
@@ -76,9 +74,6 @@ sleep 15
 # virsh domifaddr $NAME
 ip_rhel8=$(virsh domifaddr "$NAME" | grep -o -E "$rx\.$rx\.$rx\.$rx")
 log "IP address of the VM: ${bold}${ip_rhel8}${normal}"
-
-scp -o StrictHostKeyChecking=no -i "$KEY" conf/redhat.repo root@"$ip_rhel8":/etc/yum.repos.d/
-log "Repo file is copied"
 
 # scp krb_server:/var/kerberos/krb5kdc/kdc-ca.pem ./
 # scp -o StrictHostKeyChecking=no -i $KEY ./kdc-ca.pem root@$ip_rhel8:/etc/sssd/pki/sssd_auth_ca_db.pem
