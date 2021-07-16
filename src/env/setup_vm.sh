@@ -71,6 +71,19 @@ while (("$#")); do
       exit 1
     fi
     ;;
+  -s | --script)
+    if [ -n "$2" ] && [ ${2:0:1} != "-" ]; then
+      SCRIPT=$2
+      shift 2
+    else
+      echo "Error: Argument for $1 is missing" >&2
+      exit 1
+    fi
+    ;;
+  --run-script)
+    RUN=1
+    shift
+    ;;
   -N | --no-nfs)
     NFS_DIR=0
     shift
@@ -88,8 +101,11 @@ done
 
 IMG_NAME="$NAME.qcow2"
 
-
-cp -L /home/pyadlous/os_dir/latest /var/lib/libvirt/images/"$IMG_NAME"
+if [ -d /home/pyadlous/os_dir ]
+then
+  cp -L /home/pyadlous/os_dir/latest /var/lib/libvirt/images/"$IMG_NAME"
+  log "Image $(readlink /home/pyadlous/os_dir/latest) is copied to /var/lib/libvirt/images/$IMG_NAME"
+fi
 
 # TODO add key for VM with full path or just a name?
 if [[ $KEY == "" ]]; then
@@ -174,21 +190,23 @@ log "Hostname is set to $NAME"
 
 if [ ! "$SCRIPT" ==  "" ]
 then
-  scp -o StrictHostKeyChecking=no -i "$KEY" "$SCRIPT" root@"$ip_rhel8":/root/
+  scp -o StrictHostKeyChecking=no -i "$KEY" "$SCRIPT" root@"$ip_rhel8":/root/"$(basename $SCRIPT)"
   log "Script $SCRIPT is copied to /root/$SCRIPT"
-  if [ $RUN = 1 ]
+  if [ $RUN -eq 1 ]
   then
-    ssh -o StrictHostKeyChecking=no -i "$KEY" root@"$ip_rhel8" bash /root/"$SCRIPT"
+    ssh -o StrictHostKeyChecking=no -i "$KEY" root@"$ip_rhel8" bash "/root/$SCRIPT"
     log "Script ${SCRIPT} for ${ip_rhel8} is finished"
   fi
 fi
 
-echo \
+echo -e \
 "Host $NAME
     Hostname $ip_rhel8
   	Preferredauthentications publickey
   	User root
-    IdentityFile $KEY" >> "$(dirname $KEY)"/config
+  	UserKnownHostsFile /dev/null
+    StrictHostKeyChecking no
+    IdentityFile $KEY\n" >> "$(dirname $KEY)"/config
 log "New entry is created in the $(dirname $KEY)/config for address $ip_rhel8 with name $NAME"
 
 virsh snapshot-create-as --domain "$NAME" --name "initial"

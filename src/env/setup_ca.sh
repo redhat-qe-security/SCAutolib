@@ -90,7 +90,15 @@ pushd "$WORK_DIR" || exit
 if [ "$(semodule -l | grep virtcacard)" -ne 0 ]
 then
   log "SELinux module for virt_card is not installed"
-  [ -f "$CONF_DIR/virtcacard.cil" ] && err "No $CONF_DIR/virtcacard.cil file"
+  if [ -f "$CONF_DIR/virtcacard.cil" ]
+  then
+    warning "No $CONF_DIR/virtcacard.cil file, creating..."
+    echo -e \
+    "(allow pcscd_t node_t (tcp_socket (node_bind)));
+
+; allow p11_child to read softhsm cache - not present in RHEL by default
+(allow sssd_t named_cache_t (dir (read search)));" > "$CONF_DIR/virtcacard.cil"
+  fi
   semodule -i "$CONF_DIR/virtcacard.cil"
   log "SELinux module for virt_card is installed"
 fi
