@@ -1,14 +1,16 @@
-import yaml
-import utils
 import subprocess as subp
-from os.path import (exists, realpath, isfile, split)
-from os import mkdir
-from pysftp import Connection
-from decouple import config
 from configparser import ConfigParser
+from os import mkdir
+from os.path import exists, isfile, realpath, split
+
+import yaml
+from decouple import config
+from pysftp import Connection
 from SCAutolib import env_logger
-from SCAutolib.src import (check_env, KEYS, CERTS, WORK_DIR, CONF_DIR, BACKUP,
-                           CONF, CONFIG_DATA, SETUP_CA, SETUP_VSC)
+from SCAutolib.src import (BACKUP, CERTS, CONF, CONF_DIR, CONFIG_DATA, KEYS,
+                           SETUP_CA, SETUP_VSC, CA_DIR, check_env)
+
+import utils
 
 
 def create_kdc_config(sftp: Connection):
@@ -18,7 +20,8 @@ def create_kdc_config(sftp: Connection):
     env_logger.debug(f"Realm name: {realm}")
 
     sftp.get(kdc_conf, f"{BACKUP}/kdc-original.conf")
-    env_logger.debug(f"File {kdc_conf} is copied to {BACKUP}/kdc-original.conf")
+    env_logger.debug(
+        f"File {kdc_conf} is copied to {BACKUP}/kdc-original.conf")
 
     cnf = ConfigParser()
     cnf.optionxform = str
@@ -27,14 +30,17 @@ def create_kdc_config(sftp: Connection):
 
         for sec in ["kdcdefaults", "realms"]:
             if not cnf.has_section(sec):
-                env_logger.debug(f"Section {sec} is not present in {kdc_conf}.")
+                env_logger.debug(
+                    f"Section {sec} is not present in {kdc_conf}.")
                 cnf.add_section(sec)
                 env_logger.debug(f"Section {sec} in {kdc_conf} is created.")
         present = True
         if not cnf.has_option("realms", realm):
-            env_logger.debug(f"Option {realm} is not present in realms section in {kdc_conf}.")
+            env_logger.debug(
+                f"Option {realm} is not present in realms section in {kdc_conf}.")
             cnf.set("realms", realm, "{}")
-            env_logger.debug(f"Option {realm} is created in realms section in {kdc_conf}.")
+            env_logger.debug(
+                f"Option {realm} is created in realms section in {kdc_conf}.")
             present = False
         # Parse options for realm in {...}
 
@@ -49,7 +55,8 @@ def create_kdc_config(sftp: Connection):
              "max_renewable_life": "7d"}
 
         if present:
-            env_logger.debug(f"Option {realm} presents in realms section in {kdc_conf}.")
+            env_logger.debug(
+                f"Option {realm} presents in realms section in {kdc_conf}.")
             d = {}
             tmp = cnf.get("realms", realm) \
                 .replace("{", "").replace("}", "").split("\n")
@@ -77,7 +84,8 @@ def create_kdc_config(sftp: Connection):
 
 def create_krb_config(sftp: Connection = None):
     check_env()
-    realm, username, ip_addr = read_config("krb.realm_name", "krb.name", "krb.ip")
+    realm, username, ip_addr = read_config(
+        "krb.realm_name", "krb.name", "krb.ip")
 
     with open(f"{CONF_DIR}/extensions.kdc", "w") as f:
         f.write(f"""[kdc_cert]
@@ -100,7 +108,8 @@ name_string=EXP:1,SEQUENCE:kdc_principals
 [kdc_principals]
 princ1=GeneralString:krbtgt
 princ2=GeneralString:{realm}""")
-        env_logger.debug(f"Extensions file for KDC is created {CONF_DIR}/extensions.kdc")
+        env_logger.debug(
+            f"Extensions file for KDC is created {CONF_DIR}/extensions.kdc")
 
     with open(f"{CONF_DIR}/extensions.client", "w") as f:
         f.write(f"""[client_cert]
@@ -162,6 +171,8 @@ princ1=GeneralString:{username}""")
             ".ctesting.redhat.com": realm,
         },
     }
+
+    # NOTE: this may be not needed if IPA would be used
     if sftp:
         hostname = read_config("krb.server_name")
         domain_name = hostname.split(".", 1)[1]
@@ -196,26 +207,16 @@ princ1=GeneralString:{username}""")
             cnf.write(f)
             env_logger.debug("File /etc/krb5.conf is updated.")
 
-        subp.run(["setsebool", "-P", "sssd_connect_all_unreserved_ports", "on"], check=True)
-        env_logger.debug("SELinux boolean sssd_connect_all_unreserved_ports is set to ON")
+        subp.run(
+            ["setsebool", "-P", "sssd_connect_all_unreserved_ports", "on"], check=True)
+        env_logger.debug(
+            "SELinux boolean sssd_connect_all_unreserved_ports is set to ON")
 
         krb_ip_addr = read_config("krb.ip")
         with open("/etc/hosts", "a") as f:
             f.write(f"{krb_ip_addr} krb-server.sctesting.redhat.com\n")
-            env_logger.debug("IP address of kerberos server is added to /etc/hosts file")
-
-
-def generate_krb_certs():
-    check_env()
-    # TODO: add temaplate file for generatng the certificate
-    key_path = f"{KEYS}/kdckey.pem"
-    crt_path = f"{CERTS}/kdc.pem"
-    subp.run(["openssl", "genrsa", "-out", key_path, "2048"], check=True)
-    subp.run(["openssl", "req", "-new", "-out", "kdc.req", "-key", key_path], check=True)
-    subp.run(["openssl", "x509", "-req", "-in", "kdc.req", "-CAkey",
-              f"{WORK_DIR}/rootCA.key", "-CA", f"{WORK_DIR}/rootCA.crt", "-out", crt_path, "-days", "365",
-              "-extfile", f"{CONF_DIR}/extensions.kdc", "-extensions", "kdc_cert", "-CAcreateserial"], check=True)
-    return crt_path, key_path
+            env_logger.debug(
+                "IP address of kerberos server is added to /etc/hosts file")
 
 
 def prep_tmp_dirs():
@@ -223,95 +224,93 @@ def prep_tmp_dirs():
     Prepair directory structure for test environment. All paths are taken from
     previously loaded env file.
     """
-    for dir_env_var in ("WORK_DIR", "TMP", "BACKUP", "CONF_DIR"):
+    for dir_env_var in ("CA_DIR", "TMP", "BACKUP", "CONF_DIR"):
         dir_path = config(dir_env_var, cast=str)
         if not exists(dir_path):
             mkdir(dir_path)
 
 
-def create_cnf(user: str, dir: str):
+def create_cnf(user):
     """
     Create configuration files for OpenSSL to generate certificates and requests.
     """
+    conf_dir = config('CONF_DIR')
     if user == "ca":
-        conf_dir = config('CONF_DIR')
         ca_cnf = """[ ca ]
-default_ca = CA_default
+                default_ca = CA_default
 
-[ CA_default ]
-dir              = .
-database         = $dir/index.txt
-new_certs_dir    = $dir/newcerts
+                [ CA_default ]
+                dir              = .
+                database         = $dir/index.txt
+                new_certs_dir    = $dir/newcerts
 
-certificate      = $dir/rootCA.crt
-serial           = $dir/serial
-private_key      = $dir/rootCA.key
-RANDFILE         = $dir/rand
+                certificate      = $dir/rootCA.crt
+                serial           = $dir/serial
+                private_key      = $dir/rootCA.key
+                RANDFILE         = $dir/rand
 
-default_days     = 365
-default_crl_hours = 1
-default_md       = sha256
+                default_days     = 365
+                default_crl_hours = 1
+                default_md       = sha256
 
-policy           = policy_any 
-email_in_dn      = no
+                policy           = policy_any 
+                email_in_dn      = no
 
-name_opt         = ca_default
-cert_opt         = ca_default
-copy_extensions  = copy
+                name_opt         = ca_default
+                cert_opt         = ca_default
+                copy_extensions  = copy
 
-[ usr_cert ]
-authorityKeyIdentifier = keyid, issuer
+                [ usr_cert ]
+                authorityKeyIdentifier = keyid, issuer
 
-[ v3_ca ]
-subjectKeyIdentifier   = hash
-authorityKeyIdentifier = keyid:always,issuer:always
-basicConstraints       = CA:true
-keyUsage               = critical, digitalSignature, cRLSign, keyCertSign
+                [ v3_ca ]
+                subjectKeyIdentifier   = hash
+                authorityKeyIdentifier = keyid:always,issuer:always
+                basicConstraints       = CA:true
+                keyUsage               = critical, digitalSignature, cRLSign, keyCertSign
 
-[ policy_any ]
-organizationName       = supplied
-organizationalUnitName = supplied
-commonName             = supplied
-emailAddress           = optional
+                [ policy_any ]
+                organizationName       = supplied
+                organizationalUnitName = supplied
+                commonName             = supplied
+                emailAddress           = optional
 
-[ req ]
-distinguished_name = req_distinguished_name
-prompt             = no
+                [ req ]
+                distinguished_name = req_distinguished_name
+                prompt             = no
 
-[ req_distinguished_name ]
-O  = Example
-OU = Example Test
-CN = Example Test CA
-        """
+                [ req_distinguished_name ]
+                O  = Example
+                OU = Example Test
+                CN = Example Test CA"""
         with open(f"{conf_dir}/ca.cnf", "w") as f:
             f.write(ca_cnf)
-            env_logger.debug(f"Configuration file for local CA is created {CONF_DIR}/ca.cnf")
-            return
+            env_logger.debug(
+                f"Configuration file for local CA is created {conf_dir}/ca.cnf")
+        return
 
+    user_cnf = f"""[ req ]
+                distinguished_name = req_distinguished_name
+                prompt = no
 
-    user_cnf = f"""
-[ req ]
-distinguished_name = req_distinguished_name
-prompt = no
+                [ req_distinguished_name ]
+                O = Example
+                OU = Example Test
+                CN = {user}
 
-[ req_distinguished_name ]
-O = Example
-OU = Example Test
-CN = {user}
-
-[ req_exts ]
-basicConstraints = CA:FALSE
-nsCertType = client, email
-nsComment = "{user}"
-subjectKeyIdentifier = hash
-keyUsage = critical, nonRepudiation, digitalSignature
-extendedKeyUsage = clientAuth, emailProtection, msSmartcardLogin
-subjectAltName = otherName:msUPN;UTF8:{user}@EXAMPLE.COM, email:{user}@example.com
-"""
-    with open(f"{dir}/conf/req_{user}.cnf", "w") as f:
+                [ req_exts ]
+                basicConstraints = CA:FALSE
+                nsCertType = client, email
+                nsComment = "{user}"
+                subjectKeyIdentifier = hash
+                keyUsage = critical, nonRepudiation, digitalSignature
+                extendedKeyUsage = clientAuth, emailProtection, msSmartcardLogin
+                subjectAltName = otherName:msUPN;UTF8:{user}@EXAMPLE.COM, email:{user}@example.com
+                """
+    with open(f"{CONF_DIR}/req_{user}.cnf", "w") as f:
         f.write(user_cnf)
         env_logger.debug(f"Configuration file for CSR for user {user} is created "
-                             f"{dir}/conf/req_{user}.cnf")
+                         f"{conf_dir}/req_{user}.cnf")
 
 
 def create_sssd_config(local_user: str = None, krb_user: str = None):
@@ -325,7 +324,7 @@ def create_sssd_config(local_user: str = None, krb_user: str = None):
         krb_user: username for kerberos user with smart card to add the match rule.
     """
     cnf = ConfigParser(allow_no_value=True)
-    cnf.optionxform = str  # Needed for correct parsing of upercase words
+    cnf.optionxform = str  # Needed for correct parsing of uppercase words
     default = {
         "sssd": {"#<[sssd]>": None,
                  "debug_level": "9",
@@ -376,10 +375,8 @@ def create_softhsm2_config(card_dir):
 
 def create_virt_card_config(username, card_dir):
     """
-    Create systemd service (virt_cacard.service) and semodule (virtcacard.cil)
-    for virtual smart card.
+    Create systemd service for for virtual smart card (virt_cacard.service).
     """
-    # TODO create virt_cacard.service
     path = "/etc/systemd/system/virt_cacard.service"
     conf_dir = f"{card_dir}/conf"
     default = {
@@ -408,8 +405,6 @@ def create_virt_card_config(username, card_dir):
         env_logger.debug(
             f"Service file {path} for virtual smart card with {username} is created.")
 
-    # TODO: Create service for krb user
-
 
 def read_config(*items) -> list or str:
     """
@@ -423,7 +418,7 @@ def read_config(*items) -> list or str:
     Returns:
         list with required items
     """
-    with open(config("CONF"), "r") as file:  # FIXME: check what is variable for configuration file
+    with open(config("CONF"), "r") as file:
         config_data = yaml.load(file, Loader=yaml.FullLoader)
         assert config_data, "Data are not loaded correctly."
 
@@ -459,7 +454,7 @@ def setup_ca_(env_file):
     env_logger.debug("Setup of local CA is completed")
 
 
-def setup_virt_card_(user, env_file):
+def setup_virt_card_(user):
     """
     Call setup script fot virtual smart card
 
@@ -467,7 +462,8 @@ def setup_virt_card_(user, env_file):
         env_file: Path to .env file
     """
     check_env()
-    ca_dir, card_dir = read_config("ca_dir", f"{user}.card_dir")
+    ca_dir, card_dir = read_config("work_dir", f"{user}.card_dir")
+    cmd = ["bash", SETUP_VSC, "--dir", f"/root/{user}"]
     username = read_config(f"{user}.name")
     cmd = ["bash", SETUP_VSC, "--dir", card_dir]
     if user == "local_user":
@@ -480,14 +476,14 @@ def setup_virt_card_(user, env_file):
     env_logger.debug("Setup of local CA is completed")
 
 
-def check_semodule()
+def check_semodule():
     result = subp.run(["semodule", "-l"], capture_output=True)
     if "virtcacard" not in result.output:
-        work_dir = config("WORK_DIR")
+        work_dir = config("CA_DIR")
         module = """
 (allow pcscd_t node_t(tcp_socket(node_bind)))
 
-allow p11_child to read softhsm cache - not present in RHEL by default
-(allow sssd_t named_cache_t(dir(read search)))  """
+; allow p11_child to read softhsm cache - not present in RHEL by default
+(allow sssd_t named_cache_t(dir(read search)))"""
         with open(f"{work_dir}/conf/virtcacard.cil", "w") as f:
             f.write(module)

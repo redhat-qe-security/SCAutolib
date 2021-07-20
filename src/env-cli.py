@@ -19,21 +19,10 @@ def cli():
                    "smart card deployment")
 @click.option("--conf", "-c", type=click.Path(),
               help="Path to YAML file with configurations.", required=False)
-@click.option("--work-dir", "-w", type=click.Path(), required=False,
-              default=DIR_PATH,
-              help="Absolute path to working directory"
-                   "Value WORK_DIR in configuration file can overwrite "
-                   "this parameter.")
-@click.option("--env-file", "-e", type=click.Path(), required=False, default=None,
-              help="Absolute path to .env file with environment varibles to be "
-                   "used in the library.")
-@click.option("--krb", "-k", is_flag=True, required=False, default=False,
-              help="Flag for setup of kerberos client.")
-@click.option("--new-srv", "-N", is_flag=True, required=False, default=False,
-              help="Indicates that given server is an clean machine that need to be configured from the scartch")
-def prepare(setup, conf, work_dir, env_file, krb, new_srv):
+@click.option("--ipa", "-i", help="Setup IPA client with existed IPA server (IP address in conf file)")
+def prepare(setup, conf):
     """
-    Prepare the whole test environment including temporary directories, necessary
+    Prepair the whole test environment including temporary directories, necessary
     configuration files and services. Also can automatically run setup for local
     CA and virtual smart card.
 
@@ -42,7 +31,7 @@ def prepare(setup, conf, work_dir, env_file, krb, new_srv):
         setup: if you want to automatically run other setup steps
         conf: path to configuration file im YAML format
         work_dir: path to working directory. Can be overwritten
-                  by variable WORK_DIR in confugration file
+                  by variable CA_DIR in confugration file
         env_file: path to already existing .env file
     """
     # TODO: add getting of work_dir from configuration file
@@ -54,12 +43,13 @@ def prepare(setup, conf, work_dir, env_file, krb, new_srv):
     username, card_dir = read_config("local_user.name", "local_user.card_dir")
     create_sssd_config(username)
     env_logger.debug("SSSD configuration file is updated")
-
-    create_softhsm2_config()
+    card_dir = read_config("local_user.card_dir")
+    create_softhsm2_config(card_dir)
     env_logger.debug("SoftHSM2 configuration file is created in the "
                      f"{CONF_DIR}/softhsm2.conf")
 
-    create_virt_card_config()
+    username = read_config("local_user.name")
+    create_virt_card_config(username, card_dir)
     env_logger.debug("Configuration files for virtual smart card are created.")
 
     check_semodule()
@@ -67,12 +57,8 @@ def prepare(setup, conf, work_dir, env_file, krb, new_srv):
     create_cnf(username, card_dir)
 
     if setup:
-        setup_ca_(env_file)
-        setup_virt_card(env_file)
-
-    if krb:
-        setup_krb_server(new_srv)
-        setup_krb_client()
+        setup_ca_(conf, env_file)
+        setup_virt_card_("local_user")
 
 
 @click.command()
@@ -142,14 +128,15 @@ def setup_krb_server(new):
     cert, key = generate_krb_certs()
     env_logger.debug(f"KDC certificat: {cert}")
     env_logger.debug(f"KDC private key: {key}")
-    krb_ip, krb_root_passwd, krb_srv_name = read_config("krb.ip", "krb.root_passwd", "krb.server_name")
+    krb_ip, krb_root_passwd, krb_srv_name = read_config(
+        "krb.ip", "krb.root_passwd", "krb.server_name")
 
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     ssh.connect(krb_ip, 22, "root", krb_root_passwd)
     env_logger.debug(f"SSH connectin to {krb_ip} is istablished")
     if new:
-        # Install required pakcages on fresh machine
+        # Install required packages on fresh machine
         pkgs = ["ccid", "opensc", "esc", "pcsc-lite", "pcsc-lite-libs", "gdm",
                 "nss-pam-ldapd", "krb5-workstation", "krb5-libs", "krb5-pkinit",
                 "krb5-server", "krb5-pkinit-openssl", "nss-tools", "python3-ldap"]
@@ -167,13 +154,13 @@ def setup_krb_server(new):
         env_logger.debug(f"SFTP with server {krb_ip} connection established")
         paths = ({"original": "/var/kerberos/krb5kdc/kdc.pem", "new": cert},
                  {"original": "/var/kerberos/krb5kdc/kdckey.pem", "new": key},
-                 {"original": "/var/kerberos/krb5kdc/kdc-ca.pem", "new": f"{WORK_DIR}/rootCA.crt"})
+                 {"original": "/var/kerberos/krb5kdc/kdc-ca.pem", "new": f"{CA_DIR}/rootCA.crt"})
         for item in paths:
             if sftp.exists(item["original"]):
                 name = split(item["original"])[1].replace(".", "-original.")
                 sftp.get(item["original"], f"{BACKUP}/{name}")
                 env_logger.debug(f"File {item['original']} from Kerberos server "
-                                 f"({krb_ip}) is backuped to {BACKUP}/{name}")
+                                 f"({krb_ip}) is stored to {BACKUP}/{name}")
             sftp.put(item["new"], item["original"])
             env_logger.debug(f"File {item['new']} from localhost is copied to "
                              f"Kerberos server ({krb_ip}) to {item['original']}")
