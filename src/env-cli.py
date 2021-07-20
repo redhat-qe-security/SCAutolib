@@ -1,8 +1,9 @@
 import click
 import paramiko
 from time import sleep
-from pysftp import Connection, CnOpts
-from os.path import join, exists
+from pysftp import CnOpts
+
+
 from SCAutolib.src import load_env, DIR_PATH, CLEANUP_CA
 from SCAutolib.src.env import *
 
@@ -68,15 +69,9 @@ def prepare(setup, conf, work_dir, env_file,):
 
 
 @click.command()
-@click.option("--env", type=click.Path(), required=False, default=None,
-              help="Path to .env file with specified variables")
 @click.option("--conf", "-c", type=click.Path(), required=True,
               help="Path to YAML file with configurations")
-@click.option("--work-dir", type=click.Path(), required=False,
-              default=join(DIR_PATH, "virt_card"),
-              help=f"Path to working directory. By default is "
-                   f"{join(DIR_PATH, 'virt_card')}")
-def setup_ca(conf, env_file, work_dir):
+def setup_ca(conf):
     """
     CLI command for setup the local CA.
 
@@ -87,8 +82,10 @@ def setup_ca(conf, env_file, work_dir):
         env_file: Path to .env file with specified variables
     """
     # TODO: generate certs for Kerberos
-    env_path = load_env(env_file, work_dir)
-    # prepare_ca_dirs()
+    env_path = load_env(conf)
+    mkdir(config("CA_DIR"))
+    mkdir(config("CONF_DIR"))
+    create_cnf('ca')
     # prepare_ca_configs()
     # prepare_general_configs()
 
@@ -109,7 +106,7 @@ def setup_virt_card(user):
     username, card_dir = read_config(f'{user}.name', f'{user}.card_dir')
     create_softhsm2_config(card_dir)
     create_virt_card_config(username, card_dir)
-    setup_virt_card_()
+    # setup_virt_card_()
 
 
 @click.command()
