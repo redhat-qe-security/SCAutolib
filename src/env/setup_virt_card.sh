@@ -31,12 +31,6 @@ echo 'disable-in: virt_cacard' >> /usr/share/p11-kit/modules/opensc.module
 systemctl restart pcscd virt_cacard
 sleep 10
 
-mkdir /home/localuser1/.ssh
-ssh-keygen -D /usr/lib64/pkcs11/opensc-pkcs11.so > ~localuser1/.ssh/authorized_keys
-chown -R localuser1:localuser1 ~localuser1/.ssh/
-chmod 700 ~localuser1/.ssh/
-chmod 600 ~localuser1/.ssh/authorized_keys
-
 chmod 600 /etc/sssd/sssd.conf
 
 systemctl stop pcscd.service pcscd.socket virt_cacard sssd
