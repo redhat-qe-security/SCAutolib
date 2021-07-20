@@ -229,15 +229,12 @@ def prep_tmp_dirs():
             mkdir(dir_path)
 
 
-def create_cnf(user_list: [], ca: bool = True):
+def create_cnf(user):
     """
     Create configuration files for OpenSSL to generate certificates and requests.
-    Args:
-        user_list: list of users for which the configuration file for
-                   certificate signing request should be created
-        ca: if configuration file for local CA is need to be generated
     """
-    if ca:
+    if user == "ca":
+        conf_dir = config('CONF_DIR')
         ca_cnf = """[ ca ]
 default_ca = CA_default
 
@@ -286,33 +283,33 @@ O  = Example
 OU = Example Test
 CN = Example Test CA
         """
-        with open(f"{CONF_DIR}/ca.cnf", "w") as f:
+        with open(f"{conf_dir}/ca.cnf", "w") as f:
             f.write(ca_cnf)
-            env_logger.debug(f"Confugation file for local CA is created {CONF_DIR}/ca.cnf")
+            env_logger.debug(f"Confugation file for local CA is created {conf_dir}/ca.cnf")
+        return
 
-    for user in user_list:
-        user_cnf = f"""[ req ]
-distinguished_name = req_distinguished_name
-prompt = no
-
-[ req_distinguished_name ]
-O = Example
-OU = Example Test
-CN = {user}
-
-[ req_exts ]
-basicConstraints = CA:FALSE
-nsCertType = client, email
-nsComment = "{user}"
-subjectKeyIdentifier = hash
-keyUsage = critical, nonRepudiation, digitalSignature
-extendedKeyUsage = clientAuth, emailProtection, msSmartcardLogin
-subjectAltName = otherName:msUPN;UTF8:{user}@EXAMPLE.COM, email:{user}@example.com
-"""
-        with open(f"{CONF_DIR}/req_{user}.cnf", "w") as f:
-            f.write(user_cnf)
-            env_logger.debug(f"Configuraiton file for CSR for user {user} is created "
-                             f"{CONF_DIR}/req_{user}.cnf")
+#     user_cnf = f"""[ req ]
+# distinguished_name = req_distinguished_name
+# prompt = no
+#
+# [ req_distinguished_name ]
+# O = Example
+# OU = Example Test
+# CN = {user}
+#
+# [ req_exts ]
+# basicConstraints = CA:FALSE
+# nsCertType = client, email
+# nsComment = "{user}"
+# subjectKeyIdentifier = hash
+# keyUsage = critical, nonRepudiation, digitalSignature
+# extendedKeyUsage = clientAuth, emailProtection, msSmartcardLogin
+# subjectAltName = otherName:msUPN;UTF8:{user}@EXAMPLE.COM, email:{user}@example.com
+# """
+#         with open(f"{CONF_DIR}/req_{user}.cnf", "w") as f:
+#             f.write(user_cnf)
+#             env_logger.debug(f"Configuraiton file for CSR for user {user} is created "
+#                              f"{conf)}/req_{user}.cnf")
 
 
 def create_sssd_config(local_user: str = None, krb_user: str = None):
@@ -404,8 +401,7 @@ def create_softhsm2_config(card_dir):
 
 def create_virt_card_config(username, card_dir):
     """
-    Create systemd service (virt_cacard.service) and semodule (virtcacard.cil)
-    for virtual smart card.
+    Create systemd service for for virtual smart card (virt_cacard.service).
     """
     # TODO create virt_cacard.service
     path = "/etc/systemd/system/virt_cacard.service"
