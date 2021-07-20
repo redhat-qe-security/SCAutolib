@@ -229,17 +229,13 @@ def prep_tmp_dirs():
             mkdir(dir_path)
 
 
-def create_cnf(user: str, dir: str):
+def create_cnf(user):
     """
     Create configuration files for OpenSSL to generate certificates and requests.
-    Args:
-        user_list: list of users for which the configuration file for
-                   certificate signing request should be created
-        ca: if configuration file for local CA is need to be generated
     """
-    if user == "root":
-        ca_cnf = """
-[ ca ]
+    if user == "ca":
+        conf_dir = config('CONF_DIR')
+        ca_cnf = """[ ca ]
 default_ca = CA_default
 
 [ CA_default ]
@@ -285,37 +281,34 @@ prompt             = no
 [ req_distinguished_name ]
 O  = Example
 OU = Example Test
-CN = Example Test CA
-        """
-        with open(f"{dir}/conf/ca.cnf", "w") as f:
+CN = Example Test CA"""
+        with open(f"{conf_dir}/ca.cnf", "w") as f:
             f.write(ca_cnf)
-            env_logger.debug(f"Configuration file for local CA is created {CONF_DIR}/ca.cnf")
-            return
+            env_logger.debug(f"Confugation file for local CA is created {conf_dir}/ca.cnf")
+        return
 
-    
-    user_cnf = f"""
-[ req ]
-distinguished_name = req_distinguished_name
-prompt = no
-
-[ req_distinguished_name ]
-O = Example
-OU = Example Test
-CN = {user}
-
-[ req_exts ]
-basicConstraints = CA:FALSE
-nsCertType = client, email
-nsComment = "{user}"
-subjectKeyIdentifier = hash
-keyUsage = critical, nonRepudiation, digitalSignature
-extendedKeyUsage = clientAuth, emailProtection, msSmartcardLogin
-subjectAltName = otherName:msUPN;UTF8:{user}@EXAMPLE.COM, email:{user}@example.com
-"""
-    with open(f"{dir}/conf/req_{user}.cnf", "w") as f:
-        f.write(user_cnf)
-        env_logger.debug(f"Configuration file for CSR for user {user} is created "
-                             f"{dir}/conf/req_{user}.cnf")
+    # user_cnf = f"""[ req ]
+# distinguished_name = req_distinguished_name
+# prompt = no
+#
+# [ req_distinguished_name ]
+# O = Example
+# OU = Example Test
+# CN = {user}
+#
+# [ req_exts ]
+# basicConstraints = CA:FALSE
+# nsCertType = client, email
+# nsComment = "{user}"
+# subjectKeyIdentifier = hash
+# keyUsage = critical, nonRepudiation, digitalSignature
+# extendedKeyUsage = clientAuth, emailProtection, msSmartcardLogin
+# subjectAltName = otherName:msUPN;UTF8:{user}@EXAMPLE.COM, email:{user}@example.com
+# """
+#         with open(f"{CONF_DIR}/req_{user}.cnf", "w") as f:
+#             f.write(user_cnf)
+#             env_logger.debug(f"Configuraiton file for CSR for user {user} is created "
+#                              f"{conf)}/req_{user}.cnf")
 
 
 def create_sssd_config(local_user: str = None, krb_user: str = None):
@@ -380,7 +373,11 @@ def create_softhsm2_config(card_dir):
 
 def create_virt_card_config(username, card_dir):
     """
+<<<<<<< HEAD
     Create systemd service (virt_cacard.service) for virtual smart card.
+=======
+    Create systemd service for for virtual smart card (virt_cacard.service).
+>>>>>>> 128c623f282b0c071162f572fa9d6dff5d38aaff
     """
     # TODO create virt_cacard.service
     path = "/etc/systemd/system/virt_cacard.service"
@@ -470,7 +467,8 @@ def setup_virt_card_(user, env_file):
         env_file: Path to .env file
     """
     check_env()
-    ca_dir, card_dir = read_config("ca_dir", f"{user}.card_dir")
+    ca_dir, card_dir = read_config("work_dir", f"{user}.card_dir")
+    cmd = ["bash", SETUP_VSC, "--dir", f"/root/{user}"]
     username = read_config(f"{user}.name")
     cmd = ["bash", SETUP_VSC, "--dir", card_dir]
     if user == "local_user":
@@ -483,7 +481,7 @@ def setup_virt_card_(user, env_file):
     env_logger.debug("Setup of local CA is completed")
 
 
-def check_semodule()
+def check_semodule():
     result = subp.run(["semodule", "-l"], capture_output=True)
     if "virtcacard" not in result.output:
         work_dir = config("WORK_DIR")
@@ -491,7 +489,7 @@ def check_semodule()
 (allow pcscd_t node_t(tcp_socket(node_bind)))
 
 allow p11_child to read softhsm cache - not present in RHEL by default
-(allow sssd_t named_cache_t(dir(read search)))  """
+(allow sssd_t named_cache_t(dir(read search)))"""
         with open(f"{work_dir}/conf/virtcacard.cil", "w") as f:
             f.write(module)
     

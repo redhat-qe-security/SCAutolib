@@ -38,14 +38,17 @@ def load_env(conf_file: str) -> str:
     else:
         with open(conf_file, "r") as f:
             data = yaml.load(f, Loader=yaml.FullLoader)
-            work_dir = data["work_dir"]
+            ca_dir = data["ca_dir"]
         conf_file = conf_file.split("/")[-1]
         with open(env_file, "w") as f:
-            f.write(f"WORK_DIR={work_dir}\n")
-            f.write(f"TMP={join(work_dir, 'tmp')}\n")
-            f.write(f"CONF_DIR={join(work_dir, 'conf')}\n")
-            f.write(f"BACKUP={join(work_dir, 'tmp', 'backup')}\n")
+            f.write(f"WORK_DIR={ca_dir}\n")
+            f.write(f"TMP={join(ca_dir, 'tmp')}\n")
+            f.write(f"CONF_DIR={join(ca_dir, 'conf')}\n")
+            f.write(f"KEYS={join(ca_dir, 'tmp', 'keys')}\n")
+            f.write(f"CERTS={join(ca_dir, 'tmp', 'certs')}\n")
+            f.write(f"BACKUP={join(ca_dir, 'tmp', 'backup')}\n")
             f.write(f"CONF={conf_file}\n")
+            f.write(f"CA_DIR={ca_dir}\n")
     return env_file
 
 

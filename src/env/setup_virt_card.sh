@@ -9,11 +9,11 @@ NC='\033[0m' # No Color
 GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
 
-CARD_DIR=""
 KEY_PATH=""
 CERT_PATH=""
 ENV_PATH=""
 USERNAME="newuser"
+CARD_DIR="/root/$USERNAME"
 CA_DIR=""
 PIN='123456'
 LOCAL=0
@@ -107,7 +107,7 @@ NSSDB="$CARD_DIR/db"
 P11LIB='/usr/lib64/pkcs11/libsofthsm2.so'
 CONF_DIR="$CARD_DIR/conf"
 
-[ ! -d "$CARD_DIR" ] && warn "No card directory, creating..." && mkdir -p "$CARD_DIR"
+[ ! -d "$CARD_DIR" ] && warn "No card directory provided, creating..." && mkdir -p "$CARD_DIR"
 [ ! -d "$CONF_DIR" ] && warn "No configuration directory, creating..." && mkdir -p "$CONF_DIR"
 
 if [[ ! -f "$CONF_DIR/softhsm2.conf" ]]
