@@ -1,14 +1,16 @@
-import yaml
-import utils
 import subprocess as subp
-from os.path import (exists, realpath, isfile, split)
-from os import mkdir
-from pysftp import Connection
-from decouple import config
 from configparser import ConfigParser
+from os import mkdir
+from os.path import exists, isfile, realpath, split
+
+import yaml
+from decouple import config
+from pysftp import Connection
 from SCAutolib import env_logger
-from SCAutolib.src import (check_env, KEYS, CERTS, WORK_DIR, CONF_DIR, BACKUP,
-                           CONF, CONFIG_DATA, SETUP_CA, SETUP_VSC)
+from SCAutolib.src import (BACKUP, CERTS, CONF, CONF_DIR, CONFIG_DATA, KEYS,
+                           SETUP_CA, SETUP_VSC, WORK_DIR, check_env)
+
+import utils
 
 
 def create_kdc_config(sftp: Connection):
@@ -162,6 +164,8 @@ princ1=GeneralString:{username}""")
             ".ctesting.redhat.com": realm,
         },
     }
+
+    # NOTE: this may be not needed if IPA would be used
     if sftp:
         hostname = read_config("krb.server_name")
         domain_name = hostname.split(".", 1)[1]
@@ -205,19 +209,6 @@ princ1=GeneralString:{username}""")
             env_logger.debug("IP address of kerberos server is added to /etc/hosts file")
 
 
-def generate_krb_certs():
-    check_env()
-    # TODO: add temaplate file for generatng the certificate
-    key_path = f"{KEYS}/kdckey.pem"
-    crt_path = f"{CERTS}/kdc.pem"
-    subp.run(["openssl", "genrsa", "-out", key_path, "2048"], check=True)
-    subp.run(["openssl", "req", "-new", "-out", "kdc.req", "-key", key_path], check=True)
-    subp.run(["openssl", "x509", "-req", "-in", "kdc.req", "-CAkey",
-              f"{WORK_DIR}/rootCA.key", "-CA", f"{WORK_DIR}/rootCA.crt", "-out", crt_path, "-days", "365",
-              "-extfile", f"{CONF_DIR}/extensions.kdc", "-extensions", "kdc_cert", "-CAcreateserial"], check=True)
-    return crt_path, key_path
-
-
 def prep_tmp_dirs():
     """
     Prepair directory structure for test environment. All paths are taken from
@@ -233,82 +224,82 @@ def create_cnf(user):
     """
     Create configuration files for OpenSSL to generate certificates and requests.
     """
+    conf_dir = config('CONF_DIR')
     if user == "ca":
-        conf_dir = config('CONF_DIR')
         ca_cnf = """[ ca ]
-default_ca = CA_default
+                default_ca = CA_default
 
-[ CA_default ]
-dir              = .
-database         = $dir/index.txt
-new_certs_dir    = $dir/newcerts
+                [ CA_default ]
+                dir              = .
+                database         = $dir/index.txt
+                new_certs_dir    = $dir/newcerts
 
-certificate      = $dir/rootCA.crt
-serial           = $dir/serial
-private_key      = $dir/rootCA.key
-RANDFILE         = $dir/rand
+                certificate      = $dir/rootCA.crt
+                serial           = $dir/serial
+                private_key      = $dir/rootCA.key
+                RANDFILE         = $dir/rand
 
-default_days     = 365
-default_crl_hours = 1
-default_md       = sha256
+                default_days     = 365
+                default_crl_hours = 1
+                default_md       = sha256
 
-policy           = policy_any 
-email_in_dn      = no
+                policy           = policy_any 
+                email_in_dn      = no
 
-name_opt         = ca_default
-cert_opt         = ca_default
-copy_extensions  = copy
+                name_opt         = ca_default
+                cert_opt         = ca_default
+                copy_extensions  = copy
 
-[ usr_cert ]
-authorityKeyIdentifier = keyid, issuer
+                [ usr_cert ]
+                authorityKeyIdentifier = keyid, issuer
 
-[ v3_ca ]
-subjectKeyIdentifier   = hash
-authorityKeyIdentifier = keyid:always,issuer:always
-basicConstraints       = CA:true
-keyUsage               = critical, digitalSignature, cRLSign, keyCertSign
+                [ v3_ca ]
+                subjectKeyIdentifier   = hash
+                authorityKeyIdentifier = keyid:always,issuer:always
+                basicConstraints       = CA:true
+                keyUsage               = critical, digitalSignature, cRLSign, keyCertSign
 
-[ policy_any ]
-organizationName       = supplied
-organizationalUnitName = supplied
-commonName             = supplied
-emailAddress           = optional
+                [ policy_any ]
+                organizationName       = supplied
+                organizationalUnitName = supplied
+                commonName             = supplied
+                emailAddress           = optional
 
-[ req ]
-distinguished_name = req_distinguished_name
-prompt             = no
+                [ req ]
+                distinguished_name = req_distinguished_name
+                prompt             = no
 
-[ req_distinguished_name ]
-O  = Example
-OU = Example Test
-CN = Example Test CA"""
+                [ req_distinguished_name ]
+                O  = Example
+                OU = Example Test
+                CN = Example Test CA"""
         with open(f"{conf_dir}/ca.cnf", "w") as f:
             f.write(ca_cnf)
-            env_logger.debug(f"Confugation file for local CA is created {conf_dir}/ca.cnf")
+            env_logger.debug(f"Configuration file for local CA is created {conf_dir}/ca.cnf")
         return
 
-    # user_cnf = f"""[ req ]
-# distinguished_name = req_distinguished_name
-# prompt = no
-#
-# [ req_distinguished_name ]
-# O = Example
-# OU = Example Test
-# CN = {user}
-#
-# [ req_exts ]
-# basicConstraints = CA:FALSE
-# nsCertType = client, email
-# nsComment = "{user}"
-# subjectKeyIdentifier = hash
-# keyUsage = critical, nonRepudiation, digitalSignature
-# extendedKeyUsage = clientAuth, emailProtection, msSmartcardLogin
-# subjectAltName = otherName:msUPN;UTF8:{user}@EXAMPLE.COM, email:{user}@example.com
-# """
-#         with open(f"{CONF_DIR}/req_{user}.cnf", "w") as f:
-#             f.write(user_cnf)
-#             env_logger.debug(f"Configuraiton file for CSR for user {user} is created "
-#                              f"{conf)}/req_{user}.cnf")
+    user_cnf = f"""[ req ]
+                distinguished_name = req_distinguished_name
+                prompt = no
+
+                [ req_distinguished_name ]
+                O = Example
+                OU = Example Test
+                CN = {user}
+
+                [ req_exts ]
+                basicConstraints = CA:FALSE
+                nsCertType = client, email
+                nsComment = "{user}"
+                subjectKeyIdentifier = hash
+                keyUsage = critical, nonRepudiation, digitalSignature
+                extendedKeyUsage = clientAuth, emailProtection, msSmartcardLogin
+                subjectAltName = otherName:msUPN;UTF8:{user}@EXAMPLE.COM, email:{user}@example.com
+                """
+    with open(f"{CONF_DIR}/req_{user}.cnf", "w") as f:
+        f.write(user_cnf)
+        env_logger.debug(f"Configuration file for CSR for user {user} is created "
+                         f"{conf_dir}/req_{user}.cnf")
 
 
 def create_sssd_config(local_user: str = None, krb_user: str = None):
@@ -322,7 +313,7 @@ def create_sssd_config(local_user: str = None, krb_user: str = None):
         krb_user: username for kerberos user with smart card to add the match rule.
     """
     cnf = ConfigParser(allow_no_value=True)
-    cnf.optionxform = str  # Needed for correct parsing of upercase words
+    cnf.optionxform = str  # Needed for correct parsing of uppercase words
     default = {
         "sssd": {"#<[sssd]>": None,
                  "debug_level": "9",
@@ -373,13 +364,8 @@ def create_softhsm2_config(card_dir):
 
 def create_virt_card_config(username, card_dir):
     """
-<<<<<<< HEAD
-    Create systemd service (virt_cacard.service) for virtual smart card.
-=======
     Create systemd service for for virtual smart card (virt_cacard.service).
->>>>>>> 128c623f282b0c071162f572fa9d6dff5d38aaff
     """
-    # TODO create virt_cacard.service
     path = "/etc/systemd/system/virt_cacard.service"
     conf_dir = f"{card_dir}/conf"
     default = {
@@ -408,8 +394,6 @@ def create_virt_card_config(username, card_dir):
         env_logger.debug(
             f"Service file {path} for virtual smart card with {username} is created.")
 
-    # TODO: Create service for krb user
-
 
 def read_config(*items) -> list or str:
     """
@@ -423,7 +407,7 @@ def read_config(*items) -> list or str:
     Returns:
         list with required items
     """
-    with open(config("CONF"), "r") as file:  # FIXME: check what is variable for configuration file
+    with open(config("CONF"), "r") as file:
         config_data = yaml.load(file, Loader=yaml.FullLoader)
         assert config_data, "Data are not loaded correctly."
 
@@ -459,7 +443,7 @@ def setup_ca_(env_file):
     env_logger.debug("Setup of local CA is completed")
 
 
-def setup_virt_card_(user, env_file):
+def setup_virt_card_(user):
     """
     Call setup script fot virtual smart card
 
@@ -488,7 +472,7 @@ def check_semodule():
         module = """
 (allow pcscd_t node_t(tcp_socket(node_bind)))
 
-allow p11_child to read softhsm cache - not present in RHEL by default
+; allow p11_child to read softhsm cache - not present in RHEL by default
 (allow sssd_t named_cache_t(dir(read search)))"""
         with open(f"{work_dir}/conf/virtcacard.cil", "w") as f:
             f.write(module)
