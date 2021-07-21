@@ -25,11 +25,11 @@ def cli():
                    "Value WORK_DIR in configuration file can overwrite "
                    "this parameter.")
 @click.option("--env-file", "-e", type=click.Path(), required=False, default=None,
-              help="Absolute path to .env file with environment varibles to be "
+              help="Absolute path to .env file with environment variables to be "
                    "used in the library.")
 def prepare(setup, conf, work_dir, env_file,):
     """
-    Prepare the whole test environment including temporary directories, necessary
+    Prepair the whole test environment including temporary directories, necessary
     configuration files and services. Also can automatically run setup for local
     CA and virtual smart card.
 
@@ -135,14 +135,15 @@ def setup_krb_server(new):
     cert, key = generate_krb_certs()
     env_logger.debug(f"KDC certificat: {cert}")
     env_logger.debug(f"KDC private key: {key}")
-    krb_ip, krb_root_passwd, krb_srv_name = read_config("krb.ip", "krb.root_passwd", "krb.server_name")
+    krb_ip, krb_root_passwd, krb_srv_name = read_config(
+        "krb.ip", "krb.root_passwd", "krb.server_name")
 
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     ssh.connect(krb_ip, 22, "root", krb_root_passwd)
     env_logger.debug(f"SSH connectin to {krb_ip} is istablished")
     if new:
-        # Install required pakcages on fresh machine
+        # Install required packages on fresh machine
         pkgs = ["ccid", "opensc", "esc", "pcsc-lite", "pcsc-lite-libs", "gdm",
                 "nss-pam-ldapd", "krb5-workstation", "krb5-libs", "krb5-pkinit",
                 "krb5-server", "krb5-pkinit-openssl", "nss-tools", "python3-ldap"]
@@ -166,7 +167,7 @@ def setup_krb_server(new):
                 name = split(item["original"])[1].replace(".", "-original.")
                 sftp.get(item["original"], f"{BACKUP}/{name}")
                 env_logger.debug(f"File {item['original']} from Kerberos server "
-                                 f"({krb_ip}) is backuped to {BACKUP}/{name}")
+                                 f"({krb_ip}) is stored to {BACKUP}/{name}")
             sftp.put(item["new"], item["original"])
             env_logger.debug(f"File {item['new']} from localhost is copied to "
                              f"Kerberos server ({krb_ip}) to {item['original']}")
