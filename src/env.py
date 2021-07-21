@@ -8,7 +8,7 @@ from decouple import config
 from pysftp import Connection
 from SCAutolib import env_logger
 from SCAutolib.src import (BACKUP, CERTS, CONF, CONF_DIR, CONFIG_DATA, KEYS,
-                           SETUP_CA, SETUP_VSC, WORK_DIR, check_env)
+                           SETUP_CA, SETUP_VSC, CA_DIR, check_env)
 
 import utils
 
@@ -20,7 +20,8 @@ def create_kdc_config(sftp: Connection):
     env_logger.debug(f"Realm name: {realm}")
 
     sftp.get(kdc_conf, f"{BACKUP}/kdc-original.conf")
-    env_logger.debug(f"File {kdc_conf} is copied to {BACKUP}/kdc-original.conf")
+    env_logger.debug(
+        f"File {kdc_conf} is copied to {BACKUP}/kdc-original.conf")
 
     cnf = ConfigParser()
     cnf.optionxform = str
@@ -29,14 +30,17 @@ def create_kdc_config(sftp: Connection):
 
         for sec in ["kdcdefaults", "realms"]:
             if not cnf.has_section(sec):
-                env_logger.debug(f"Section {sec} is not present in {kdc_conf}.")
+                env_logger.debug(
+                    f"Section {sec} is not present in {kdc_conf}.")
                 cnf.add_section(sec)
                 env_logger.debug(f"Section {sec} in {kdc_conf} is created.")
         present = True
         if not cnf.has_option("realms", realm):
-            env_logger.debug(f"Option {realm} is not present in realms section in {kdc_conf}.")
+            env_logger.debug(
+                f"Option {realm} is not present in realms section in {kdc_conf}.")
             cnf.set("realms", realm, "{}")
-            env_logger.debug(f"Option {realm} is created in realms section in {kdc_conf}.")
+            env_logger.debug(
+                f"Option {realm} is created in realms section in {kdc_conf}.")
             present = False
         # Parse options for realm in {...}
 
@@ -51,7 +55,8 @@ def create_kdc_config(sftp: Connection):
              "max_renewable_life": "7d"}
 
         if present:
-            env_logger.debug(f"Option {realm} presents in realms section in {kdc_conf}.")
+            env_logger.debug(
+                f"Option {realm} presents in realms section in {kdc_conf}.")
             d = {}
             tmp = cnf.get("realms", realm) \
                 .replace("{", "").replace("}", "").split("\n")
@@ -79,7 +84,8 @@ def create_kdc_config(sftp: Connection):
 
 def create_krb_config(sftp: Connection = None):
     check_env()
-    realm, username, ip_addr = read_config("krb.realm_name", "krb.name", "krb.ip")
+    realm, username, ip_addr = read_config(
+        "krb.realm_name", "krb.name", "krb.ip")
 
     with open(f"{CONF_DIR}/extensions.kdc", "w") as f:
         f.write(f"""[kdc_cert]
@@ -102,7 +108,8 @@ name_string=EXP:1,SEQUENCE:kdc_principals
 [kdc_principals]
 princ1=GeneralString:krbtgt
 princ2=GeneralString:{realm}""")
-        env_logger.debug(f"Extensions file for KDC is created {CONF_DIR}/extensions.kdc")
+        env_logger.debug(
+            f"Extensions file for KDC is created {CONF_DIR}/extensions.kdc")
 
     with open(f"{CONF_DIR}/extensions.client", "w") as f:
         f.write(f"""[client_cert]
@@ -200,13 +207,16 @@ princ1=GeneralString:{username}""")
             cnf.write(f)
             env_logger.debug("File /etc/krb5.conf is updated.")
 
-        subp.run(["setsebool", "-P", "sssd_connect_all_unreserved_ports", "on"], check=True)
-        env_logger.debug("SELinux boolean sssd_connect_all_unreserved_ports is set to ON")
+        subp.run(
+            ["setsebool", "-P", "sssd_connect_all_unreserved_ports", "on"], check=True)
+        env_logger.debug(
+            "SELinux boolean sssd_connect_all_unreserved_ports is set to ON")
 
         krb_ip_addr = read_config("krb.ip")
         with open("/etc/hosts", "a") as f:
             f.write(f"{krb_ip_addr} krb-server.sctesting.redhat.com\n")
-            env_logger.debug("IP address of kerberos server is added to /etc/hosts file")
+            env_logger.debug(
+                "IP address of kerberos server is added to /etc/hosts file")
 
 
 def prep_tmp_dirs():
@@ -214,7 +224,7 @@ def prep_tmp_dirs():
     Prepair directory structure for test environment. All paths are taken from
     previously loaded env file.
     """
-    for dir_env_var in ("WORK_DIR", "TMP", "BACKUP", "CONF_DIR"):
+    for dir_env_var in ("CA_DIR", "TMP", "BACKUP", "CONF_DIR"):
         dir_path = config(dir_env_var, cast=str)
         if not exists(dir_path):
             mkdir(dir_path)
@@ -275,7 +285,8 @@ def create_cnf(user):
                 CN = Example Test CA"""
         with open(f"{conf_dir}/ca.cnf", "w") as f:
             f.write(ca_cnf)
-            env_logger.debug(f"Configuration file for local CA is created {conf_dir}/ca.cnf")
+            env_logger.debug(
+                f"Configuration file for local CA is created {conf_dir}/ca.cnf")
         return
 
     user_cnf = f"""[ req ]
@@ -352,7 +363,7 @@ def create_softhsm2_config(card_dir):
     the error. conf_dir expected to be in work_dir.
     """
     conf_dir = f"{card_dir}/conf"
-    
+
     with open(f"{conf_dir}/softhsm2.conf", "w") as f:
         f.write(f"directories.tokendir = {card_dir}/tokens/\n"
                 f"slots.removable = true\n"
@@ -468,7 +479,7 @@ def setup_virt_card_(user):
 def check_semodule():
     result = subp.run(["semodule", "-l"], capture_output=True)
     if "virtcacard" not in result.output:
-        work_dir = config("WORK_DIR")
+        work_dir = config("CA_DIR")
         module = """
 (allow pcscd_t node_t(tcp_socket(node_bind)))
 
@@ -476,5 +487,3 @@ def check_semodule():
 (allow sssd_t named_cache_t(dir(read search)))"""
         with open(f"{work_dir}/conf/virtcacard.cil", "w") as f:
             f.write(module)
-    
-

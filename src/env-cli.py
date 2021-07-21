@@ -19,15 +19,8 @@ def cli():
                    "smart card deployment")
 @click.option("--conf", "-c", type=click.Path(),
               help="Path to YAML file with configurations.", required=False)
-@click.option("--work-dir", "-w", type=click.Path(), required=False,
-              default=DIR_PATH,
-              help="Absolute path to working directory"
-                   "Value WORK_DIR in configuration file can overwrite "
-                   "this parameter.")
-@click.option("--env-file", "-e", type=click.Path(), required=False, default=None,
-              help="Absolute path to .env file with environment variables to be "
-                   "used in the library.")
-def prepare(setup, conf, work_dir, env_file,):
+@click.option("--ipa", "-i", help="Setup IPA client with existed IPA server (IP address in conf file)")
+def prepare(setup, conf):
     """
     Prepair the whole test environment including temporary directories, necessary
     configuration files and services. Also can automatically run setup for local
@@ -38,7 +31,7 @@ def prepare(setup, conf, work_dir, env_file,):
         setup: if you want to automatically run other setup steps
         conf: path to configuration file im YAML format
         work_dir: path to working directory. Can be overwritten
-                  by variable WORK_DIR in confugration file
+                  by variable CA_DIR in confugration file
         env_file: path to already existing .env file
     """
     # TODO: add getting of work_dir from configuration file
@@ -161,7 +154,7 @@ def setup_krb_server(new):
         env_logger.debug(f"SFTP with server {krb_ip} connection established")
         paths = ({"original": "/var/kerberos/krb5kdc/kdc.pem", "new": cert},
                  {"original": "/var/kerberos/krb5kdc/kdckey.pem", "new": key},
-                 {"original": "/var/kerberos/krb5kdc/kdc-ca.pem", "new": f"{WORK_DIR}/rootCA.crt"})
+                 {"original": "/var/kerberos/krb5kdc/kdc-ca.pem", "new": f"{CA_DIR}/rootCA.crt"})
         for item in paths:
             if sftp.exists(item["original"]):
                 name = split(item["original"])[1].replace(".", "-original.")
