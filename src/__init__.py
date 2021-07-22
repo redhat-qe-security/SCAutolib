@@ -1,4 +1,4 @@
-from os.path import (dirname, abspath, join, exists)
+from os.path import (dirname, abspath, join, exists, relpath)
 
 import yaml
 
@@ -45,7 +45,7 @@ def load_env(conf_file: str) -> str:
             f.write(f"KEYS={join(ca_dir, 'tmp', 'keys')}\n")
             f.write(f"CERTS={join(ca_dir, 'tmp', 'certs')}\n")
             f.write(f"BACKUP={join(ca_dir, 'tmp', 'backup')}\n")
-            f.write(f"CONF={conf_file}\n")
+            f.write(f"CONF=/{relpath(conf_file, '/')}\n")
             f.write(f"CA_DIR={ca_dir}\n")
         env_logger.debug(f"File {env_file} is created")
     return env_file
