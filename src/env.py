@@ -9,13 +9,12 @@ from decouple import config
 from pysftp import Connection
 from SCAutolib import env_logger
 from SCAutolib.src import (BACKUP, CERTS, CONF, CONF_DIR, CONFIG_DATA, KEYS,
-                           SETUP_CA, SETUP_VSC, CA_DIR, check_env)
+                           SETUP_CA, SETUP_VSC, CA_DIR)
 
 import utils
 
 
 def create_kdc_config(sftp: Connection):
-    check_env()
     realm = read_config("krb.realm_name")
     kdc_conf = "/var/kerberos/krb5kdc/kdc.conf"
     env_logger.debug(f"Realm name: {realm}")
@@ -84,7 +83,7 @@ def create_kdc_config(sftp: Connection):
 
 
 def create_krb_config(sftp: Connection = None):
-    check_env()
+    
     realm, username, ip_addr = read_config(
         "krb.realm_name", "krb.name", "krb.ip")
 
@@ -231,7 +230,7 @@ def prep_tmp_dirs():
             mkdir(dir_path)
 
 
-def create_cnf(user):
+def create_cnf(user, conf_dir=None):
     """
     Create configuration files for OpenSSL to generate certificates and requests.
     """
@@ -285,6 +284,8 @@ def create_cnf(user):
                     O  = Example
                     OU = Example Test
                     CN = Example Test CA"""
+        if conf_dir is None:
+            raise Exception(f"No conf directory is provided for user {user}")
         with open(f"{conf_dir}/ca.cnf", "w") as f:
             f.write(ca_cnf)
             env_logger.debug(
@@ -309,7 +310,6 @@ def create_cnf(user):
                 extendedKeyUsage = clientAuth, emailProtection, msSmartcardLogin
                 subjectAltName = otherName:msUPN;UTF8:{user}@EXAMPLE.COM, email:{user}@example.com
                 """
-    # conf_dir =
     with open(f"{conf_dir}/req_{user}.cnf", "w") as f:
         f.write(user_cnf)
         env_logger.debug(f"Configuration file for CSR for user {user} is created "
@@ -446,11 +446,11 @@ def read_config(*items):
 
 
 def setup_ca_(env_file):
-    work_dir = read_config("ca_dir")
+    ca_dir = config("ca_dir")
     env_logger.debug("Start setup of local CA")
 
     out = subp.run(["bash", SETUP_CA,
-                    "--dir", work_dir,
+                    "--dir", ca_dir,
                     "--env", env_file])
     assert out.returncode == 0, "Something break in setup script"
 
@@ -464,7 +464,7 @@ def setup_virt_card_(user):
     Args:
         env_file: Path to .env file
     """
-    check_env()
+    
     ca_dir, card_dir = read_config("work_dir", f"{user}.card_dir")
     cmd = ["bash", SETUP_VSC, "--dir", f"/root/{user}"]
     username = read_config(f"{user}.name")
@@ -498,7 +498,7 @@ def check_semodule():
             "SELinux module for virtual smart cards is installed")
 
 
-def prepare_dir(dir, conf=True):
-    mkdir(dir)
+def prepare_dir(dir_path, conf=True):
+    mkdir(dir_path)
     if conf:
-        mkdir(join(dir, "conf"))
+        mkdir(join(dir_path, "conf"))
