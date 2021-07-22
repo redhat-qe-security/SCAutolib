@@ -3,6 +3,8 @@ import subprocess as subp
 from configparser import ConfigParser
 from os import mkdir
 from os.path import (exists, split)
+from pathlib import Path
+
 
 import yaml
 from decouple import config
@@ -361,8 +363,8 @@ def check_semodule():
 
 
 def prepare_dir(dir_path, conf=True):
-    mkdir(dir_path)
+    Path(dir_path).mkdir(parents=True, exist_ok=True)
     env_logger.debug(f"Directory {dir_path} is created")
     if conf:
-        mkdir(join(dir_path, "conf"))
+        Path(join(dir_path, "conf")).mkdir(parents=True, exist_ok=True)
         env_logger.debug(f"Directory {join(dir_path, 'conf')} is created")
