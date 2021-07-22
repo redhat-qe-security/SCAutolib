@@ -481,19 +481,19 @@ def setup_virt_card_(user):
 
 def check_semodule():
     result = subp.run(["semodule", "-l"], capture_output=True)
-    if "virtcacard" not in result.output:
+    if "virtcacard" not in result.stdout:
         env_logger.debug(
             "SELinux module for virtual smart cards is not present in the system.")
-        work_dir = config("CA_DIR")
+        conf_dir = join(config("CA_DIR"), 'conf')
         module = """
 (allow pcscd_t node_t(tcp_socket(node_bind)))
 
 ; allow p11_child to read softhsm cache - not present in RHEL by default
 (allow sssd_t named_cache_t(dir(read search)))"""
-        with open(f"{work_dir}/conf/virtcacard.cil", "w") as f:
+        with open(f"{conf_dir}/virtcacard.cil", "w") as f:
             f.write(module)
         subp.run(
-            ["semodule", "-i", f"{work_dir}/conf/virtcacard.cil"], check=True)
+            ["semodule", "-i", f"{conf_dir}/virtcacard.cil"], check=True)
         env_logger.debug(
             "SELinux module for virtual smart cards is installed")
 
