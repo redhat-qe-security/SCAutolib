@@ -82,7 +82,6 @@ def setup_ca(conf):
     # TODO: generate certs for Kerberos
     env_path = load_env(conf)
     mkdir(config("CA_DIR"))
-    mkdir(config("CONF_DIR"))
     create_cnf('ca')
     # prepare_ca_configs()
     # prepare_general_configs()

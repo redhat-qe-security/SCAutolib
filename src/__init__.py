@@ -11,7 +11,6 @@ CLEANUP_CA = f"{DIR_PATH}/env/cleanup_ca.sh"
 DOTENV = f"{DIR_PATH}/.env"
 CA_DIR = None
 TMP = None
-CONF_DIR = None
 KEYS = None
 CERTS = None
 BACKUP = None
@@ -23,7 +22,7 @@ CONF = None
 def load_env(conf_file: str) -> str:
     """
     Create .env near source files of the library. In .env file following
-    variables expected to be present: CA_DIR, CONF_DIR, TMP, KEYS, CERTS, BACKUP.
+    variables expected to be present: CA_DIR, TMP, KEYS, CERTS, BACKUP.
     Deployment process would relay on this variables.
 
     Args:
