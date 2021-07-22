@@ -55,7 +55,7 @@ def prepare(setup, conf, ipa):
 
     check_semodule()
     env_logger.debug("SELinux module for virtual smart card is checked")
-
+    create_cnf("ca")
     if setup:
         setup_ca_(env_file)
         for user in users:
