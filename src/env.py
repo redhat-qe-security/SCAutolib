@@ -1,3 +1,4 @@
+from posixpath import join
 import subprocess as subp
 from configparser import ConfigParser
 from os import mkdir
@@ -234,55 +235,56 @@ def create_cnf(user):
     """
     Create configuration files for OpenSSL to generate certificates and requests.
     """
-    conf_dir = config('CONF_DIR')
     if user == "ca":
-        ca_cnf = """[ ca ]
-                default_ca = CA_default
+        ca_dir = config("CA_DIR")
+        conf_dir = join(ca_dir, "conf")
+        ca_cnf = f"""[ ca ]
+                    default_ca = CA_default
 
-                [ CA_default ]
-                dir              = .
-                database         = $dir/index.txt
-                new_certs_dir    = $dir/newcerts
+                    [ CA_default ]
+                    dir              = {ca_dir}
+                    database         = $dir/index.txt
+                    new_certs_dir    = $dir/newcerts
 
-                certificate      = $dir/rootCA.crt
-                serial           = $dir/serial
-                private_key      = $dir/rootCA.key
-                RANDFILE         = $dir/rand
+                    certificate      = $dir/rootCA.crt
+                    serial           = $dir/serial
+                    private_key      = $dir/rootCA.key
+                    RANDFILE         = $dir/rand
 
-                default_days     = 365
-                default_crl_hours = 1
-                default_md       = sha256
+                    default_days     = 365
+                    default_crl_hours = 1
+                    default_md       = sha256
 
-                policy           = policy_any 
-                email_in_dn      = no
+                    policy           = policy_any
+                    email_in_dn      = no
 
-                name_opt         = ca_default
-                cert_opt         = ca_default
-                copy_extensions  = copy
+                    name_opt         = ca_default
+                    cert_opt         = ca_default
+                    copy_extensions  = copy
 
-                [ usr_cert ]
-                authorityKeyIdentifier = keyid, issuer
+                    [ usr_cert ]
+                    authorityKeyIdentifier = keyid, issuer
 
-                [ v3_ca ]
-                subjectKeyIdentifier   = hash
-                authorityKeyIdentifier = keyid:always,issuer:always
-                basicConstraints       = CA:true
-                keyUsage               = critical, digitalSignature, cRLSign, keyCertSign
+                    [ v3_ca ]
+                    subjectKeyIdentifier   = hash
+                    authorityKeyIdentifier = keyid:always,issuer:always
+                    basicConstraints       = CA:true
+                    keyUsage               = critical, digitalSignature, cRLSign, keyCertSign
 
-                [ policy_any ]
-                organizationName       = supplied
-                organizationalUnitName = supplied
-                commonName             = supplied
-                emailAddress           = optional
+                    [ policy_any ]
+                    organizationName       = supplied
+                    organizationalUnitName = supplied
+                    commonName             = supplied
+                    emailAddress           = optional
 
-                [ req ]
-                distinguished_name = req_distinguished_name
-                prompt             = no
+                    [ req ]
+                    distinguished_name = req_distinguished_name
+                    prompt             = no
 
-                [ req_distinguished_name ]
-                O  = Example
-                OU = Example Test
-                CN = Example Test CA"""
+                    [ req_distinguished_name ]
+                    O  = Example
+                    OU = Example Test
+                    CN = Example Test CA"""
         with open(f"{conf_dir}/ca.cnf", "w") as f:
             f.write(ca_cnf)
             env_logger.debug(
@@ -307,7 +309,8 @@ def create_cnf(user):
                 extendedKeyUsage = clientAuth, emailProtection, msSmartcardLogin
                 subjectAltName = otherName:msUPN;UTF8:{user}@EXAMPLE.COM, email:{user}@example.com
                 """
-    with open(f"{CONF_DIR}/req_{user}.cnf", "w") as f:
+    # conf_dir =
+    with open(f"{conf_dir}/req_{user}.cnf", "w") as f:
         f.write(user_cnf)
         env_logger.debug(f"Configuration file for CSR for user {user} is created "
                          f"{conf_dir}/req_{user}.cnf")
@@ -373,11 +376,11 @@ def create_softhsm2_config(card_dir):
                          f"in {CONF_DIR}/softhsm2.conf.")
 
 
-def create_virt_card_config(username, card_dir):
+def create_virt_card_service(username, card_dir):
     """
     Create systemd service for for virtual smart card (virt_cacard.service).
     """
-    path = "/etc/systemd/system/virt_cacard.service"
+    path = f"/etc/systemd/system/virt_cacard_{username}.service"
     conf_dir = f"{card_dir}/conf"
     default = {
         "Unit": {
@@ -403,10 +406,10 @@ def create_virt_card_config(username, card_dir):
         cnf.read_dict(default)
         cnf.write(f)
         env_logger.debug(
-            f"Service file {path} for virtual smart card with {username} is created.")
+            f"Service file {path} for user '{username}' is created.")
 
 
-def read_config(*items) -> list or str:
+def read_config(*items):
     """
     Read data from the configuration file and return require items or full
     content.
@@ -479,6 +482,8 @@ def setup_virt_card_(user):
 def check_semodule():
     result = subp.run(["semodule", "-l"], capture_output=True)
     if "virtcacard" not in result.output:
+        env_logger.debug(
+            "SELinux module for virtual smart cards is not present in the system.")
         work_dir = config("CA_DIR")
         module = """
 (allow pcscd_t node_t(tcp_socket(node_bind)))
@@ -487,3 +492,13 @@ def check_semodule():
 (allow sssd_t named_cache_t(dir(read search)))"""
         with open(f"{work_dir}/conf/virtcacard.cil", "w") as f:
             f.write(module)
+        subp.run(
+            ["semodule", "-i", f"{work_dir}/conf/virtcacard.cil"], check=True)
+        env_logger.debug(
+            "SELinux module for virtual smart cards is installed")
+
+
+def prepare_dir(dir, conf=True):
+    mkdir(dir)
+    if conf:
+        mkdir(join(dir, "conf"))
