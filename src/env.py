@@ -1,10 +1,8 @@
 from posixpath import join
 import subprocess as subp
 from configparser import ConfigParser
-from os import mkdir
 from os.path import (exists, split)
 from pathlib import Path
-
 
 import yaml
 from decouple import config
@@ -310,30 +308,33 @@ def setup_ca_(env_file):
     env_logger.debug("Setup of local CA is completed")
 
 
-def setup_virt_card_(user):
+def setup_virt_card_(user: dict):
     """
     Call setup script fot virtual smart card
 
     Args:
-        env_file: Path to .env file
+        user: dictionary with user information
     """
-    
-    ca_dir, card_dir = read_config("work_dir", f"{user}.card_dir")
-    cmd = ["bash", SETUP_VSC, "--dir", f"/root/{user}"]
-    username = read_config(f"{user}.name")
-    cmd = ["bash", SETUP_VSC, "--dir", card_dir]
-    if user == "local_user":
-        cmd += ["--ca", ca_dir, "--username", username]
+
+    username, card_dir = user["name"], user["card_dir"]
+    cmd = ["bash", SETUP_VSC, "--dir", card_dir, "--username", username]
+    if user["local"]:
+        ca_dir = config("CA_DIR")
+        cmd += ["--ca", ca_dir]
+    else:
+        # TODO: add support for key and certs from IPA
+        env_logger.debug("Not a local user. Skip for now")
+        return
 
     env_logger.debug(f"Start setup of virtual smart card for user {username}")
-    out = subp.run(cmd, check=True)
-
+    out = subp.run(cmd, check=True, stderr=subp.PIPE, stdout=subp.PIPE,
+                   encoding="utf-8")
     assert out.returncode == 0, "Something break in setup script :("
-    env_logger.debug("Setup of local CA is completed")
+    env_logger.debug(f"Setup of virtual smart card for user {username} is completed")
 
 
 def check_semodule():
-    result = subp.run(["semodule", "-l"],  stdout=subp.PIPE, stderr=subp.PIPE,
+    result = subp.run(["semodule", "-l"], stdout=subp.PIPE, stderr=subp.PIPE,
                       encoding="utf-8")
     if "virtcacard" not in result.stdout:
         env_logger.debug(
