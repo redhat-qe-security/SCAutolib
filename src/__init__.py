@@ -48,5 +48,5 @@ def load_env(conf_file: str) -> str:
             f.write(f"BACKUP={join(ca_dir, 'tmp', 'backup')}\n")
             f.write(f"CONF={conf_file}\n")
             f.write(f"CA_DIR={ca_dir}\n")
-            env_logger
+        env_logger.debug(f"File {env_file} is created")
     return env_file
