@@ -83,17 +83,6 @@ def create_kdc_config(sftp: Connection):
         env_logger.debug(f"File {kdc_conf} is updated")
 
 
-def prep_tmp_dirs():
-    """
-    Prepair directory structure for test environment. All paths are taken from
-    previously loaded env file.
-    """
-    for dir_env_var in ("CA_DIR", "TMP", "BACKUP"):
-        dir_path = config(dir_env_var, cast=str)
-        if not exists(dir_path):
-            mkdir(dir_path)
-
-
 def create_cnf(user, conf_dir=None):
     """
     Create configuration files for OpenSSL to generate certificates and requests.
@@ -310,7 +299,7 @@ def read_config(*items):
 
 
 def setup_ca_(env_file):
-    ca_dir = config("ca_dir")
+    ca_dir = config("CA_DIR")
     env_logger.debug("Start setup of local CA")
 
     out = subp.run(["bash", SETUP_CA,
@@ -369,3 +358,15 @@ def prepare_dir(dir_path, conf=True):
     if conf:
         Path(join(dir_path, "conf")).mkdir(parents=True, exist_ok=True)
         env_logger.debug(f"Directory {join(dir_path, 'conf')} is created")
+
+
+def prep_tmp_dirs():
+    """
+    Prepair directory structure for test environment. All paths are taken from
+    previously loaded env file.
+    """
+    paths = [config(path, cast=str) for path in ("CA_DIR", "TMP", "BACKUP")] + \
+            [join(config("CA_DIR"), "conf")]
+    for path in paths:
+        prepare_dir(path, conf=False)
+        env_logger.debug(f"Directory {path} is created")
