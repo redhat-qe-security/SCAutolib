@@ -1,5 +1,4 @@
 from os.path import (dirname, abspath, join, exists)
-from SCAutolib.src import env
 
 import yaml
 
