@@ -500,5 +500,7 @@ def check_semodule():
 
 def prepare_dir(dir_path, conf=True):
     mkdir(dir_path)
+    env_logger.debug(f"Directory {dir_path} is created")
     if conf:
         mkdir(join(dir_path, "conf"))
+        env_logger.debug(f"Directory {join(dir_path, 'conf')} is created")
