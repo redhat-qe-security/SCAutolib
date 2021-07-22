@@ -54,13 +54,13 @@ def prepare(setup, conf, ipa):
         create_virt_card_service(username, card_dir)
 
     check_semodule()
-    env_logger.debug("SELinux module for virtual smart card is checked")
+
     create_cnf("ca")
+
     if setup:
         setup_ca_(env_file)
         for user in users:
-            if user["local"]:
-                setup_virt_card_(user["name"])
+            setup_virt_card_(user)
 
 
 @click.command()
