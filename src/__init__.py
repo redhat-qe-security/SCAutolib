@@ -1,5 +1,4 @@
 from os.path import (dirname, abspath, join, exists)
-from SCAutolib.src import env
 
 import yaml
 
@@ -44,11 +43,10 @@ def load_env(conf_file: str) -> str:
 
         with open(env_file, "w") as f:
             f.write(f"TMP={join(ca_dir, 'tmp')}\n")
-            f.write(f"CONF_DIR={join(ca_dir, 'conf')}\n")
             f.write(f"KEYS={join(ca_dir, 'tmp', 'keys')}\n")
             f.write(f"CERTS={join(ca_dir, 'tmp', 'certs')}\n")
             f.write(f"BACKUP={join(ca_dir, 'tmp', 'backup')}\n")
             f.write(f"CONF={conf_file}\n")
             f.write(f"CA_DIR={ca_dir}\n")
-            env_logger
+        env_logger.debug(f"File {env_file} is created")
     return env_file
