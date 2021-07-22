@@ -16,7 +16,7 @@ def cli():
 @click.option("--conf", "-c", type=click.Path(),
               help="Path to YAML file with configurations.", required=False)
 @click.option("--ipa", "-i", help="Setup IPA client with existed IPA server (IP address in conf file)")
-def prepare(setup, conf):
+def prepare(setup, conf, ipa):
     """
     Prepair the whole test environment including temporary directories, necessary
     configuration files and services. Also can automatically run setup for local
