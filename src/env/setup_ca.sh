@@ -1,6 +1,6 @@
 #!/usr/bin/bash
 # author: Pavel Yadlouski <pyadlous@redhat.com>
-set -e
+set -xe
 
 bold=$(tput bold)
 normal=$(tput sgr0)
@@ -69,17 +69,21 @@ if [[ $RELEASE != *"Red Hat Enterprise Linux release 9"* ]]; then
 fi
 
 if [ "$ENV_PATH" != "" ]; then
+  log "Env file $ENV_PATH is used"
   export $(grep -v '^#' $ENV_PATH | xargs)
-  echo "ROOT_CRT=$WORK_DIR/rootCA.pem" >>"$ENV_PATH"
-else
-  CONF_DIR="$WORK_DIR/conf"
+  echo "ROOT_CRT=$WORK_DIR/rootCA.pem" >> "$ENV_PATH"
 fi
 
+CONF_DIR="$WORK_DIR/conf"
+
 [ ! -d "$WORK_DIR" ] && mkdir -p "$WORK_DIR"
+log "CA directory is checked"
+
 [ ! -d "$CONF_DIR" ] && mkdir -p "$CONF_DIR"
-log "Necessary directory are checked"
+log "Configuration directory for CA is checked"
 
 [ ! -f "$CONF_DIR/ca.cnf" ] && err "File ca.cnf doesn't exist"
+log "Configuration file $CONF_DIR/ca.cnf for CA is fount"
 
 dnf -y install vpcd softhsm python3-pip sssd-tools httpd virt_cacard sssd
 yum groupinstall "Smart Card Support" -y
