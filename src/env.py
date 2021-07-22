@@ -344,7 +344,8 @@ def setup_virt_card_(user):
 
 
 def check_semodule():
-    result = subp.run(["semodule", "-l"],  stdout=subp.PIPE, stderr=subp.PIPE)
+    result = subp.run(["semodule", "-l"],  stdout=subp.PIPE, stderr=subp.PIPE,
+                      encoding="utf-8")
     if "virtcacard" not in result.stdout:
         env_logger.debug(
             "SELinux module for virtual smart cards is not present in the system.")

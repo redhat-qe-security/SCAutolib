@@ -46,9 +46,6 @@ def prepare(setup, conf, ipa):
             env_logger.debug("SSSD configuration file is updated")
 
             create_cnf(username, join(card_dir, "conf"))
-            env_logger.debug(
-                f"Configuration file {join(card_dir, 'conf', f'req_{username}.cnf')}"
-                f"for CSR for user {username} is created")
 
         create_softhsm2_config(card_dir)
         env_logger.debug("SoftHSM2 configuration file is created in the "
