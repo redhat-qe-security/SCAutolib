@@ -1,10 +1,6 @@
 import click
-import paramiko
-from time import sleep
-from pysftp import CnOpts
 
-
-from SCAutolib.src import load_env, DIR_PATH, CLEANUP_CA
+from SCAutolib.src import load_env, CLEANUP_CA
 from SCAutolib.src.env import *
 
 
@@ -117,7 +113,6 @@ def cleanup_ca():
     """
     Cleanup the host after configuration of the testing environment.
     """
-    check_env()
     env_logger.debug("Start cleanup of local CA")
 
     username = read_config("local_user.name")
