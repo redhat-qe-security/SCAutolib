@@ -49,7 +49,7 @@ def prepare(setup, conf):
             create_sssd_config(username)
             env_logger.debug("SSSD configuration file is updated")
 
-            create_cnf(username, card_dir)
+            create_cnf(username, join(card_dir, "conf"))
             env_logger.debug(
                 f"Configuration file {join(card_dir, 'conf', f'req_{username}.cnf')}"
                 f"for CSR for user {username} is created")
@@ -64,8 +64,10 @@ def prepare(setup, conf):
     env_logger.debug("SELinux module for virtual smart card is checked")
 
     if setup:
-        setup_ca_(conf, env_file)
-        setup_virt_card_("local_user")
+        setup_ca_(env_file)
+        for user in users:
+            if user["local"]:
+                setup_virt_card_(user["name"])
 
 
 @click.command()
