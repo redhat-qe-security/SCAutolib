@@ -1,4 +1,4 @@
-from os.path import (dirname, abspath, join, exists)
+from os.path import (dirname, abspath, join, exists, relpath)
 
 import yaml
 
@@ -11,7 +11,6 @@ CLEANUP_CA = f"{DIR_PATH}/env/cleanup_ca.sh"
 DOTENV = f"{DIR_PATH}/.env"
 CA_DIR = None
 TMP = None
-CONF_DIR = None
 KEYS = None
 CERTS = None
 BACKUP = None
@@ -23,7 +22,7 @@ CONF = None
 def load_env(conf_file: str) -> str:
     """
     Create .env near source files of the library. In .env file following
-    variables expected to be present: CA_DIR, CONF_DIR, TMP, KEYS, CERTS, BACKUP.
+    variables expected to be present: CA_DIR, TMP, KEYS, CERTS, BACKUP.
     Deployment process would relay on this variables.
 
     Args:
@@ -39,7 +38,6 @@ def load_env(conf_file: str) -> str:
             env_logger.debug(f"Reading configurations from {conf_file}")
             data = yaml.load(f, Loader=yaml.FullLoader)
             ca_dir = data["ca_dir"]
-        conf_file = conf_file.split("/")[-1]
 
         with open(env_file, "w") as f:
             f.write(f"TMP={join(ca_dir, 'tmp')}\n")

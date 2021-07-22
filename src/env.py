@@ -2,14 +2,15 @@ from posixpath import join
 import subprocess as subp
 from configparser import ConfigParser
 from os import mkdir
-from os.path import exists, isfile, realpath, split
+from os.path import (exists, split)
+from pathlib import Path
+
 
 import yaml
 from decouple import config
 from pysftp import Connection
 from SCAutolib import env_logger
-from SCAutolib.src import (BACKUP, CERTS, CONF, CONF_DIR, CONFIG_DATA, KEYS,
-                           SETUP_CA, SETUP_VSC, CA_DIR)
+from SCAutolib.src import (BACKUP, SETUP_CA, SETUP_VSC)
 
 import utils
 
@@ -80,154 +81,6 @@ def create_kdc_config(sftp: Connection):
     with sftp.open(kdc_conf, "w") as f:
         cnf.write(f)
         env_logger.debug(f"File {kdc_conf} is updated")
-
-
-def create_krb_config(sftp: Connection = None):
-    
-    realm, username, ip_addr = read_config(
-        "krb.realm_name", "krb.name", "krb.ip")
-
-    with open(f"{CONF_DIR}/extensions.kdc", "w") as f:
-        f.write(f"""[kdc_cert]
-basicConstraints=CA:FALSE
-keyUsage=nonRepudiation,digitalSignature,keyEncipherment,keyAgreement
-extendedKeyUsage=1.3.6.1.5.2.3.5
-subjectKeyIdentifier=hash
-authorityKeyIdentifier=keyid,issuer
-issuerAltName=issuer:copy
-subjectAltName=otherName:1.3.6.1.5.2.2;SEQUENCE:kdc_princ_name
-
-[kdc_princ_name]
-realm=EXP:0,GeneralString:{realm}
-principal_name=EXP:1,SEQUENCE:kdc_principal_seq
-
-[kdc_principal_seq]
-name_type=EXP:0,INTEGER:1
-name_string=EXP:1,SEQUENCE:kdc_principals
-
-[kdc_principals]
-princ1=GeneralString:krbtgt
-princ2=GeneralString:{realm}""")
-        env_logger.debug(
-            f"Extensions file for KDC is created {CONF_DIR}/extensions.kdc")
-
-    with open(f"{CONF_DIR}/extensions.client", "w") as f:
-        f.write(f"""[client_cert]
-basicConstraints=CA:FALSE
-keyUsage=digitalSignature,keyEncipherment,keyAgreement
-extendedKeyUsage=1.3.6.1.5.2.3.4
-subjectKeyIdentifier=hash
-authorityKeyIdentifier=keyid,issuer
-issuerAltName=issuer:copy
-subjectAltName=otherName:1.3.6.1.5.2.2;SEQUENCE:princ_name
-
-[princ_name]
-realm=EXP:0,GeneralString:{realm}
-principal_name=EXP:1,SEQUENCE:principal_seq
-
-[principal_seq]
-name_type=EXP:0,INTEGER:1
-name_string=EXP:1,SEQUENCE:principals
-
-[principals]
-princ1=GeneralString:{username}""")
-        env_logger.debug(f"Extensions file for KDC client is created "
-                         f"{CONF_DIR}/extensions.client")
-
-    krb_conf = "/etc/krb5.conf"
-    exist = sftp.exists(krb_conf) if sftp is not None else exists(krb_conf)
-    if exist:
-        utils.backup_(krb_conf, "krb5-original.conf", sftp)
-
-    cnf = ConfigParser()
-    cnf.optionxform = str
-    content = {
-        "logging": {
-            "default": "FILE:/var/log/krb5libs.log",
-            "kdc": "FILE:/var/log/krb5kdc.log",
-            "admin_server": "FILE:/var/log/kadmind.log"
-        },
-        "libdefaults": {
-            "dns_lookup_realm": "false",
-            "dns_lookup_kdc": "false",
-            "rdns": "false",
-            "ticket_lifetime": "24h",
-            "renew_lifetime": "7d",
-            "forwardable": "true",
-            "default_ccache_name": "KEYRING:persistent: % {uid}",
-            "default_realm": realm,
-        },
-        "realms": {
-            realm: """{
-        pkinit_anchors = FILE:/etc/sssd/pki/sssd_auth_ca_db.pem
-        pkinit_cert_match = <KU>digitalSignature
-        kdc = krb-server.sctesting.redhat.com
-        admin_server = krb-server.sctesting.redhat.com
-        pkinit_kdc_hostname = krb-server.sctesting.redhat.com
-        }"""
-        },
-        "domain_realm": {
-            ".sctesting.redhat.com": realm,
-            ".ctesting.redhat.com": realm,
-        },
-    }
-
-    # NOTE: this may be not needed if IPA would be used
-    if sftp:
-        hostname = read_config("krb.server_name")
-        domain_name = hostname.split(".", 1)[1]
-
-        content["realms"] = {realm: "{\n"
-                                    f"""kdc = {hostname}:88
-                                        admin_server = {hostname}"
-                                        default_domain = {domain_name}"
-                                        pkinit_anchors = FILE:/var/kerberos/krb5kdc/kdc-ca.pem\n"""
-                                    "\t}\n"}
-    else:
-        content["appdefaults"] = {
-            "pam": """{
-        debug = true
-        ticket_lifetime = 1h
-        renew_lifetime = 3h
-        forwardable = true
-        krb4_convert = false
-        }"""
-        }
-
-    cnf.read_dict(content)
-
-    if sftp:
-        with sftp.open(krb_conf, "w") as f:
-            f.write("includedir /etc/krb5.conf.d/")
-            cnf.write(f)
-            env_logger.debug("File /etc/krb5.conf is updated.")
-    else:
-        with open(krb_conf, "w") as f:
-            f.write("includedir /etc/krb5.conf.d/")
-            cnf.write(f)
-            env_logger.debug("File /etc/krb5.conf is updated.")
-
-        subp.run(
-            ["setsebool", "-P", "sssd_connect_all_unreserved_ports", "on"], check=True)
-        env_logger.debug(
-            "SELinux boolean sssd_connect_all_unreserved_ports is set to ON")
-
-        krb_ip_addr = read_config("krb.ip")
-        with open("/etc/hosts", "a") as f:
-            f.write(f"{krb_ip_addr} krb-server.sctesting.redhat.com\n")
-            env_logger.debug(
-                "IP address of kerberos server is added to /etc/hosts file")
-
-
-def prep_tmp_dirs():
-    """
-    Prepair directory structure for test environment. All paths are taken from
-    previously loaded env file.
-    """
-    for dir_env_var in ("CA_DIR", "TMP", "BACKUP", "CONF_DIR"):
-        dir_path = config(dir_env_var, cast=str)
-        if not exists(dir_path):
-            mkdir(dir_path)
 
 
 def create_cnf(user, conf_dir=None):
@@ -373,7 +226,7 @@ def create_softhsm2_config(card_dir):
                 f"objectstore.backend = file\n"
                 f"log.level = INFO\n")
         env_logger.debug(f"Configuration file for SoftHSM2 is created "
-                         f"in {CONF_DIR}/softhsm2.conf.")
+                         f"in {conf_dir}/softhsm2.conf.")
 
 
 def create_virt_card_service(username, card_dir):
@@ -446,7 +299,7 @@ def read_config(*items):
 
 
 def setup_ca_(env_file):
-    ca_dir = config("ca_dir")
+    ca_dir = config("CA_DIR")
     env_logger.debug("Start setup of local CA")
 
     out = subp.run(["bash", SETUP_CA,
@@ -480,7 +333,8 @@ def setup_virt_card_(user):
 
 
 def check_semodule():
-    result = subp.run(["semodule", "-l"], capture_output=True)
+    result = subp.run(["semodule", "-l"],  stdout=subp.PIPE, stderr=subp.PIPE,
+                      encoding="utf-8")
     if "virtcacard" not in result.stdout:
         env_logger.debug(
             "SELinux module for virtual smart cards is not present in the system.")
@@ -499,8 +353,20 @@ def check_semodule():
 
 
 def prepare_dir(dir_path, conf=True):
-    mkdir(dir_path)
+    Path(dir_path).mkdir(parents=True, exist_ok=True)
     env_logger.debug(f"Directory {dir_path} is created")
     if conf:
-        mkdir(join(dir_path, "conf"))
+        Path(join(dir_path, "conf")).mkdir(parents=True, exist_ok=True)
         env_logger.debug(f"Directory {join(dir_path, 'conf')} is created")
+
+
+def prep_tmp_dirs():
+    """
+    Prepair directory structure for test environment. All paths are taken from
+    previously loaded env file.
+    """
+    paths = [config(path, cast=str) for path in ("CA_DIR", "TMP", "BACKUP")] + \
+            [join(config("CA_DIR"), "conf")]
+    for path in paths:
+        prepare_dir(path, conf=False)
+        env_logger.debug(f"Directory {path} is created")

@@ -16,7 +16,7 @@ def cli():
 @click.option("--conf", "-c", type=click.Path(),
               help="Path to YAML file with configurations.", required=False)
 @click.option("--ipa", "-i", help="Setup IPA client with existed IPA server (IP address in conf file)")
-def prepare(setup, conf):
+def prepare(setup, conf, ipa):
     """
     Prepair the whole test environment including temporary directories, necessary
     configuration files and services. Also can automatically run setup for local
@@ -46,9 +46,6 @@ def prepare(setup, conf):
             env_logger.debug("SSSD configuration file is updated")
 
             create_cnf(username, join(card_dir, "conf"))
-            env_logger.debug(
-                f"Configuration file {join(card_dir, 'conf', f'req_{username}.cnf')}"
-                f"for CSR for user {username} is created")
 
         create_softhsm2_config(card_dir)
         env_logger.debug("SoftHSM2 configuration file is created in the "
@@ -82,7 +79,6 @@ def setup_ca(conf):
     # TODO: generate certs for Kerberos
     env_path = load_env(conf)
     mkdir(config("CA_DIR"))
-    mkdir(config("CONF_DIR"))
     create_cnf('ca')
     # prepare_ca_configs()
     # prepare_general_configs()
