@@ -3,6 +3,7 @@ import subprocess as subp
 from configparser import ConfigParser
 from os.path import (exists, split)
 from pathlib import Path
+from crypt import crypt
 
 import yaml
 from decouple import config
@@ -319,6 +320,8 @@ def setup_virt_card_(user: dict):
     username, card_dir = user["name"], user["card_dir"]
     cmd = ["bash", SETUP_VSC, "--dir", card_dir, "--username", username]
     if user["local"]:
+        enc_passwd = crypt(user["passwd"], 22)
+        subp.run(["useradd", username, "-m", "-p", enc_passwd])
         ca_dir = config("CA_DIR")
         cmd += ["--ca", ca_dir]
     else:
