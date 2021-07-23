@@ -14,7 +14,7 @@ class VirtCard:
     This class can be used in context manage (with statment).
     """
 
-    def __init__(self, insert=False):
+    def __init__(self, username, insert=False):
         """
         Constructor for virtual smart card.
 
@@ -23,6 +23,7 @@ class VirtCard:
                     inserted in the context manager
         """
         self._insert = insert
+        self.service_name = f"virt_cacard_{username}.service"
         log.debug("Smart card initialized")
 
     def __enter__(self):
@@ -40,7 +41,7 @@ class VirtCard:
 
     def remove(self):
         """Simulate removing of the smart card by stopping the systemd service."""
-        rc = subp.run(["systemctl", "stop", "virt_cacard.service"])
+        rc = subp.run(["systemctl", "stop", self.service_name])
         time.sleep(2)
         msg = "Smart card removal failed"
         assert rc.returncode == 0, msg
@@ -48,7 +49,7 @@ class VirtCard:
 
     def insert(self):
         """Simulate inserting of the smart card by starting the systemd service."""
-        rc = subp.run(["systemctl", "start", "virt_cacard.service"])
+        rc = subp.run(["systemctl", "start", self.service_name])
 
         time.sleep(2)
         msg = "Smart card insert failed"
