@@ -11,8 +11,6 @@ from shutil import copy
 from decouple import config, UndefinedValueError
 import dotenv
 
-# import SCAutolib.src.virt_card as virt_sc
-# import SCAutolib.src.authselect as authselect
 from SCAutolib import env_logger, log
 from SCAutolib.src import DIR_PATH
 
@@ -279,18 +277,3 @@ def generate_cert(username=None):
         f.write(builder.public_bytes(serialization.Encoding.PEM))
 
     return cert_path, key_path
-
-#
-# def check_su_login_with_sc(pin=True, passwd="123456", username="localuser"):
-#     """
-#     Function for common use case - su login.
-#
-#     Args:
-#         pin: Specify is PIN or password is used for login
-#         passwd: PIN or password for login
-#         username: username to login
-#     """
-#     with authselect.Authselect():
-#         with virt_sc.VirtCard(insert=True) as sc:
-#             sc.run_cmd(f'su - {username} -c "su - {username} -c whoami"',
-#                        expect=username, passwd=passwd, pin=pin)
