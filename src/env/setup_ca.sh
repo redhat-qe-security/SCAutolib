@@ -89,12 +89,9 @@ dnf -y install vpcd softhsm python3-pip sssd-tools httpd virt_cacard sssd
 yum groupinstall "Smart Card Support" -y
 log "Necessary packages are installed"
 
-semodule -i "$CONF_DIR/virtcacard.cil" -v
-log "SELinux module for virtual smart card is installed"
-
 pushd "$WORK_DIR" || exit
 
-if [ "$(semodule -l | grep virtcacard)" -ne 0 ]
+if [[ "$(semodule -l | grep virtcacard)" -ne 0 ]]
 then
   log "SELinux module for virt_card is not installed"
   if [ -f "$CONF_DIR/virtcacard.cil" ]
