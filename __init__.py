@@ -10,13 +10,11 @@ handler.setFormatter(formatter)
 # Basic logger
 log = logging.getLogger("base")
 log.setLevel(logging.DEBUG)
-
 log.addHandler(handler)
 
 # Logger for environment events
 env_logger = logging.getLogger("env")
 env_logger.setLevel(logging.DEBUG)
-
 env_logger.addHandler(handler)
 
 
