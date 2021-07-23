@@ -33,7 +33,7 @@ class VirtCard:
 
     def __exit__(self, exp_type, exp_value, exp_traceback):
         if exp_type is not None:
-            log.error("Exception in authselect context")
+            log.error("Exception in virtual smart card context")
             log.error(f"Exception type: {exp_type}")
             log.error(f"Exception value: {exp_value}")
             log.error(f"Exception traceback: {exp_traceback}")
@@ -107,11 +107,12 @@ class VirtCard:
 
         except pexpect.exceptions.EOF as e:
             # Pattern is not found
-            log.error(
-                f"Pattern '{expect}' not found in output.\n"
-                f"Output:\n{str(shell.before)}")
+            log.error(f"Pattern '{expect}' not found in output.\n")
+            log.error(f"Command: {cmd}")
+            log.error(f"Output:\n{str(shell.before)}\n")
             raise e
         except Exception as e:
             log.error(f"Unexpected exception: {str(e)}")
+            log.error(f"Command: {cmd}")
             raise e
         return shell
