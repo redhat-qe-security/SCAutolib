@@ -317,11 +317,16 @@ def setup_virt_card_(user: dict):
         user: dictionary with user information
     """
 
-    username, card_dir = user["name"], user["card_dir"]
+    username, card_dir, passwd = user["name"], user["card_dir"], user["passwd"]
     cmd = ["bash", SETUP_VSC, "--dir", card_dir, "--username", username]
     if user["local"]:
-        enc_passwd = crypt(user["passwd"], '22')
-        subp.run(["useradd", username, "-m", "-p", enc_passwd])
+        if subp.run(["id", username]).returncode != 0:
+            enc_passwd = crypt(passwd, '22')
+            subp.run(["useradd", username, "-m", "-p", enc_passwd])
+        else:
+            with subp.Popen(['/usr/bin/sudo', '/usr/bin/passwd', username, '--stdin']) as proc:
+                proc.communicate(passwd)
+            env_logger.debug(f"Password for user {username} is updated to {passwd}")
         ca_dir = config("CA_DIR")
         cmd += ["--ca", ca_dir]
     else:
