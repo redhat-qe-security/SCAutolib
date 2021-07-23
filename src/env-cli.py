@@ -1,5 +1,4 @@
 import click
-
 from SCAutolib.src import load_env, CLEANUP_CA
 from SCAutolib.src.env import *
 
@@ -21,14 +20,6 @@ def prepare(setup, conf, ipa):
     Prepair the whole test environment including temporary directories, necessary
     configuration files and services. Also can automatically run setup for local
     CA and virtual smart card.
-
-    Args:
-        krb: if you want to deploy kerberos server and client
-        setup: if you want to automatically run other setup steps
-        conf: path to configuration file im YAML format
-        work_dir: path to working directory. Can be overwritten
-                  by variable CA_DIR in confugration file
-        env_file: path to already existing .env file
     """
     env_file = load_env(conf)
 
@@ -54,7 +45,6 @@ def prepare(setup, conf, ipa):
         create_virt_card_service(username, card_dir)
 
     check_semodule()
-
     create_cnf("ca")
 
     if setup:
@@ -78,12 +68,12 @@ def setup_ca(conf):
     """
     # TODO: generate certs for Kerberos
     env_path = load_env(conf)
-    mkdir(config("CA_DIR"))
+    prepare_dir(config("CA_DIR"))
     create_cnf('ca')
     # prepare_ca_configs()
     # prepare_general_configs()
 
-    setup_ca_(conf, env_path)
+    setup_ca_(env_path)
 
 
 @click.command()
@@ -91,10 +81,6 @@ def setup_ca(conf):
 def setup_virt_card(user):
     """
     Setup virtual smart card. Has to be run after configuration of the local CA.
-
-    Args:
-        work_dir: Working directory where all necessary files and directories
-                  are/will be stored
     """
     # env_path = load_env(env, work_dir)
     username, card_dir = read_config(f'{user}.name', f'{user}.card_dir')

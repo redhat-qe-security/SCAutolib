@@ -62,7 +62,7 @@ while (("$#")); do
     fi
     ;;
 
-  -k | --ssh-key)
+  -k | --key)
     if [ -n "$2" ] && [ ${2:0:1} != "-" ]; then
       KEY=$2
       shift 2
