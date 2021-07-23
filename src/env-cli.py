@@ -47,6 +47,10 @@ def prepare(setup, conf, ipa):
     check_semodule()
     create_cnf("ca")
 
+    if ipa:
+        env_logger.debug("Start setup of IPA client")
+        setup_ipa_client_()
+
     if setup:
         setup_ca_(env_file)
         for user in users:

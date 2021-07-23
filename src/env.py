@@ -1,11 +1,13 @@
 from posixpath import join
 import subprocess as subp
+from subprocess import PIPE, run, Popen
 from configparser import ConfigParser
 from os.path import (exists, split)
 from pathlib import Path
 from crypt import crypt
 
 import yaml
+from _cffi_backend import cast
 from decouple import config
 from pysftp import Connection
 from SCAutolib import env_logger
@@ -379,3 +381,72 @@ def prep_tmp_dirs():
             [join(config("CA_DIR"), "conf")]
     for path in paths:
         prepare_dir(path, conf=False)
+
+
+def setup_ipa_client_():
+    run(["yum", "install", "@idm:DL1", "-y"], check=True, stdout=PIPE,
+        stderr=PIPE, encoding="utf-8")
+    run(["dnf", "copr", "enable", "jjelen/vsmartcard", "-y"], check=True,
+        stdout=PIPE, stderr=PIPE, encoding="utf-8")
+    run(["yum", "install", "freeipa-client virt_cacard softhsm", '-y'],
+        check=True, stdout=PIPE, stderr=PIPE, encoding="utf-8")
+    ipa_server_ip, ipa_server_hostname, hostname, admin_passwd, realm, domain = \
+        read_config("ipa_server_ip", "ipa_server_hostname", "ipa_client_hostname",
+                    "ipa_server_admin_passwd", "ipa_realm", "ipa_domain")
+    with open("/etc/hosts", "a") as f:
+        f.write(f"{ipa_server_ip} {ipa_server_hostname}")
+        env_logger.debug(f"New entry for IPA server is added to /etc/hosts:"
+                         f"{ipa_server_ip} {ipa_server_hostname}")
+
+    run(["hostnamectl", "set-hostname", hostname, "--static"], check=True,
+        stdout=PIPE, stderr=PIPE, encoding="utf-8")
+    env_logger.debug(f"Hostname is set to {hostname}")
+
+    run(["ipa-client-install", "-p", "admin", "--password", admin_passwd,
+         "--server", ipa_server_hostname, "--domain", domain, "--realm", realm,
+         "--hostname", hostname, "--all-ip-addresses",  "--force", "--force-join",
+         "--no-ntp"], check=True, stdout=PIPE, stderr=PIPE, encoding="utf-8")
+    env_logger.debug("IPA client installed")
+
+    with Popen(["kinit", "admin"], stdout=PIPE, stderr=PIPE, encoding="utf-8") as proc:
+        proc.communicate(admin_passwd)
+        env_logger.debug("Kerberos ticket for admin is obtained")
+    username, card_dir = read_config("ipa_user.name", "ipa_user.card_dir")
+    run(["openssl", "req", "-new", "-newkey", "rsa:2048", "-days", "365",
+         "-nodes", "-keyout", f"{card_dir}/private.key", "-out",
+         f"{card_dir}/cert.csr", '-subj', f"/CN={username}"], check=True,
+        stdout=PIPE, stderr=PIPE,  encoding="utf-8")
+    env_logger.debug(f"User key is generated into {card_dir}/private.key "
+                     f"and CSR into {card_dir}/cert.csr")
+
+    run(["ipa", "cert-request", f"{card_dir}/cert.csr", "--principal", username,
+         "--certificate-out", f"{card_dir}/cert.pem"], check=True,
+        stdout=PIPE, stderr=PIPE, encoding="utf-8")
+    env_logger.debug(f"Certificate for user {username} is created in "
+                     f"{card_dir}/cert.pem")
+
+
+def setup_ipa_server_():
+# dnf install @idm:DL1 -y
+# dnf install firewalld freeipa-server ipa-server-dns -y
+    run(["dnf", "install", "@idm:DL1", "-y"], check=True,
+        stdout=PIPE, stderr=PIPE, encoding="utf-8")
+    run(["dnf", "install", "firewalld freeipa-server ipa-server-dns", "-y"], check=True,
+        stdout=PIPE, stderr=PIPE, encoding="utf-8")
+    env_logger.debug("Necessary packages for IPA server are installed")
+
+    run(["systemctl", "enable", "firewalld", "--now"], check=True,
+        stdout=PIPE, stderr=PIPE, encoding="utf-8")
+    env_logger.debug("Firewall service is enabled")
+
+    ip_addr, ipa_server_hostnaname, admin_passwd, realm, domain = \
+        read_config("ipa_server_ip", "ipa_server_hostname",
+                    "ipa_server_admin_passwd", "ipa_realm", "ipa_domain")
+    with open("/etc/hosts", "a") as f:
+        f.write(f"{ip_addr} {ipa_server_hostnaname}")
+        env_logger.debug(f"IP address {ip_addr} of IPA server {ipa_server_hostnaname} is "
+                         f"added to /etc/hosts")
+
+    run(["ipa-server-install", "-p", admin_passwd, "-a", admin_passwd,
+         "--realm", realm, "--hostname", ipa_server_hostnaname, "--domain", domain,
+         "--no-ntp", "-U"], check=True, stdout=PIPE, stderr=PIPE, encoding="utf-8")
