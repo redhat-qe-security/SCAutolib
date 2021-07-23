@@ -27,9 +27,7 @@ def prepare(setup, conf, ipa):
     env_logger.debug("tmp directories are created")
 
     users = read_config("local_user", "ipa_user")
-    env_logger.debug(users)
     for user in users:
-        env_logger.debug(user)
         username = user["name"]
         card_dir = user["card_dir"]
         prepare_dir(card_dir)

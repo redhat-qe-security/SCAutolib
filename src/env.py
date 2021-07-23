@@ -373,4 +373,3 @@ def prep_tmp_dirs():
             [join(config("CA_DIR"), "conf")]
     for path in paths:
         prepare_dir(path, conf=False)
-        env_logger.debug(f"Directory {path} is created")
