@@ -324,7 +324,8 @@ def setup_virt_card_(user: dict):
             enc_passwd = crypt(passwd, '22')
             subp.run(["useradd", username, "-m", "-p", enc_passwd])
         else:
-            with subp.Popen(['/usr/bin/sudo', '/usr/bin/passwd', username, '--stdin']) as proc:
+            with subp.Popen(['passwd', username, '--stdin'], stdin=subp.PIPE,
+                            stderr=subp.PIPE, encoding="utf-8") as proc:
                 proc.communicate(passwd)
             env_logger.debug(f"Password for user {username} is updated to {passwd}")
         ca_dir = config("CA_DIR")
