@@ -36,7 +36,7 @@ entry="$(hostname -I | grep -o -E "$rx\.$rx\.$rx\.$rx") $SERVER_HOSTNAME"
 echo "$entry" >> /etc/hosts
 log "Entry $entry is added to /etc/hosts file"
 
-ipa-server-install -p "$ADMIN_PASSWD" -a "$ADMIN_PASSWD" --realm "$REALM" --hostname "$SERVER_HOSTNAME" --domain "$DOMAIN_NAME" --no-ntp
+ipa-server-install -U -p "$ADMIN_PASSWD" -a "$ADMIN_PASSWD" --realm "$REALM" --hostname "$SERVER_HOSTNAME" --domain "$DOMAIN_NAME" --no-ntp
 log "IPA server is installed"
 
 kinit admin
@@ -66,5 +66,3 @@ fi
 
 systemctl restart sssd
 log "SSSD is restarted"
-
-
