@@ -30,6 +30,7 @@ firewall-cmd --reload
 log "Firewall is configured for IPA server"
 
 hostnamectl set-hostname "$SERVER_HOSTNAME" --static
+hostname "$SERVER_HOSTNAME"
 log "Hostname is set to $SERVER_HOSTNAME"
 
 entry="$(hostname -I | grep -o -E "$rx\.$rx\.$rx\.$rx") $SERVER_HOSTNAME"
@@ -53,9 +54,12 @@ cnf = ConfigParser(); \
 cnf.optionxform = str; \
 f = open('/etc/sssd/sssd.conf', 'r'); \
 cnf.read_file(f);\
+f.close; \
 cnf.set('sssd', 'certificate_verification', 'no_ocsp');\
+[cnf.set(sec, 'debug_level', '9') for sec in cnf.sections()];\
+f = open('/etc/sssd/sssd.conf', 'w'); \
 cnf.write(f); \
-f.close();"
+f.close;"
 if [ "$?" -ne "0" ]
 then
     echo "Failed to modify SSSD config" >&2
