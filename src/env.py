@@ -3,11 +3,11 @@ import subprocess as subp
 from subprocess import PIPE, run, Popen
 from configparser import ConfigParser
 from os.path import (exists, split)
+from os import chmod
 from pathlib import Path
 from crypt import crypt
 
 import yaml
-from _cffi_backend import cast
 from decouple import config
 from pysftp import Connection
 from SCAutolib import env_logger
@@ -170,7 +170,7 @@ def create_cnf(user, conf_dir=None):
                          f"{conf_dir}/req_{user}.cnf")
 
 
-def create_sssd_config(local_user: str = None, krb_user: str = None):
+def create_sssd_config(local_user: str = None):
     """
     Update the content of the sssd.conf file. If file exists, it would be store
     to the backup folder and content in would be edited for testing purposes.
@@ -178,7 +178,6 @@ def create_sssd_config(local_user: str = None, krb_user: str = None):
 
     Args:
         local_user: username for local user with smart card to add the match rule.
-        krb_user: username for kerberos user with smart card to add the match rule.
     """
     cnf = ConfigParser(allow_no_value=True)
     cnf.optionxform = str  # Needed for correct parsing of uppercase words
@@ -199,18 +198,20 @@ def create_sssd_config(local_user: str = None, krb_user: str = None):
 
     cnf.read_dict(default)
 
-    if exists("/etc/sssd/sssd.conf"):
-        utils.backup_("/etc/sssd/sssd.conf", name="sssd-original.conf")
+    sssd_conf = "/etc/sssd/sssd.conf"
+    if exists(sssd_conf):
+        utils.backup_(sssd_conf, name="sssd-original.conf")
 
     if local_user:
         cnf[f"certmap/shadowutils/{local_user}"] = {
             f"#<[certmap/shadowutils/{local_user}]>": None,
             "matchrule": f"<SUBJECT>.*CN={local_user}.*"}
 
-    with open("/etc/sssd/sssd.conf", "w") as f:
+    with open(sssd_conf, "w") as f:
         cnf.write(f)
         env_logger.debug("Configuration file for SSSD is updated "
                          "in  /etc/sssd/sssd.conf")
+    chmod(sssd_conf, 0o600)
 
 
 def create_softhsm2_config(card_dir):
