@@ -70,7 +70,7 @@ log "Necessary packages are installed"
 
 echo "$IP $SERVER_HOSTNAME" >> /etc/hosts
 log "New entry '$IP $SERVER_HOSTNAME' is added to /etc/hosts"
-
+set -x
 sed -i "1 i\nameserver $IP" /etc/resolv.conf
 log "IPA server is added to /etc/resolv.conf as first nameserver"
 
@@ -104,14 +104,3 @@ then
 else
     log "SSSD is update for no_ocsp for certificate verification"
 fi
-
-ipa user-add "$USERNAME" --last last --first first --cn "$USERNAME"
-log "User '$USERNAME' is added to IPA server"
-
-mkdir -p "$DIR" && pushd "$DIR"
-openssl req -new -newkey rsa:2048 -days 365 -nodes -keyout private.key \
-            -out cert.csr -subj "/CN=$USERNAME"
-log "CSR for user $USERNAME is created and"
-
-ipa cert-request cert.csr --principal="$USERNAME" --certificate-out cert.pem
-log "Certificate for user $USERNAME is created in cert.pem"

@@ -15,7 +15,8 @@ def cli():
 @click.option("--conf", "-c", type=click.Path(),
               help="Path to YAML file with configurations.", required=False)
 @click.option("--ipa", "-i", help="Setup IPA client with existed IPA server (IP address in conf file)")
-def prepare(setup, conf, ipa):
+@click.option("--ip")
+def prepare(setup, conf, ipa, ip):
     """
     Prepair the whole test environment including temporary directories, necessary
     configuration files and services. Also can automatically run setup for local
@@ -49,10 +50,13 @@ def prepare(setup, conf, ipa):
 
     if ipa:
         env_logger.debug("Start setup of IPA client")
-        setup_ipa_client_()
+        if not ip:
+            ip = read_config("ipa_server_ip")
+        install_ipa_client_(ip)
 
     if setup:
-        setup_ca_(env_file)
+        create_cnf("ca")
+        setup_ca(conf)
         for user in users:
             setup_virt_card_(user)
 
@@ -69,6 +73,7 @@ def setup_ca(conf):
     """
     # TODO: generate certs for Kerberos
     env_path = load_env(conf)
+    general_setup()
     prepare_dir(config("CA_DIR"))
     prep_tmp_dirs()
     create_cnf('ca')
@@ -78,15 +83,32 @@ def setup_ca(conf):
 @click.command()
 @click.option("-u", "--user", type=click.STRING, required=True)
 @click.option("-c", "--conf", type=click.STRING, default=None)
-def setup_virt_card(user, conf):
+@click.option("--key", "-k")
+@click.option("--cert", "-C")
+@click.option("--card-dir", "-d")
+@click.option("--password", "-p")
+@click.option("--local", "-l", is_flag=True)
+def setup_virt_card(username, conf, key, cert, card_dir, password, local):
     """
     Setup virtual smart card. Has to be run after configuration of the local CA.
     """
-    # env_path = load_env(env, work_dir)
     if conf is not None:
         load_env(conf)
-    user = read_config(user)
+    user = read_config(username)
+    general_setup()
+    if user is None:
+        env_logger.debug(f"User {username} is not in the configuration file. "
+                         f"Using values from parameters")
+        user = dict()
+        user["name"] = username
+        user["key"] = key
+        user["cert"] = cert
+        user["card_dir"] = card_dir
+        user["passwd"] = password
+        user["local"] = local
+
     prepare_dir(user["card_dir"])
+    prep_tmp_dirs()
     create_softhsm2_config(user["card_dir"])
     create_virt_card_service(user["name"], user['card_dir'])
     check_semodule()
@@ -118,13 +140,28 @@ def setup_ipa_server(ip):
 
 
 @click.command()
-@click.option("--conf", "-c")
-@click.option("--ip", "-i")
-def setup_ipa_client(ip, conf):
+@click.option("--conf", "-c", default='')
+@click.option("--ip", "-i", default='')
+def install_ipa_client(ip, conf):
     if conf:
         load_env(conf)
-    username, card_dir = read_config("ipa_user.name", "ipa_user.card_dir")
-    setup_ipa_client_(ip, username, card_dir)
+    if not ip:
+        ip = read_config("ipa_server_ip")
+    install_ipa_client_(ip)
+
+
+@click.command()
+@click.option("--username", "-u")
+@click.option("--user-dir", "-d")
+def add_ipa_user(username, user_dir):
+    user = {}
+    if not username or not user_dir:
+        user = read_config("ipa_user")
+    else:
+        user["name"] = username
+        user["card_dir"] = user_dir
+    env_logger.debug(user)
+    add_ipa_user_(user)
 
 
 cli.add_command(setup_ca)
@@ -132,7 +169,8 @@ cli.add_command(setup_virt_card)
 cli.add_command(cleanup_ca)
 cli.add_command(prepare)
 cli.add_command(setup_ipa_server)
-cli.add_command(setup_ipa_client)
+cli.add_command(install_ipa_client)
+cli.add_command(add_ipa_user)
 
 
 if __name__ == "__main__":

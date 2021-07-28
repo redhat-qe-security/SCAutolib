@@ -137,11 +137,11 @@ log "pcscd.service is updated"
 mkdir -p "$CARD_DIR/tokens" "$NSSDB"
 log "Directories for tokens and NSS database are created"
 
-softhsm2-util --init-token --slot 0 --label "SC test" --so-pin="$SOPIN" --pin="$PIN"
+softhsm2-util --init-token --free --label "SC test" --so-pin="$SOPIN" --pin="$PIN"
 log "SoftHSM token is initialized with label 'SC test'"
 
 modutil -create -dbdir sql:"$NSSDB" -force
-log "NSS database is created"
+log "NSS database is initialized"
 
 modutil -list -dbdir sql:"$NSSDB" | grep 'library name: p11-kit-proxy.so'
 if [ "$?" = "1" ]; then
@@ -175,7 +175,7 @@ log "User certificate $CERT_PATH is added to SoftHSM token"
 systemctl daemon-reload
 echo 'disable-in: virt_cacard' >> /usr/share/p11-kit/modules/opensc.module
 log "opensc.module is updated"
-#[ ! -f /etc/systemd/system/virt_cacard.service ] && err "No service for virt_cacard (/etc/systemd/system/virt_cacard.service)"
+
 systemctl restart pcscd
 log "Waiting 10 seconds"
 for _ in {1..10}; do echo -n "."; sleep 1; done
