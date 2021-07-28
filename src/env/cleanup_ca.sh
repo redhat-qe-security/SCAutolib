@@ -1,7 +1,7 @@
 #!/usr/bin/bash
 
-set -xe
-NAME=localuser1
+set -e
+NAME=local-user
 
 while (("$#")); do
   case "$1" in
@@ -21,7 +21,6 @@ while (("$#")); do
   esac
 done
 
-systemctl disable virt_cacard.service --now
 dnf remove virt_cacard vpcd -y
 
 RELEASE=$(cat /etc/redhat-release)
@@ -41,8 +40,7 @@ rm -f /etc/systemd/system/pcscd.service
 systemctl daemon-reload
 systemctl restart pcscd
 
-pip3 uninstall avocado-framework pexpect click pyyaml \
-avocado-framework-plugin-varianter-yaml-to-mux -y
+pip3 uninstall -r ./requirements.txt -y
 
 
 exit 0
