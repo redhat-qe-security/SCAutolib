@@ -430,9 +430,19 @@ def add_ipa_user_(user):
     env_logger.debug(f"Adding user {username} to IPA server")
     args = ["bash", ADD_IPA_CLIENT, "--username", username, "--dir", user_dir]
     run(args, check=True, encoding="utf-8")
+
     env_logger.debug(f"User {username} is added to IPA server. "
                      f"Cert and key stored into {user_dir}")
 
 
 def setup_ipa_server_():
     run(["bash", SETUP_IPA_SERVER])
+
+
+def general_setup():
+    args = ['bash', GENERAL_SETUP]
+    if config("READY", cast=int, default=0) != 1:
+        check_semodule()
+        run(args, check=True)
+        with open(DOTENV, "a") as f:
+            f.write("READY=1")

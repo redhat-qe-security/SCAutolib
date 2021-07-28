@@ -11,6 +11,7 @@ CLEANUP_CA = f"{DIR_PATH}/env/cleanup_ca.sh"
 SETUP_IPA_SERVER = f"{DIR_PATH}/env/ipa-install-server.sh"
 INSTALL_IPA_CLIENT = f"{DIR_PATH}/env/ipa-install-client.sh"
 ADD_IPA_CLIENT = f"{DIR_PATH}/env/ipa-client-add.sh"
+GENERAL_SETUP = f"{DIR_PATH}/env/general_setup.sh"
 DOTENV = f"{DIR_PATH}/.env"
 CA_DIR = None
 TMP = None

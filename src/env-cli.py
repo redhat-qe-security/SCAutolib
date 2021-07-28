@@ -45,8 +45,7 @@ def prepare(setup, conf, ipa, ip):
 
         create_virt_card_service(username, card_dir)
 
-    check_semodule()
-    create_cnf("ca")
+    general_setup()
 
     if ipa:
         env_logger.debug("Start setup of IPA client")
@@ -81,7 +80,7 @@ def setup_ca(conf):
 
 
 @click.command()
-@click.option("-u", "--user", type=click.STRING, required=True)
+@click.option("-u", "--username", type=click.STRING)
 @click.option("-c", "--conf", type=click.STRING, default=None)
 @click.option("--key", "-k")
 @click.option("--cert", "-C")
@@ -111,7 +110,6 @@ def setup_virt_card(username, conf, key, cert, card_dir, password, local):
     prep_tmp_dirs()
     create_softhsm2_config(user["card_dir"])
     create_virt_card_service(user["name"], user['card_dir'])
-    check_semodule()
     setup_virt_card_(user)
 
 
