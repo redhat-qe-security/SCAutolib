@@ -11,7 +11,7 @@ import yaml
 from decouple import config
 from pysftp import Connection
 from SCAutolib import env_logger
-from SCAutolib.src import (BACKUP, SETUP_CA, SETUP_VSC)
+from SCAutolib.src import (BACKUP, SETUP_CA, SETUP_IPA_SERVER, SETUP_VSC)
 
 import utils
 
@@ -428,26 +428,4 @@ def setup_ipa_client_():
 
 
 def setup_ipa_server_():
-# dnf install @idm:DL1 -y
-# dnf install firewalld freeipa-server ipa-server-dns -y
-    run(["dnf", "install", "@idm:DL1", "-y"], check=True,
-        stdout=PIPE, stderr=PIPE, encoding="utf-8")
-    run(["dnf", "install", "firewalld freeipa-server ipa-server-dns", "-y"], check=True,
-        stdout=PIPE, stderr=PIPE, encoding="utf-8")
-    env_logger.debug("Necessary packages for IPA server are installed")
-
-    run(["systemctl", "enable", "firewalld", "--now"], check=True,
-        stdout=PIPE, stderr=PIPE, encoding="utf-8")
-    env_logger.debug("Firewall service is enabled")
-
-    ip_addr, ipa_server_hostnaname, admin_passwd, realm, domain = \
-        read_config("ipa_server_ip", "ipa_server_hostname",
-                    "ipa_server_admin_passwd", "ipa_realm", "ipa_domain")
-    with open("/etc/hosts", "a") as f:
-        f.write(f"{ip_addr} {ipa_server_hostnaname}")
-        env_logger.debug(f"IP address {ip_addr} of IPA server {ipa_server_hostnaname} is "
-                         f"added to /etc/hosts")
-
-    run(["ipa-server-install", "-p", admin_passwd, "-a", admin_passwd,
-         "--realm", realm, "--hostname", ipa_server_hostnaname, "--domain", domain,
-         "--no-ntp", "-U"], check=True, stdout=PIPE, stderr=PIPE, encoding="utf-8")
+    run(["bash", SETUP_IPA_SERVER])

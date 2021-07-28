@@ -8,6 +8,7 @@ DIR_PATH = dirname(abspath(__file__))
 SETUP_CA = f"{DIR_PATH}/env/setup_ca.sh"
 SETUP_VSC = f"{DIR_PATH}/env/setup_virt_card.sh"
 CLEANUP_CA = f"{DIR_PATH}/env/cleanup_ca.sh"
+SETUP_IPA_SERVER = f"{DIR_PATH}/env/ipa-install-server.sh"
 DOTENV = f"{DIR_PATH}/.env"
 CA_DIR = None
 TMP = None
