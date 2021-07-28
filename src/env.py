@@ -11,8 +11,8 @@ import yaml
 from decouple import config
 from pysftp import Connection
 from SCAutolib import env_logger
-from SCAutolib.src import (BACKUP, SETUP_CA, SETUP_IPA_SERVER, SETUP_IPA_CLIENT,
-                           SETUP_VSC)
+from SCAutolib.src import (BACKUP, SETUP_CA, SETUP_IPA_SERVER, INSTALL_IPA_CLIENT,
+                           SETUP_VSC, ADD_IPA_CLIENT)
 
 import utils
 
@@ -409,17 +409,23 @@ def prep_tmp_dirs():
         prepare_dir(path, conf=False)
 
 
-def setup_ipa_client_(ip, username='', card_dir=''):
-    env_logger.debug(f"Start setup of IPA client {username} ")
+def install_ipa_client_(ip):
+    env_logger.debug(f"Start installation of IPA client")
     args = ["bash", SETUP_IPA_CLIENT, ip]
-    if username != '':
-        args += ["--username", username]
-    if card_dir != '':
-        args += ["--dir", card_dir]
     env_logger.debug(f"Aruments for script: {args}")
     run(args, check=True, encoding="utf-8")
-    env_logger.debug(f"IPA client {username} is configured")
-    env_logger.debug(f"Card directory: {card_dir}")
+    env_logger.debug("IPA client is configured on the system. "
+                     "Don't forget to add IPA user by add-ipa-user command :)")
+
+
+def add_ipa_user_(user):
+    username, user_dir = read_config("ipa_user.name", "ipa_user.card_dir")
+    env_logger.debug(f"Adding user {username} to IPA server")
+    args = ["bash", ADD_IPA_CLIENT, "--username", username, "--dir", user_dir]
+    run(args, check=True, encoding="utf-8")
+    env_logger.debug(f"User {username} is added to IPA server. "
+                     f"Cert and key stored into {user_dir}")
+
 
 def setup_ipa_server_():
     run(["bash", SETUP_IPA_SERVER])

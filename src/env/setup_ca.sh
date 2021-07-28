@@ -1,6 +1,6 @@
 #!/usr/bin/bash
 # author: Pavel Yadlouski <pyadlous@redhat.com>
-set -xe
+set -e
 
 bold=$(tput bold)
 normal=$(tput sgr0)

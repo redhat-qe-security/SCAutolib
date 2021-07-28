@@ -15,7 +15,8 @@ def cli():
 @click.option("--conf", "-c", type=click.Path(),
               help="Path to YAML file with configurations.", required=False)
 @click.option("--ipa", "-i", help="Setup IPA client with existed IPA server (IP address in conf file)")
-def prepare(setup, conf, ipa):
+@click.option("--ip")
+def prepare(setup, conf, ipa, ip):
     """
     Prepair the whole test environment including temporary directories, necessary
     configuration files and services. Also can automatically run setup for local
@@ -49,7 +50,9 @@ def prepare(setup, conf, ipa):
 
     if ipa:
         env_logger.debug("Start setup of IPA client")
-        setup_ipa_client_()
+        if not ip:
+            ip = read_config("ipa_server_ip")
+        install_ipa_client_(ip)
 
     if setup:
         setup_ca_(env_file)
@@ -118,13 +121,20 @@ def setup_ipa_server(ip):
 
 
 @click.command()
-@click.option("--conf", "-c")
-@click.option("--ip", "-i")
-def setup_ipa_client(ip, conf):
+@click.option("--conf", "-c", default='')
+@click.option("--ip", "-i", defult='')
+def install_ipa_client(ip, conf):
     if conf:
         load_env(conf)
-    username, card_dir = read_config("ipa_user.name", "ipa_user.card_dir")
-    setup_ipa_client_(ip, username, card_dir)
+    if not ip:
+        ip = read_config("ipa_server_ip")
+    install_ipa_client_(ip)
+
+
+@click.command()
+def add_ipa_user():
+    user = read_config("ipa_user")
+    add_ipa_user_(user)
 
 
 cli.add_command(setup_ca)
@@ -132,7 +142,8 @@ cli.add_command(setup_virt_card)
 cli.add_command(cleanup_ca)
 cli.add_command(prepare)
 cli.add_command(setup_ipa_server)
-cli.add_command(setup_ipa_client)
+cli.add_command(install_ipa_client)
+cli.add_command(add_ipa_user)
 
 
 if __name__ == "__main__":
