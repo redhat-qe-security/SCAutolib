@@ -40,7 +40,7 @@ log "Entry $entry is added to /etc/hosts file"
 ipa-server-install -U -p "$ADMIN_PASSWD" -a "$ADMIN_PASSWD" --realm "$REALM" --hostname "$SERVER_HOSTNAME" --domain "$DOMAIN_NAME" --no-ntp
 log "IPA server is installed"
 
-kinit admin
+echo "$ADMIN_PASSWD" | kinit admin
 log "Kerberos ticket for admin is obtained"
 
 ipa-advise config-server-for-smart-card-auth > ipa-server-sc.sh
