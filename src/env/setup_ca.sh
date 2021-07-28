@@ -125,7 +125,6 @@ log "Certificate for local CA is created"
 
 openssl ca -config "$CONF_DIR"/ca.cnf -gencrl -out crl/root.crl
 log "CRL is created"
-#cp "$WORK_DIR"/rootCA.crt "$WORK_DIR"/rootCA.pem
 cat "$WORK_DIR/rootCA.crt" >> /etc/sssd/pki/sssd_auth_ca_db.pem
 log "Root certificate is copied to /etc/sssd/pki/sssd_auth_ca_db.pem"
 
