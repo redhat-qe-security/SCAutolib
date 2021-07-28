@@ -33,11 +33,13 @@ hostnamectl set-hostname "$SERVER_HOSTNAME" --static
 hostname "$SERVER_HOSTNAME"
 log "Hostname is set to $SERVER_HOSTNAME"
 
-entry="$(hostname -I | grep -o -E "$rx\.$rx\.$rx\.$rx") $SERVER_HOSTNAME"
+ip=$(hostname -I | grep -o -E "$rx\.$rx\.$rx\.$rx")
+entry="$ip $SERVER_HOSTNAME"
 echo "$entry" >> /etc/hosts
 log "Entry $entry is added to /etc/hosts file"
 
 ipa-server-install -U -p "$ADMIN_PASSWD" -a "$ADMIN_PASSWD" --realm "$REALM" --hostname "$SERVER_HOSTNAME" --domain "$DOMAIN_NAME" --no-ntp
+ipa-dns-install --allow-zone-overlap --auto-forwarders --ip-address "$ip"  --no-dnssec-validation --no-reverse
 log "IPA server is installed"
 
 echo "$ADMIN_PASSWD" | kinit admin
@@ -55,7 +57,6 @@ cnf.optionxform = str; \
 f = open('/etc/sssd/sssd.conf', 'r'); \
 cnf.read_file(f);\
 f.close; \
-cnf.set('sssd', 'certificate_verification', 'no_ocsp');\
 [cnf.set(sec, 'debug_level', '9') for sec in cnf.sections()];\
 f = open('/etc/sssd/sssd.conf', 'w'); \
 cnf.write(f); \
@@ -65,7 +66,7 @@ then
     echo "Failed to modify SSSD config" >&2
     exit 1
 else
-    log "SSSD is update for no_ocsp for certificate verification"
+    log "SSSD is update. debug_level = 9 for all sections"
 fi
 
 systemctl restart sssd
