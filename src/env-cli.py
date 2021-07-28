@@ -66,31 +66,31 @@ def setup_ca(conf):
 
     Args:
         conf: Path to YAML file with configurations
-        work_dir: Path to working directory. By default working directory is
-                  in the source directory of the library
-        env_file: Path to .env file with specified variables
     """
     # TODO: generate certs for Kerberos
     env_path = load_env(conf)
     prepare_dir(config("CA_DIR"))
+    prep_tmp_dirs()
     create_cnf('ca')
-    # prepare_ca_configs()
-    # prepare_general_configs()
-
     setup_ca_(env_path)
 
 
 @click.command()
 @click.option("-u", "--user", type=click.STRING, required=True)
-def setup_virt_card(user):
+@click.option("-c", "--conf", type=click.STRING, default=None)
+def setup_virt_card(user, conf):
     """
     Setup virtual smart card. Has to be run after configuration of the local CA.
     """
     # env_path = load_env(env, work_dir)
-    username, card_dir = read_config(f'{user}.name', f'{user}.card_dir')
-    create_softhsm2_config(card_dir)
-    create_virt_card_service(username, card_dir)
-    # setup_virt_card_()
+    if conf is not None:
+        load_env(conf)
+    user = read_config(user)
+    prepare_dir(user["card_dir"])
+    create_softhsm2_config(user["card_dir"])
+    create_virt_card_service(user["name"], user['card_dir'])
+    check_semodule()
+    setup_virt_card_(user)
 
 
 @click.command()
@@ -111,10 +111,28 @@ def cleanup_ca():
     env_logger.debug("Cleanup of local CA is completed")
 
 
+@click.command()
+@click.option("--ip", "-i")
+def setup_ipa_server(ip):
+    setup_ipa_server_()
+
+
+@click.command()
+@click.option("--conf", "-c")
+@click.option("--ip", "-i")
+def setup_ipa_client(ip, conf):
+    if conf:
+        load_env(conf)
+    username, card_dir = read_config("ipa_user.name", "ipa_user.card_dir")
+    setup_ipa_client_(ip, username, card_dir)
+
+
 cli.add_command(setup_ca)
 cli.add_command(setup_virt_card)
 cli.add_command(cleanup_ca)
 cli.add_command(prepare)
+cli.add_command(setup_ipa_server)
+cli.add_command(setup_ipa_client)
 
 
 if __name__ == "__main__":
