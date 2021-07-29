@@ -14,7 +14,7 @@ def cli():
                    "smart card deployment")
 @click.option("--conf", "-c", type=click.Path(),
               help="Path to YAML file with configurations.", required=False)
-@click.option("--ipa", "-i", help="Setup IPA client with existed IPA server (IP address in conf file)")
+@click.option("--ipa", "-i", is_flag=True, help="Setup IPA client with existed IPA server (IP address in conf file)")
 @click.option("--ip")
 def prepare(setup, conf, ipa, ip):
     """
