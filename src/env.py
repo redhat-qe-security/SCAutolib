@@ -359,7 +359,7 @@ def setup_virt_card_(user: dict):
         if user["key"]:
             cmd += ["--key", user["key"]]
         else:
-            raise KeyError
+            raise KeyError()
     except KeyError:
         ca_dir = read_env("CA_DIR")
         cmd += ["--ca", ca_dir]
@@ -395,7 +395,7 @@ def check_semodule():
             ["semodule", "-i", f"{conf_dir}/virtcacard.cil"], check=True)
         env_logger.debug(
             "SELinux module for virtual smart cards is installed")
-
+        subp.run(["systemctl", "restart", "pcscd"], check=True)
 
 def prepare_dir(dir_path, conf=True):
     Path(dir_path).mkdir(parents=True, exist_ok=True)
@@ -416,10 +416,11 @@ def prep_tmp_dirs():
         prepare_dir(path, conf=False)
 
 
-def install_ipa_client_(ip):
+def install_ipa_client_(ip, passwd):
     env_logger.debug(f"Start installation of IPA client")
-    args = ["bash", INSTALL_IPA_CLIENT, "--ip", ip]
+    args = ["bash", INSTALL_IPA_CLIENT, "--ip", ip, "--root", passwd]
     env_logger.debug(f"Aruments for script: {args}")
+
     run(args, check=True, encoding="utf-8")
     env_logger.debug("IPA client is configured on the system. "
                      "Don't forget to add IPA user by add-ipa-user command :)")
@@ -429,6 +430,10 @@ def add_ipa_user_(user):
     username, user_dir = user["name"], user["card_dir"]
     env_logger.debug(f"Adding user {username} to IPA server")
     args = ["bash", ADD_IPA_CLIENT, "--username", username, "--dir", user_dir]
+    # try:
+    #     run(["ipa", "user-find", username], check=True, encoding="utf-8")
+    # except subp.CalledProcessError:
+    #     args += ["--no-new"]
     run(args, check=True, encoding="utf-8")
 
     env_logger.debug(f"User {username} is added to IPA server. "

@@ -1,5 +1,4 @@
 import click
-from SCAutolib.src import load_env, CLEANUP_CA
 from SCAutolib.src.env import *
 
 
@@ -9,20 +8,25 @@ def cli():
 
 
 @click.command()
-@click.option("--setup", "-s", is_flag=True, default=False, required=False,
-              help="Flag for automatic execution of local CA and virtual "
-                   "smart card deployment")
+@click.option("--cards", "-C", is_flag=True, default=False, required=False,
+              help="Flag for setting up virtual smart cards for local_user "
+                   "and ipa_user from the configuration file")
 @click.option("--conf", "-c", type=click.Path(),
               help="Path to YAML file with configurations.", required=False)
-@click.option("--ipa", "-i", help="Setup IPA client with existed IPA server (IP address in conf file)")
-@click.option("--ip")
-def prepare(setup, conf, ipa, ip):
+@click.option("--ipa", "-i", is_flag=True,
+              help="Setup IPA client with existed IPA server (IP address in "
+                   "conf file or specify by --ip parameter)")
+@click.option("--ip", type=click.STRING,
+              help="IP address of IPA server to setup with", required=False)
+@click.option("--ca", is_flag=True, required=False,
+              help="Flag for setting up the local CA")
+def prepare(cards, conf, ipa, ip, ca):
     """
     Prepair the whole test environment including temporary directories, necessary
     configuration files and services. Also can automatically run setup for local
     CA and virtual smart card.
     """
-    env_file = load_env(conf)
+    load_env(conf)
 
     prep_tmp_dirs()
     env_logger.debug("tmp directories are created")
@@ -37,25 +41,31 @@ def prepare(setup, conf, ipa, ip):
             create_sssd_config(username)
             env_logger.debug("SSSD configuration file is updated")
 
-            create_cnf(username, join(card_dir, "conf"))
-
         create_softhsm2_config(card_dir)
         env_logger.debug("SoftHSM2 configuration file is created in the "
                          f"{card_dir}/conf/softhsm2.conf")
 
         create_virt_card_service(username, card_dir)
 
+    check_semodule()
     general_setup()
 
     if ipa:
         env_logger.debug("Start setup of IPA client")
         if not ip:
             ip = read_config("ipa_server_ip")
-        install_ipa_client_(ip)
+        root_passwd, user = read_config("ipa_server_root", "ipa_user")
+        install_ipa_client_(ip, root_passwd)
+        add_ipa_user_(user)
 
-    if setup:
-        create_cnf("ca")
-        setup_ca(conf)
+    if ca:
+        env_logger.debug("Start setup of local CA")
+        prepare_dir(config("CA_DIR"))
+        create_cnf('ca')
+        setup_ca_(DOTENV)
+
+    if cards:
+        env_logger.debug(f"Start setup of virtual smart cards for users in {conf}")
         for user in users:
             setup_virt_card_(user)
 
@@ -145,7 +155,12 @@ def install_ipa_client(ip, conf):
         load_env(conf)
     if not ip:
         ip = read_config("ipa_server_ip")
-    install_ipa_client_(ip)
+    if ip is None:
+        msg = "No IP address for IPA server is provided. Can't continue..."
+        env_logger.error(msg)
+        raise click.MissingParameter(msg)
+    root_passwd = read_config("ipa_server_root")
+    install_ipa_client_(ip, root_passwd)
 
 
 @click.command()

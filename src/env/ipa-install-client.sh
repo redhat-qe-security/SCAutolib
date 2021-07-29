@@ -16,6 +16,7 @@ ADMIN_PASSWD="SECret.123"
 USERNAME="ipa-user"
 DIR="/root/$USERNAME"
 IP=""
+IPA_ROOT=""
 
 function log() {
   echo -e "${GREEN}${bold}[LOG $(date +"%T")]${normal}${NC} $1"
@@ -45,6 +46,15 @@ while (("$#")); do
       exit 1
     fi
     ;;
+  --root)
+    if [ -n "$2" ] && [ ${2:0:1} != "-" ]; then
+      IPA_ROOT=$2
+      shift 2
+    else
+      echo "Error: Argument for $1 is missing" >&2
+      exit 1
+    fi
+    ;;
   -h | --help)
     help
     shift
@@ -65,13 +75,14 @@ fi
 
 yum install @idm:DL1 -y
 dnf -y copr enable jjelen/vsmartcard
-yum install freeipa-client virt_cacard softhsm -y
+dnf install https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm -y
+yum install freeipa-client virt_cacard softhsm sshpass -y
 log "Necessary packages are installed"
 
 echo "$IP $SERVER_HOSTNAME" >> /etc/hosts
 log "New entry '$IP $SERVER_HOSTNAME' is added to /etc/hosts"
-set -x
-sed -i "1 i\nameserver $IP" /etc/resolv.conf
+
+sed -i "1s/^/nameserver $IP\n/" /etc/resolv.conf
 log "IPA server is added to /etc/resolv.conf as first nameserver"
 
 hostnamectl set-hostname "$CLIENT_HOSTNAME" --static
@@ -104,3 +115,7 @@ then
 else
     log "SSSD is update for no_ocsp for certificate verification"
 fi
+
+sshpass -p "$IPA_ROOT" ssh -q -o StrictHostKeyChecking=no root@"$IP" ipa-advise config-client-for-smart-card-auth > ipa-client-sc.sh
+chmod +x ipa-client-sc.sh && ./ipa-client-sc.sh /etc/ipa/ca.crt
+log "Setup of IPA client for smart card is finished"

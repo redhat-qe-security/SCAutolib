@@ -160,15 +160,27 @@ log "Group Smart Card Support is installed"
 
 if [ "$NFS_DIR" -eq 1 ]
 then
-  NFS_SERVER_PATH=$(showmount -e localhost | grep -P -o  "\/[a-zA-Z\/_\-0-9]* ")
-  ssh -o StrictHostKeyChecking=no -i "$KEY" root@"$ip_rhel8" "mkdir /root/sc && mount.nfs 192.168.122.1:$NFS_SERVER_PATH /root/sc"
-  log "NFS directory $NFS_SERVER_PATH is mounted into /root/sc"
+  for path in $(showmount -e localhost | grep -P -o  "\/[a-zA-Z\/_\-0-9]* ")
+  do
+    name=$(basename "$path")
+    ssh -o StrictHostKeyChecking=no -i "$KEY" root@"$ip_rhel8" "mkdir /root/$name && mount.nfs 192.168.122.1:$path /root/$name"
+    log "NFS directory $path is mounted into /root/$name"
 
-  ssh -o StrictHostKeyChecking=no -i "$KEY" root@"$ip_rhel8" "echo \"192.168.122.1:$NFS_SERVER_PATH /root/sc nfs defaults 0 0\" >> /etc/fstab"
-  log "NFS directory $NFS_SERVER_PATH is added to /etc/fstab for automount"
+    ssh -o StrictHostKeyChecking=no -i "$KEY" root@"$ip_rhel8" "echo \"192.168.122.1:$path /root/$name nfs defaults 0 0\" >> /etc/fstab"
+    log "NFS directory $path is added to /etc/fstab for automount to /root/$name"
+  done
 fi
 
-ssh -o StrictHostKeyChecking=no -i "$KEY" root@"$ip_rhel8" "hostnamectl set-hostname $NAME --static"
+cmd="pip3 install --upgrade pip && pip3 install --upgrade -I -r /root/SCAutolib/src/env/requirements.txt "
+ssh -o StrictHostKeyChecking=no -i "$KEY" root@"$ip_rhel8" "$cmd"
+log "Python requirements are installed"
+
+cmd="mkdir -p \$(python3 -m site --user-site) && ln -sf /root/SCAutolib \$(python3 -m site --user-site)"
+ssh -o StrictHostKeyChecking=no -i "$KEY" root@"$ip_rhel8" "$cmd"
+log "SCAutolib is added for python imports to user-site derectory"
+
+cmd="hostnamectl set-hostname $NAME --static"
+ssh -o StrictHostKeyChecking=no -i "$KEY" root@"$ip_rhel8" "$cmd"
 log "Hostname is set to $NAME"
 
 # if $LOCAL != 0
@@ -206,8 +218,8 @@ echo -e \
   	User root
   	UserKnownHostsFile /dev/null
     StrictHostKeyChecking no
-    IdentityFile $KEY\n" >> "$(dirname $KEY)"/config
-log "New entry is created in the $(dirname $KEY)/config for address $ip_rhel8 with name $NAME"
+    IdentityFile $KEY\n" >> "$(dirname "$KEY")"/config
+log "New entry is created in the $(dirname "$KEY")/config for address $ip_rhel8 with name $NAME"
 
 virsh snapshot-create-as --domain "$NAME" --name "initial"
 

@@ -11,7 +11,7 @@ GREEN='\033[0;32m'
 ADMIN_PASSWD="SECret.123"
 USERNAME="ipa-user"
 DIR="/root/$USERNAME"
-
+NO_NEW=0
 function log() {
   echo -e "${GREEN}${bold}[LOG $(date +"%T")]${normal}${NC} $1"
 }
@@ -31,6 +31,10 @@ while (("$#")); do
       exit 1
     fi
     ;;
+  --no-new)
+    NO_NEW=1
+    shift 2
+    ;;
   -* | --*=) # unsupported flags
     echo "Error: Unsupported flag $1" >&2
     exit 1
@@ -39,8 +43,12 @@ while (("$#")); do
 done
 
 echo "$ADMIN_PASSWD" | kinit admin
-ipa user-add "$USERNAME" --last last --first first --cn "$USERNAME"
-log "User '$USERNAME' is added to IPA server"
+
+#if [[ "$NO_NEW" -eq 0 ]]
+#then
+  ipa user-add "$USERNAME" --last last --first first --cn "$USERNAME"
+  log "User '$USERNAME' is added to IPA server"
+#fi
 
 mkdir -p "$DIR" && pushd "$DIR"
 openssl req -new -newkey rsa:2048 -days 365 -nodes -keyout private.key \
