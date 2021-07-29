@@ -65,8 +65,13 @@ def prepare(cards, conf, ipa, ip, ca):
         setup_ca_(DOTENV)
 
     if cards:
-        env_logger.debug(f"Start setup of virtual smart cards for users in {conf}")
-        for user in users:
+        if ca:
+            user = read_config("local_user")
+            env_logger.debug(f"Start setup of virtual smart cards for local user {user}")
+            setup_virt_card_(user)
+        if ipa:
+            user = read_config("ipa_user")
+            env_logger.debug(f"Start setup of virtual smart cards for IPA user {user}")
             setup_virt_card_(user)
 
 
