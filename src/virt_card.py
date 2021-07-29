@@ -14,7 +14,7 @@ class VirtCard:
     This class can be used in context manage (with statment).
     """
 
-    def __init__(self, insert=False):
+    def __init__(self, username, insert=False):
         """
         Constructor for virtual smart card.
 
@@ -23,6 +23,7 @@ class VirtCard:
                     inserted in the context manager
         """
         self._insert = insert
+        self.service_name = f"virt_cacard_{username}.service"
         log.debug("Smart card initialized")
 
     def __enter__(self):
@@ -32,7 +33,7 @@ class VirtCard:
 
     def __exit__(self, exp_type, exp_value, exp_traceback):
         if exp_type is not None:
-            log.error("Exception in authselect context")
+            log.error("Exception in virtual smart card context")
             log.error(f"Exception type: {exp_type}")
             log.error(f"Exception value: {exp_value}")
             log.error(f"Exception traceback: {exp_traceback}")
@@ -40,7 +41,7 @@ class VirtCard:
 
     def remove(self):
         """Simulate removing of the smart card by stopping the systemd service."""
-        rc = subp.run(["systemctl", "stop", "virt_cacard.service"])
+        rc = subp.run(["systemctl", "stop", self.service_name])
         time.sleep(2)
         msg = "Smart card removal failed"
         assert rc.returncode == 0, msg
@@ -48,7 +49,7 @@ class VirtCard:
 
     def insert(self):
         """Simulate inserting of the smart card by starting the systemd service."""
-        rc = subp.run(["systemctl", "start", "virt_cacard.service"])
+        rc = subp.run(["systemctl", "start", self.service_name])
 
         time.sleep(2)
         msg = "Smart card insert failed"
@@ -106,11 +107,12 @@ class VirtCard:
 
         except pexpect.exceptions.EOF as e:
             # Pattern is not found
-            log.error(
-                f"Pattern '{expect}' not found in output.\n"
-                f"Output:\n{str(shell.before)}")
+            log.error(f"Pattern '{expect}' not found in output.\n")
+            log.error(f"Command: {cmd}")
+            log.error(f"Output:\n{str(shell.before)}\n")
             raise e
         except Exception as e:
             log.error(f"Unexpected exception: {str(e)}")
+            log.error(f"Command: {cmd}")
             raise e
         return shell

@@ -1,17 +1,19 @@
 #!/usr/bin/bash
 # author: Pavel Yadlouski <pyadlous@redhat.com>
-set -xe
+set -e
 
 bold=$(tput bold)
 normal=$(tput sgr0)
+RED='\033[0;31m'
+NC='\033[0m' # No Color
+GREEN='\033[0;32m'
 
-
-NAME="localuser1"
 PIN='123456'
 SOPIN='12345678'
 export GNUTLS_PIN=$PIN
 WORK_DIR="."
 ENV_PATH=""
+CONF_DIR=""
 
 function help() {
   echo -e "Script for settingup the local Certificate Authority and virtual smart card"
@@ -24,9 +26,13 @@ function help() {
 }
 
 function log() {
-  echo -e "${bold}[LOG $(date +"%T")]${normal} $1"
+  echo -e "${GREEN}${bold}[LOG $(date +"%T")]${normal}${NC} $1"
 }
 
+function err() {
+  echo -e "${RED}${bold}[ERROR $(date +"%T")]${normal}${NC} $1"
+  exit 1
+}
 
 while (("$#")); do
   case "$1" in
@@ -37,33 +43,6 @@ while (("$#")); do
   --env)
     if [ -n "$2" ] && [ ${2:0:1} != "-" ]; then
       ENV_PATH=$2
-      shift 2
-    else
-      echo "Error: Argument for $1 is missing" >&2
-      exit 1
-    fi
-    ;;
-  --username)
-    if [ -n "$2" ] && [ ${2:0:1} != "-" ]; then
-      NAME=$2
-      shift 2
-    else
-      echo "Error: Argument for $1 is missing" >&2
-      exit 1
-    fi
-    ;;
-  --userpasswd)
-    if [ -n "$2" ] && [ "${2:0:1}" != "-" ]; then
-      USER_PASSWD=$2
-      shift 2
-    else
-      echo "Error: Argument for $1 is missing" >&2
-      exit 1
-    fi
-    ;;
-  --pin)
-    if [ -n "$2" ] && [ "${2:0:1}" != "-" ]; then
-      PIN=$2
       shift 2
     else
       echo "Error: Argument for $1 is missing" >&2
@@ -82,68 +61,72 @@ while (("$#")); do
 done
 
 RELEASE=$(cat /etc/redhat-release)
-if [[ $RELEASE != *"Red Hat Enterprise Linux release 9"*  ]]
-then
+if [[ $RELEASE != *"Red Hat Enterprise Linux release 9"* ]]; then
   dnf -y module enable idm:DL1
+  log "idm:DL1 module is enabled"
   dnf -y copr enable jjelen/vsmartcard
+  log "Copr repo for virt_cacard is enabled"
 fi
 
-export $(grep -v '^#' $ENV_PATH | xargs)
+if [ "$ENV_PATH" != "" ]; then
+  log "Env file $ENV_PATH is used"
+  export $(grep -v '^#' $ENV_PATH | xargs)
+  echo "ROOT_CRT=$WORK_DIR/rootCA.pem" >> "$ENV_PATH"
+fi
 
-NSSDB=$WORK_DIR/db
+CONF_DIR="$WORK_DIR/conf"
 
-dnf -y install vpcd softhsm python3-pip sssd-tools httpd
+[ ! -d "$WORK_DIR" ] && mkdir -p "$WORK_DIR"
+log "CA directory is checked"
+
+[ ! -d "$CONF_DIR" ] && mkdir -p "$CONF_DIR"
+log "Configuration directory for CA is checked"
+
+[ ! -f "$CONF_DIR/ca.cnf" ] && err "File ca.cnf doesn't exist"
+log "Configuration file $CONF_DIR/ca.cnf for CA is fount"
+
+dnf -y install vpcd softhsm python3-pip sssd-tools httpd virt_cacard sssd
 yum groupinstall "Smart Card Support" -y
+log "Necessary packages are installed"
 
-# Configuring softhm2
-P11LIB='/usr/lib64/pkcs11/libsofthsm2.so'
-sed -i "s,<TESTDIR>,$WORK_DIR,g" $CONF_DIR/softhsm2.conf
-cat $CONF_DIR/softhsm2.conf
-pushd $WORK_DIR || exit
+pushd "$WORK_DIR" || exit
 
-mkdir tokens
-export SOFTHSM2_CONF="$CONF_DIR/softhsm2.conf" # Should I save previous value of
-softhsm2-util --init-token --slot 0 --label "SC test" --so-pin="$SOPIN" --pin="$PIN"
+if [[ "$(semodule -l | grep virtcacard)" -ne 0 ]]
+then
+  log "SELinux module for virt_card is not installed"
+  if [ -f "$CONF_DIR/virtcacard.cil" ]
+  then
+    warning "No $CONF_DIR/virtcacard.cil file, creating..."
+    echo -e \
+    "(allow pcscd_t node_t (tcp_socket (node_bind)));
 
-# Creating NSS database
-mkdir $NSSDB
-modutil -create -dbdir sql:$NSSDB -force
-modutil -list -dbdir sql:$NSSDB | grep 'library name: p11-kit-proxy.so'
-if [ "$?" = "1" ]; then
-  modutil -force -add 'SoftHSM PKCS#11' -dbdir sql:$NSSDB -libfile $P11LIB
+; allow p11_child to read softhsm cache - not present in RHEL by default
+(allow sssd_t named_cache_t (dir (read search)));" > "$CONF_DIR/virtcacard.cil"
+  fi
+  semodule -i "$CONF_DIR/virtcacard.cil"
+  log "SELinux module for virt_card is installed"
 fi
 
 # Setup local openssl CA
-mkdir {certs,crl,newcerts}
+mkdir -p {certs,crl,newcerts}
+log "Directories for local CA are created"
+
 touch serial index.txt crlnumber index.txt.attr
 echo 01 >serial
+log "Files for local CA are created"
+
 openssl genrsa -out rootCA.key 2048
+log "Key for local CA is created"
 
-openssl req -batch -config $CONF_DIR/ca.cnf -x509 -new -nodes \
+openssl req -batch -config "$CONF_DIR"/ca.cnf -x509 -new -nodes \
   -key rootCA.key -sha256 -days 10000 -set_serial 0 \
-  -extensions v3_ca -out $WORK_DIR/rootCA.crt
-openssl ca -config $CONF_DIR/ca.cnf -gencrl -out crl/root.crl
+  -extensions v3_ca -out "$WORK_DIR"/rootCA.crt
+log "Certificate for local CA is created"
 
-# Setup user and certs on the card
-useradd -m $NAME
-echo -e "${USER_PASSWD}\n${USER_PASSWD}" | passwd "${NAME}"
-
-openssl genrsa -out ${NAME}.key 2048
-openssl req -new -nodes -key ${NAME}.key -reqexts req_exts -config $CONF_DIR/req_${NAME}.cnf -out ${NAME}.csr
-openssl ca -config $CONF_DIR/ca.cnf -batch -notext -keyfile rootCA.key -in ${NAME}.csr -days 365 -extensions usr_cert -out ${NAME}.crt
-
-pkcs11-tool --module libsofthsm2.so --slot-index 0 -w ${NAME}.key -y privkey --label ${NAME} -p $PIN --set-id 0 -d 0
-pkcs11-tool --module libsofthsm2.so --slot-index 0 -w ${NAME}.crt -y cert --label ${NAME} -p $PIN --set-id 0 -d 0
-######################################
-# Setup SELinux module
-######################################
-semodule -i $CONF_DIR/virtcacard.cil
-cp /usr/lib/systemd/system/pcscd.service /etc/systemd/system/
-sed -i 's/ --auto-exit//' /etc/systemd/system/pcscd.service
-cp $WORK_DIR/rootCA.crt /etc/sssd/pki/sssd_auth_ca_db.pem
-
-systemctl daemon-reload
-systemctl restart pcscd
+openssl ca -config "$CONF_DIR"/ca.cnf -gencrl -out crl/root.crl
+log "CRL is created"
+cat "$WORK_DIR/rootCA.crt" >> /etc/sssd/pki/sssd_auth_ca_db.pem
+log "Root certificate is copied to /etc/sssd/pki/sssd_auth_ca_db.pem"
 
 log "End of setup-ca script"
 

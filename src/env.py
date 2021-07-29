@@ -1,240 +1,177 @@
-from os.path import (exists, realpath, isfile, dirname, abspath, join)
-from os import mkdir
-import click
-import yaml
+from posixpath import join
 import subprocess as subp
-from shutil import copy
-from re import match
+from subprocess import PIPE, run, Popen
+from configparser import ConfigParser
+from os.path import (exists, split)
+from os import chmod
+from pathlib import Path
+from crypt import crypt
+
+import yaml
 from decouple import config
-import utils as utils
+from pysftp import Connection
 from SCAutolib import env_logger
+from SCAutolib.src import (BACKUP, SETUP_CA, SETUP_IPA_SERVER, INSTALL_IPA_CLIENT,
+                           SETUP_VSC, ADD_IPA_CLIENT)
 
-# TODO add docs about parameters
-DIR_PATH = dirname(abspath(__file__))
-SETUP_CA = f"{DIR_PATH}/env/setup_ca.sh"
-SETUP_VSC = f"{DIR_PATH}/env/setup_virt_card.sh"
-CLEANUP_CA = f"{DIR_PATH}/env/cleanup_ca.sh"
-WORK_DIR = f"{DIR_PATH}/virt_card"
-TMP = f"{WORK_DIR}/tmp"
-CONF_DIR = f"{WORK_DIR}/conf"
-KEYS = f"{TMP}/keys"
-CERTS = f"{TMP}/certs"
-BACKUP = f"{TMP}/backup"
-CONFIG_DATA = None  # for caching configuration data
+import utils
 
 
-@click.group()
-def cli():
-    pass
+def create_kdc_config(sftp: Connection):
+    realm = read_config("krb.realm_name")
+    kdc_conf = "/var/kerberos/krb5kdc/kdc.conf"
+    env_logger.debug(f"Realm name: {realm}")
+
+    sftp.get(kdc_conf, f"{BACKUP}/kdc-original.conf")
+    env_logger.debug(
+        f"File {kdc_conf} is copied to {BACKUP}/kdc-original.conf")
+
+    cnf = ConfigParser()
+    cnf.optionxform = str
+    with sftp.open(kdc_conf, "r") as f:
+        cnf.read_file(f, source="kdc.conf")
+
+        for sec in ["kdcdefaults", "realms"]:
+            if not cnf.has_section(sec):
+                env_logger.debug(
+                    f"Section {sec} is not present in {kdc_conf}.")
+                cnf.add_section(sec)
+                env_logger.debug(f"Section {sec} in {kdc_conf} is created.")
+        present = True
+        if not cnf.has_option("realms", realm):
+            env_logger.debug(
+                f"Option {realm} is not present in realms section in {kdc_conf}.")
+            cnf.set("realms", realm, "{}")
+            env_logger.debug(
+                f"Option {realm} is created in realms section in {kdc_conf}.")
+            present = False
+        # Parse options for realm in {...}
+
+        d = {"acl_file": "/var/kerberos/krb5kdc/kadm5.acl",
+             "dict_file": "/usr/share/dict/words",
+             "admin_keytab": "/var/kerberos/krb5kdc/kadm5.keytab",
+             "supported_enctypes": "aes256-cts:normal aes128-cts:normal "
+                                   "arcfour-hmac:normal camellia256-cts:normal "
+                                   "camellia128-cts:normal",
+             "pkinit_allow_upn": "on",
+             "pkinit_eku_checking": "scLogin",
+             "max_renewable_life": "7d"}
+
+        if present:
+            env_logger.debug(
+                f"Option {realm} presents in realms section in {kdc_conf}.")
+            d = {}
+            tmp = cnf.get("realms", realm) \
+                .replace("{", "").replace("}", "").split("\n")
+            tmp = list(filter(None, tmp))
+            for i in tmp:
+                key, value = [a.strip() for a in i.split("=")]
+                d[key] = value
+
+        d["pkinit_anchors"] = "FILE:/var/kerberos/krb5kdc/kdc-ca.pem"
+        d["pkinit_identity"] = "FILE:/var/kerberos/krb5kdc/kdc.pem," \
+                               "/var/kerberos/krb5kdc/kdckey.pem"
+
+        options = [f"{key} = {value}\n" for key, value in d.items()]
+        val = "{\n"
+        for opt in options:
+            val += opt
+        val += "}\n"
+        cnf.set("realms", realm, val)
+        env_logger.debug(f"Value for option {realm} is {value}")
+
+    with sftp.open(kdc_conf, "w") as f:
+        cnf.write(f)
+        env_logger.debug(f"File {kdc_conf} is updated")
 
 
-def check_env():
-    """
-    Insure that environment variables are loaded from .env file.
-    """
-    global BACKUP
-    global KEYS
-    global CERTS
-    global TMP
-    if BACKUP is None:
-        BACKUP = config("BACKUP")
-    if KEYS is None:
-        KEYS = config("KEYS")
-    if CERTS is None:
-        CERTS = config("CERTS")
-    if TMP is None:
-        CERTS = config("TMP")
-
-
-@click.command()
-@click.option("--setup", "-s", is_flag=True, default=False, required=False,
-              help="Flag for automatic execution of local CA and virtual "
-                   "smart card deployment")
-@click.option("--conf", "-c", type=click.Path(),
-              help="Path to YAML file with configurations.", required=False)
-@click.option("--work-dir", "-w", type=click.Path(), required=False,
-              default=DIR_PATH,
-              help="Absolute path to working directory"
-                   "Value WORK_DIR in configuration file can overwrite "
-                   "this parameter.")
-@click.option("--env-file", "-e", type=click.Path(), required=False, default=None,
-              help="Absolute path to .env file with environment varibles to be "
-                   "used in the library.")
-def prepair(setup, conf, work_dir, env_file):
-    """
-    Prepair the whole test envrionment including temporary directories, necessary
-    configuration files and services. Also can automaticaly run setup for local
-    CA and virtual smart card.
-
-    Args:
-        setup: if you want to automatically run other setup steps
-        conf: path to configuration file im YAML format
-        work_dir: path to working directory. Can be overwritten
-                  by varible WORK_DIR in confugration file
-        env_file: path to already existing .env file
-    """
-    # TODO: add geting of work_dir from configuraion file
-    env_file = _load_env(env_file, work_dir)
-
-    _prep_tmp_dirs()
-    env_logger.debug("tmp directories are created")
-
-    usernames = _read_config(conf, items=["local_user.name",
-                                          "krb_user.name"])
-    _create_sssd_config(*usernames)
-    env_logger.debug("SSSD configuration file is updated")
-
-    _create_softhsm2_config()
-    env_logger.debug("SoftHSM2 configuration file is created in the "
-                     f"{CONF_DIR}/softhsm2.conf")
-
-    _create_virtcacard_configs()
-    env_logger.debug("Configuration files for virtual smart card are created.")
-
-    _creat_cnf(usernames)
-
-    if setup:
-        _setup_ca(conf, env_file)
-
-        _setup_virt_card(env_file)
-
-
-def _load_env(env_file, work_dir=join(DIR_PATH, "virt_card")) -> str:
-    """
-    Create .env near source files of the libarary. In .env file following
-    variables expected to be present: WORK_DIR, CONF_DIR, TMP, KEYS, CERTS, BACKUP.
-    Deployment process would relay on this variables.
-
-    Args:
-        env_file:  path to already existing .env file. If given, then it would be just copied to the library.
-        work_dir: working directory
-
-    Returns:
-        Path to .env file.
-    """
-    global WORK_DIR
-    global CONF_DIR
-    global BACKUP
-
-    if env_file is None:
-        env_file = f"{DIR_PATH}/.env"
-        with open(env_file, "w") as f:
-            f.write(f"WORK_DIR={work_dir}\n")
-            f.write(f"TMP={join(work_dir, 'tmp')}\n")
-            f.write(f"CONF_DIR={join(work_dir, 'conf')}\n")
-            f.write(f"KEYS={join(work_dir, 'tmp','keys')}\n")
-            f.write(f"CERTS={join(work_dir, 'tmp','certs')}\n")
-            f.write(f"BACKUP={join(work_dir, 'tmp','backup')}\n")
-    else:
-        # .env file should be near source file
-        # because this env file is used other source files
-        copy(env_file, DIR_PATH)
-        env_file = join(DIR_PATH, ".env")
-    env_logger.debug("Environment file is created")
-    WORK_DIR = work_dir
-    CONF_DIR = config("CONF_DIR", cast=str)
-    BACKUP = config("BACKUP", cast=str)
-    return env_file
-
-
-def _prep_tmp_dirs():
-    """
-    Prepair directory structure for test environment. All paths are taken from
-    previously loaded env file.
-    """
-    for dir_env_var in ("WORK_DIR", "TMP", "KEYS", "CERTS", "BACKUP", "CONF_DIR"):
-        dir_path = config(dir_env_var, cast=str)
-        if not exists(dir_path):
-            mkdir(dir_path)
-
-
-def _creat_cnf(user_list: [], ca: bool = True):
+def create_cnf(user, conf_dir=None):
     """
     Create configuration files for OpenSSL to generate certificates and requests.
-    Args:
-        user_list: list of users for which the configuration file for
-                   certificate signing request should be created
-        ca: if configuration file for local CA is need to be generated
     """
-    if ca:
-        ca_cnf = """[ ca ]
-default_ca = CA_default
+    if user == "ca":
+        ca_dir = config("CA_DIR")
+        conf_dir = join(ca_dir, "conf")
+        ca_cnf = f"""[ ca ]
+                    default_ca = CA_default
 
-[ CA_default ]
-dir              = .
-database         = $dir/index.txt
-new_certs_dir    = $dir/newcerts
+                    [ CA_default ]
+                    dir              = {ca_dir}
+                    database         = $dir/index.txt
+                    new_certs_dir    = $dir/newcerts
 
-certificate      = $dir/rootCA.crt
-serial           = $dir/serial
-private_key      = $dir/rootCA.key
-RANDFILE         = $dir/rand
+                    certificate      = $dir/rootCA.crt
+                    serial           = $dir/serial
+                    private_key      = $dir/rootCA.key
+                    RANDFILE         = $dir/rand
 
-default_days     = 365
-default_crl_hours = 1
-default_md       = sha256
+                    default_days     = 365
+                    default_crl_hours = 1
+                    default_md       = sha256
 
-policy           = policy_any 
-email_in_dn      = no
+                    policy           = policy_any
+                    email_in_dn      = no
 
-name_opt         = ca_default
-cert_opt         = ca_default
-copy_extensions  = copy
+                    name_opt         = ca_default
+                    cert_opt         = ca_default
+                    copy_extensions  = copy
 
-[ usr_cert ]
-authorityKeyIdentifier = keyid, issuer
+                    [ usr_cert ]
+                    authorityKeyIdentifier = keyid, issuer
 
-[ v3_ca ]
-subjectKeyIdentifier   = hash
-authorityKeyIdentifier = keyid:always,issuer:always
-basicConstraints       = CA:true
-keyUsage               = critical, digitalSignature, cRLSign, keyCertSign
+                    [ v3_ca ]
+                    subjectKeyIdentifier   = hash
+                    authorityKeyIdentifier = keyid:always,issuer:always
+                    basicConstraints       = CA:true
+                    keyUsage               = critical, digitalSignature, cRLSign, keyCertSign
 
-[ policy_any ]
-organizationName       = supplied
-organizationalUnitName = supplied
-commonName             = supplied
-emailAddress           = optional
+                    [ policy_any ]
+                    organizationName       = supplied
+                    organizationalUnitName = supplied
+                    commonName             = supplied
+                    emailAddress           = optional
 
-[ req ]
-distinguished_name = req_distinguished_name
-prompt             = no
+                    [ req ]
+                    distinguished_name = req_distinguished_name
+                    prompt             = no
 
-[ req_distinguished_name ]
-O  = Example
-OU = Example Test
-CN = Example Test CA
-        """
-        with open(f"{CONF_DIR}/ca.cnf", "w") as f:
+                    [ req_distinguished_name ]
+                    O  = Example
+                    OU = Example Test
+                    CN = Example Test CA"""
+        if conf_dir is None:
+            raise Exception(f"No conf directory is provided for user {user}")
+        with open(f"{conf_dir}/ca.cnf", "w") as f:
             f.write(ca_cnf)
-            env_logger.debug(f"Confugation file for local CA is created {CONF_DIR}/ca.cnf")
+            env_logger.debug(
+                f"Configuration file for local CA is created {conf_dir}/ca.cnf")
+        return
 
-    for user in user_list:
-        user_cnf = f"""[ req ]
-distinguished_name = req_distinguished_name
-prompt = no
+    user_cnf = f"""[ req ]
+                distinguished_name = req_distinguished_name
+                prompt = no
 
-[ req_distinguished_name ]
-O = Example
-OU = Example Test
-CN = {user}
+                [ req_distinguished_name ]
+                O = Example
+                OU = Example Test
+                CN = {user}
 
-[ req_exts ]
-basicConstraints = CA:FALSE
-nsCertType = client, email
-nsComment = "{user}"
-subjectKeyIdentifier = hash
-keyUsage = critical, nonRepudiation, digitalSignature
-extendedKeyUsage = clientAuth, emailProtection, msSmartcardLogin
-subjectAltName = otherName:msUPN;UTF8:{user}@EXAMPLE.COM, email:{user}@example.com
-"""
-        with open(f"{CONF_DIR}/req_{user}.cnf", "w") as f:
-            f.write(user_cnf)
-            env_logger.debug(f"Configuraiton file for CSR for user {user} is created "
-                             f"{CONF_DIR}/req_{user}.cnf")
+                [ req_exts ]
+                basicConstraints = CA:FALSE
+                nsCertType = client, email
+                nsComment = "{user}"
+                subjectKeyIdentifier = hash
+                keyUsage = critical, nonRepudiation, digitalSignature
+                extendedKeyUsage = clientAuth, emailProtection, msSmartcardLogin
+                subjectAltName = otherName:msUPN;UTF8:{user}@EXAMPLE.COM, email:{user}@example.com
+                """
+    with open(f"{conf_dir}/req_{user}.cnf", "w") as f:
+        f.write(user_cnf)
+        env_logger.debug(f"Configuration file for CSR for user {user} is created "
+                         f"{conf_dir}/req_{user}.cnf")
 
 
-def _create_sssd_config(local_user: str = None, krb_user: str = None):
+def create_sssd_config(local_user: str = None):
     """
     Update the content of the sssd.conf file. If file exists, it would be store
     to the backup folder and content in would be edited for testing purposes.
@@ -242,262 +179,253 @@ def _create_sssd_config(local_user: str = None, krb_user: str = None):
 
     Args:
         local_user: username for local user with smart card to add the match rule.
-        krb_user: username for kerberos user with smart card to add the match rule.
     """
+    cnf = ConfigParser(allow_no_value=True)
+    cnf.optionxform = str  # Needed for correct parsing of uppercase words
+    default = {
+        "sssd": {"#<[sssd]>": None,
+                 "debug_level": "9",
+                 "services": "nss, pam",
+                 "domains": "shadowutils"},
+        "nss": {"#<[nss]>": None,
+                "debug_level": "9"},
+        "pam": {"#<[pam]>": None,
+                "debug_level": "9",
+                "pam_cert_auth": "True"},
+        "domain/shadowutils": {"#<[domain/shadowutils]>": None,
+                               "debug_level": "9",
+                               "id_provider": "files"},
+    }
 
-    holder = "#<{holder}>\n"
-    content = []
-    if exists("/etc/sssd/sssd.conf"):
-        utils._backup("/etc/sssd/sssd.conf", name="sssd-original.conf")
-        with open("/etc/sssd/sssd.conf", "r") as f:
-            content = f.readlines()
-        for index, line in enumerate(content):
-            if match(r"^\[(.*)]\n$", line):
-                content[index] = line + holder.format(holder=line.rstrip("\n"))
-        if local_user:
-            rule = f"\n[certmap/shadowutils/{local_user}]\n" \
-                   f"matchrule = <SUBJECT>.*CN={local_user}.*\n" \
-                   f"#<[certmap/shadowutils/{local_user}]>\n"
-            content.append(rule)
+    cnf.read_dict(default)
 
-        if krb_user:
-            pass
-            # TODO: add rule for kerberos user
-    else:
-        content = ["[sssd]\n",
-                   "#<[sssd]>\n",
-                   "debug_level = 9\n",
-                   "services = nss, pam\n",
-                   "domains = shadowutils\n",
+    sssd_conf = "/etc/sssd/sssd.conf"
+    if exists(sssd_conf):
+        utils.backup_(sssd_conf, name="sssd-original.conf")
 
-                   "\n[nss]\n",
-                   "#<[nss]>\n",
-                   "debug_level = 9\n",
+    if local_user:
+        cnf[f"certmap/shadowutils/{local_user}"] = {
+            f"#<[certmap/shadowutils/{local_user}]>": None,
+            "matchrule": f"<SUBJECT>.*CN={local_user}.*"}
 
-                   "\n[pam]\n",
-                   "#<[pam]>\n",
-                   "debug_level = 9\n",
-                   "pam_cert_auth = True\n",
-
-                   "\n[domain/shadowutils]\n",
-                   "#<[domain/shadowutils]>\n"
-                   "debug_level = 9\n",
-                   "id_provider = files\n"]
-
-        if local_user:
-            content.append(f"\n[certmap/shadowutils/{local_user}]\n"
-                           f"#<[certmap/shadowutils/{local_user}]>\n"
-                           f"matchrule = <SUBJECT>.*CN={local_user}.*\n")
-        if krb_user:
-            pass
-            # TODO: add rule for kerberos user
-
-    with open("/etc/sssd/sssd.conf", "w") as f:
-        f.write("".join(content))
+    with open(sssd_conf, "w") as f:
+        cnf.write(f)
         env_logger.debug("Configuration file for SSSD is updated "
                          "in  /etc/sssd/sssd.conf")
+    chmod(sssd_conf, 0o600)
 
 
-def _create_softhsm2_config():
+def create_softhsm2_config(card_dir):
     """
-    Create SoftHSM2 configuraion file in conf_dir. Same directory has to be used
-    in setup-ca function, otherwise configuraion file wouldn't be found causing
+    Create SoftHSM2 configuration file in conf_dir. Same directory has to be used
+    in setup-ca function, otherwise configuration file wouldn't be found causing
     the error. conf_dir expected to be in work_dir.
     """
-    hsm_conf = config("SOFTHSM2_CONF", default=None)
-    if hsm_conf is not None:
-        with open(f"{BACKUP}/SoftHSM2-conf-env-var", "w") as f:
-            f.write(hsm_conf + "\n")
-        env_logger.debug(f"Original value of SOFTHSM2_CONF is stored into "
-                         f"{BACKUP}/SoftHSM2-conf-env-var file.")
-    with open(f"{CONF_DIR}/softhsm2.conf", "w") as f:
-        f.write(f"directories.tokendir = {WORK_DIR}/tokens/\n"
+    conf_dir = f"{card_dir}/conf"
+
+    with open(f"{conf_dir}/softhsm2.conf", "w") as f:
+        f.write(f"directories.tokendir = {card_dir}/tokens/\n"
                 f"slots.removable = true\n"
                 f"objectstore.backend = file\n"
                 f"log.level = INFO\n")
         env_logger.debug(f"Configuration file for SoftHSM2 is created "
-                         f"in {CONF_DIR}/softhsm2.conf.")
+                         f"in {conf_dir}/softhsm2.conf.")
 
 
-def _create_virtcacard_configs():
+def create_virt_card_service(username, card_dir):
     """
-    Create systemd service (virt_cacard.service) and semodule (virtcacard.cil)
-    for virtual smart card.
+    Create systemd service for for virtual smart card (virt_cacard.service).
     """
-    # TODO create virt_cacard.service
-    service_path = "/etc/systemd/system/virt_cacard.service"
-    module_path = f"{CONF_DIR}/virtcacard.cil"
-    if exists(service_path):
-        utils._backup(service_path, "virt_cacard-original.service")
-    if exists(module_path):
-        utils._backup(module_path, "virtcacard-original.cil")
+    path = f"/etc/systemd/system/virt_cacard_{username}.service"
+    conf_dir = f"{card_dir}/conf"
+    default = {
+        "Unit": {
+            "Description": f"virtual card for {username}",
+            "Requires": "pcscd.service"},
+        "Service": {
+            "Environment": f'SOFTHSM2_CONF="{conf_dir}/softhsm2.conf"',
+            "WorkingDirectory": card_dir,
+            "ExecStart": "/usr/bin/virt_cacard >> /var/log/virt_cacard.debug 2>&1",
+            "KillMode": "process"
+        },
+        "Install": {"WantedBy": "multi-user.target"}
+    }
+    cnf = ConfigParser()
+    cnf.optionxform = str
 
-    with open(service_path, "w") as f:
-        f.write(f"""[Unit]
-Description=virt_cacard Service
-Requires=pcscd.service
+    if exists(path):
+        name = split(path)[1].split(".", 1)
+        name = name[0] + "-original." + name[1]
+        utils.backup_(path, name)
 
-[Service]
-Environment=SOFTHSM2_CONF="{CONF_DIR}/softhsm2.conf"
-WorkingDirectory={WORK_DIR}
-ExecStart=/usr/bin/virt_cacard >> /var/log/virt_cacard.debug 2>&1
-KillMode=process
-
-[Install]
-WantedBy=multi-user.target
-""")
-    env_logger.debug(
-        f"Service file {service_path} for virtual smart card is created.")
-
-    with open(module_path, "w") as f:
-        f.write("""(allow pcscd_t node_t (tcp_socket (node_bind)));
-
-; allow p11_child to read softhsm cache - not present in RHEL by default
-(allow sssd_t named_cache_t (dir (read search)));""")
-
-    env_logger.debug(f"SELinux module create {module_path}")
+    with open(path, "w") as f:
+        cnf.read_dict(default)
+        cnf.write(f)
+    env_logger.debug(f"Service file {path} for user '{username}' "
+                     "is created.")
 
 
-def _read_config(conf, items: [str] = None) -> list:
+def read_env(item, *args, **kwargs):
+    return config(item, *args, **kwargs)
+
+
+def read_config(*items):
     """
     Read data from the configuration file and return require items or full
     content.
 
     Args:
-        conf: path to configuration file
         items: list of items to extracrt from the configuration file.
                If None, full contant would be returned
 
     Returns:
         list with required items
     """
-    global CONFIG_DATA
-    if CONFIG_DATA is None:
-        with open(conf, "r") as file:
-            CONFIG_DATA = yaml.load(file, Loader=yaml.FullLoader)
-            assert CONFIG_DATA, "Data are not loaded correctly."
+    try:
+        with open(read_env("CONF"), "r") as file:
+            config_data = yaml.load(file, Loader=yaml.FullLoader)
+            assert config_data, "Data are not loaded correctly."
+    except FileNotFoundError as e:
+        env_logger.error(".env file is not present. Try to rerun command"
+                         "with --conf </path/to/conf.yaml> parameter")
+        raise e
 
     if items is None:
-        return CONFIG_DATA
+        return config_data
+
     return_list = []
     for item in items:
         parts = item.split(".")
-        value = CONFIG_DATA
+        value = config_data
         for part in parts:
-            try:
-                if value is None:
-                    raise KeyError
-                value = value.get(part)
-
-                if part == parts[-1]:
-                    return_list.append(value)
-            except KeyError:
+            if value is None:
                 env_logger.debug(
                     f"Key {part} not present in the configuration file. Skip.")
                 break
-    return return_list
+
+            value = value.get(part)
+            if part == parts[-1]:
+                return_list.append(value)
+
+    return return_list if len(items) > 1 else return_list[0]
 
 
-@click.command()
-@click.option("--env", type=click.Path(), required=False, default=None,
-              help="Path to .env file with specified variables")
-@click.option("--conf", "-c", type=click.Path(), required=True,
-              help="Path to YAML file with configurations")
-@click.option("--work-dir", type=click.Path(), required=False,
-              default=join(DIR_PATH, "virt_card"),
-              help=f"Path to working directory. By default is "
-                   f"{join(DIR_PATH, 'virt_card')}")
-def setup_ca(conf, env_file, work_dir):
-    """
-    CLI command for setup the local CA.
-
-    Args:
-        conf: Path to YAML file with configurations
-        work_dir: Path to working directory. By default working directory is 
-                  in the source directory of the library
-        env_file: Path to .env file with specified variables
-    """
-
-    env_path = _load_env(env_file, work_dir)
-    _setup_ca(conf, env_path)
-
-
-def _setup_ca(conf, env_file):
-    check_env()
-    assert exists(realpath(conf)), f"File {conf} is not exist."
-    assert isfile(realpath(conf)), f"{conf} is not a file."
-
+def setup_ca_(env_file):
+    ca_dir = read_env("CA_DIR")
     env_logger.debug("Start setup of local CA")
 
-    user = _read_config(conf, items=["local_user"])[0]
     out = subp.run(["bash", SETUP_CA,
-                    "--username", user["name"],
-                    "--userpasswd", user["passwd"],
-                    "--pin", user["pin"],
+                    "--dir", ca_dir,
                     "--env", env_file])
-    assert out.returncode == 0, "Something break in setup playbook :("
+    assert out.returncode == 0, "Something break in setup script"
+
     env_logger.debug("Setup of local CA is completed")
 
 
-@click.command()
-@click.option("--env", type=click.Path(), required=False, default=None,
-              help="Path to .env file with specified variables")
-@click.option("--work-dir", type=click.Path(), required=False,
-              default=join(DIR_PATH, "virt_card"),
-              help="Working directory where all necessary files and directories "
-                   "are/will be stored")
-def setup_virt_card(env, work_dir):
+def setup_virt_card_(user: dict):
     """
-    Setup virtual smart card. Has to be run after configuration of the local CA.
+    Call setup script fot virtual smart card
 
     Args:
-        env: Path to .env file with specified variables
-        work_dir: Working directory where all necessary files and directories
-                  are/will be stored
+        user: dictionary with user information
     """
-    env_path = _load_env(env, work_dir)
-    _setup_virt_card(env_path)
+
+    username, card_dir, passwd = user["name"], user["card_dir"], user["passwd"]
+    cmd = ["bash", SETUP_VSC, "--dir", card_dir, "--username", username]
+    if user["local"]:
+        if subp.run(["id", username]).returncode != 0:
+            enc_passwd = crypt(passwd, '22')
+            subp.run(["useradd", username, "-m", "-p", enc_passwd])
+            env_logger.debug(f"Local user {username} is added to the system "
+                             f"with a password {passwd}")
+        else:
+            with subp.Popen(['passwd', username, '--stdin'], stdin=subp.PIPE,
+                            stderr=subp.PIPE, encoding="utf-8") as proc:
+                proc.communicate(passwd)
+            env_logger.debug(f"Password for user {username} is updated to {passwd}")
+
+    try:
+        if user["cert"]:
+            cmd += ["--cert", user["cert"]]
+        else:
+            raise KeyError
+        if user["key"]:
+            cmd += ["--key", user["key"]]
+        else:
+            raise KeyError
+    except KeyError:
+        ca_dir = read_env("CA_DIR")
+        cmd += ["--ca", ca_dir]
+        env_logger.debug(f"Key or certificate for user {username} "
+                         f"is not present. New pair of key and cert will "
+                         f"be generated by local CA from {ca_dir}")
+
+    env_logger.debug(f"Start setup of virtual smart card for user {username} "
+                     f"in {card_dir}")
+    out = subp.run(cmd, check=True, encoding="utf-8")
+    assert out.returncode == 0, "Something break in setup script of " \
+                                "virtual smart card :("
+    env_logger.debug(f"Setup of virtual smart card for user {username} "
+                     f"is completed")
 
 
-def _setup_virt_card(env_file):
+def check_semodule():
+    result = subp.run(["semodule", "-l"], stdout=subp.PIPE, stderr=subp.PIPE,
+                      encoding="utf-8")
+    if "virtcacard" not in result.stdout:
+        env_logger.debug(
+            "SELinux module for virtual smart cards is not present in the "
+            "system. Installing...")
+        conf_dir = join(read_env("CA_DIR"), 'conf')
+        module = """
+(allow pcscd_t node_t(tcp_socket(node_bind)))
+
+; allow p11_child to read softhsm cache - not present in RHEL by default
+(allow sssd_t named_cache_t(dir(read search)))"""
+        with open(f"{conf_dir}/virtcacard.cil", "w") as f:
+            f.write(module)
+        subp.run(
+            ["semodule", "-i", f"{conf_dir}/virtcacard.cil"], check=True)
+        env_logger.debug(
+            "SELinux module for virtual smart cards is installed")
+
+
+def prepare_dir(dir_path, conf=True):
+    Path(dir_path).mkdir(parents=True, exist_ok=True)
+    env_logger.debug(f"Directory {dir_path} is created")
+    if conf:
+        Path(join(dir_path, "conf")).mkdir(parents=True, exist_ok=True)
+        env_logger.debug(f"Directory {join(dir_path, 'conf')} is created")
+
+
+def prep_tmp_dirs():
     """
-    Call setup scritp fro virtual smart card
-
-    Args:
-        env_file: Path to .env file
+    Prepair directory structure for test environment. All paths are taken from
+    previously loaded env file.
     """
-    check_env()
-    env_logger.debug("Start setup of local CA")
-    out = subp.run(["bash", SETUP_VSC, "-c", CONF_DIR, "-e", env_file])
-
-    assert out.returncode == 0, "Something break in setup playbook :("
-    env_logger.debug("Setup of local CA is completed")
+    paths = [read_env(path, cast=str) for path in ("CA_DIR", "TMP", "BACKUP")] + \
+            [join(read_env("CA_DIR"), "conf")]
+    for path in paths:
+        prepare_dir(path, conf=False)
 
 
-@click.command()
-@click.option("--conf", "-c", type=click.Path(), help="Path to YAML file with configurations")
-def cleanup_ca(conf):
-    """
-    Cleanup the host after configuration of the testing environment.
-
-    Args:
-        conf: path to configuraion file in YAML format
-    """
-    env_logger.debug("Start cleanup of local CA")
-
-    username = _read_config(conf, ["local_user.name"])[0]
-    # TODO: check after adding kerberos user that everything is also OK
-    out = subp.run(
-        ["bash", CLEANUP_CA, "--username", username])
-
-    assert out.returncode == 0, "Something break in cleanup script :("
-    env_logger.debug("Cleanup of local CA is completed")
+def install_ipa_client_(ip):
+    env_logger.debug(f"Start installation of IPA client")
+    args = ["bash", SETUP_IPA_CLIENT, ip]
+    env_logger.debug(f"Aruments for script: {args}")
+    run(args, check=True, encoding="utf-8")
+    env_logger.debug("IPA client is configured on the system. "
+                     "Don't forget to add IPA user by add-ipa-user command :)")
 
 
-cli.add_command(setup_ca)
-cli.add_command(setup_virt_card)
-cli.add_command(cleanup_ca)
-cli.add_command(prepair)
+def add_ipa_user_(user):
+    username, user_dir = read_config("ipa_user.name", "ipa_user.card_dir")
+    env_logger.debug(f"Adding user {username} to IPA server")
+    args = ["bash", ADD_IPA_CLIENT, "--username", username, "--dir", user_dir]
+    run(args, check=True, encoding="utf-8")
+    env_logger.debug(f"User {username} is added to IPA server. "
+                     f"Cert and key stored into {user_dir}")
 
-if __name__ == "__main__":
-    cli()
+
+def setup_ipa_server_():
+    run(["bash", SETUP_IPA_SERVER])
