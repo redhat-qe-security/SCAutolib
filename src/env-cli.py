@@ -122,7 +122,7 @@ def setup_ipa_server(ip):
 
 @click.command()
 @click.option("--conf", "-c", default='')
-@click.option("--ip", "-i", defult='')
+@click.option("--ip", "-i", default='')
 def install_ipa_client(ip, conf):
     if conf:
         load_env(conf)
