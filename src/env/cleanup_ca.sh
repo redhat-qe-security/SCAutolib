@@ -1,7 +1,28 @@
 #!/usr/bin/bash
 
 set -e
-NAME=local-user
+
+bold=$(tput bold)
+normal=$(tput sgr0)
+RED='\033[0;31m'
+NC='\033[0m' # No Color
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+
+ENV_PATH="$(pwd)/../.env"
+
+function log() {
+  echo -e "${GREEN}${bold}[LOG $(date +"%T")]${normal}${NC} $1"
+}
+
+function err() {
+  echo -e "${RED}${bold}[ERROR $(date +"%T")]${normal}${NC} $1"
+  exit 1
+}
+
+function warn() {
+  echo -e "${YELLOW}${bold}[WARNING $(date +"%T")]${normal}${NC} $1"
+}
 
 while (("$#")); do
   case "$1" in
@@ -21,6 +42,13 @@ while (("$#")); do
   esac
 done
 
+if [ "$ENV_PATH" != "" ]
+then
+  export $(grep -v '^#' $ENV_PATH | xargs)
+fi
+
+rm -rf "$CA_DIR"
+
 dnf remove virt_cacard vpcd -y
 
 RELEASE=$(cat /etc/redhat-release)
@@ -30,11 +58,9 @@ then
   dnf -y copr remove jjelen/vsmartcard
 fi
 
-userdel -r ${NAME}
-
 semodule -r virtcacard
 
-rm -f /etc/systemd/system/virt_cacard.service
+rm -f /etc/systemd/system/virt_cacard_*.service
 rm -f /etc/systemd/system/pcscd.service
 
 systemctl daemon-reload
