@@ -6,6 +6,7 @@ from os.path import (exists, split)
 from os import chmod
 from pathlib import Path
 from crypt import crypt
+import python_freeipa as pipa
 
 import yaml
 from decouple import config
@@ -89,7 +90,7 @@ def create_cnf(user, conf_dir=None):
     Create configuration files for OpenSSL to generate certificates and requests.
     """
     if user == "ca":
-        ca_dir = config("CA_DIR")
+        ca_dir = read_config("ca_dir")
         conf_dir = join(ca_dir, "conf")
         ca_cnf = f"""[ ca ]
                     default_ca = CA_default
@@ -170,14 +171,11 @@ def create_cnf(user, conf_dir=None):
                          f"{conf_dir}/req_{user}.cnf")
 
 
-def create_sssd_config(local_user: str = None):
+def create_sssd_config():
     """
     Update the content of the sssd.conf file. If file exists, it would be store
     to the backup folder and content in would be edited for testing purposes.
     If file doesn't exist, it would be created and filled with default options.
-
-    Args:
-        local_user: username for local user with smart card to add the match rule.
     """
     cnf = ConfigParser(allow_no_value=True)
     cnf.optionxform = str  # Needed for correct parsing of uppercase words
@@ -429,12 +427,15 @@ def install_ipa_client_(ip, passwd):
 def add_ipa_user_(user):
     username, user_dir = user["name"], user["card_dir"]
     env_logger.debug(f"Adding user {username} to IPA server")
-    args = ["bash", ADD_IPA_CLIENT, "--username", username, "--dir", user_dir]
-    # try:
-    #     run(["ipa", "user-find", username], check=True, encoding="utf-8")
-    # except subp.CalledProcessError:
-    #     args += ["--no-new"]
-    run(args, check=True, encoding="utf-8")
+    ipa_admin_passwd, ipa_hostname = read_config("ipa_server_admin_passwd", "ipa_server_hostname")
+    client = pipa.ClientMeta(ipa_hostname)
+    client.login("admin", ipa_admin_passwd)
+    try:
+        user = client.user_add('test3', 'John', 'Doe', 'John Doe' )
+    except pipa.exceptions.DuplicateEntry:
+        env_logger.error(f"User {username} already exists in the IPA server "
+                         f"{ipa_hostname}")
+        exit(1)
 
     env_logger.debug(f"User {username} is added to IPA server. "
                      f"Cert and key stored into {user_dir}")
@@ -451,3 +452,14 @@ def general_setup():
         run(args, check=True)
         with open(DOTENV, "a") as f:
             f.write("READY=1")
+
+
+def create_sc(sc_user):
+    name, card_dir = sc_user["name"], sc_user["card_dir"]
+    prepare_dir(card_dir)
+    create_softhsm2_config(card_dir)
+    env_logger.debug("SoftHSM2 configuration file is created in the "
+                     f"{card_dir}/conf/softhsm2.conf")
+    create_virt_card_service(name, card_dir)
+    env_logger.debug(f"Start setup of virtual smart cards for local user {name}")
+    setup_virt_card_(sc_user)
