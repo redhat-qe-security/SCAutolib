@@ -7,3 +7,4 @@ python-decouple
 paramiko
 pysftp
 python-dotenv
+python-freeipa

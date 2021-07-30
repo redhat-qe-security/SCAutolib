@@ -29,34 +29,25 @@ def prepare(cards, conf, ipa, ip, ca):
     load_env(conf)
 
     prep_tmp_dirs()
-    env_logger.debug("tmp directories are created")
+    env_logger.debug("Temporary directories are created")
 
-    users = read_config("local_user", "ipa_user")
-    for user in users:
-        username = user["name"]
-        card_dir = user["card_dir"]
-        prepare_dir(card_dir)
-
-        if user["local"]:
-            create_sssd_config(username)
-            env_logger.debug("SSSD configuration file is updated")
-
-        create_softhsm2_config(card_dir)
-        env_logger.debug("SoftHSM2 configuration file is created in the "
-                         f"{card_dir}/conf/softhsm2.conf")
-
-        create_virt_card_service(username, card_dir)
-
+    create_sssd_config()
     check_semodule()
     general_setup()
 
     if ipa:
         env_logger.debug("Start setup of IPA client")
         if not ip:
+            env_logger.debug("No IP address for IPA server is given.")
+            env_logger.debug("Try to get IP address of IPA server from "
+                             "configuration file.")
             ip = read_config("ipa_server_ip")
-        root_passwd, user = read_config("ipa_server_root", "ipa_user")
+        if ip is None:
+            env_logger.error("Can't find IP address of IPA server in "
+                             "configuration file")
+            exit(1)
+        root_passwd = read_config("ipa_server_root")
         install_ipa_client_(ip, root_passwd)
-        add_ipa_user_(user)
 
     if ca:
         env_logger.debug("Start setup of local CA")
@@ -68,11 +59,13 @@ def prepare(cards, conf, ipa, ip, ca):
         if ca:
             user = read_config("local_user")
             env_logger.debug(f"Start setup of virtual smart cards for local user {user}")
-            setup_virt_card_(user)
+            create_sc(user)
+
         if ipa:
             user = read_config("ipa_user")
+            add_ipa_user_(user)
             env_logger.debug(f"Start setup of virtual smart cards for IPA user {user}")
-            setup_virt_card_(user)
+            create_sc(user)
 
 
 @click.command()
@@ -121,11 +114,7 @@ def setup_virt_card(username, conf, key, cert, card_dir, password, local):
         user["passwd"] = password
         user["local"] = local
 
-    prepare_dir(user["card_dir"])
-    prep_tmp_dirs()
-    create_softhsm2_config(user["card_dir"])
-    create_virt_card_service(user["name"], user['card_dir'])
-    setup_virt_card_(user)
+    create_sc(user)
 
 
 @click.command()
@@ -169,16 +158,14 @@ def install_ipa_client(ip, conf):
 
 
 @click.command()
-@click.option("--username", "-u")
+@click.option("--username", "-u", required=True)
 @click.option("--user-dir", "-d")
 def add_ipa_user(username, user_dir):
-    user = {}
-    if not username or not user_dir:
-        user = read_config("ipa_user")
-    else:
+    user = read_config(username)
+    if user is None:
+        user = dict()
         user["name"] = username
         user["card_dir"] = user_dir
-    env_logger.debug(user)
     add_ipa_user_(user)
 
 
