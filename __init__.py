@@ -4,7 +4,7 @@ from sys import stdout
 handler = logging.StreamHandler(stdout)
 handler.setLevel(logging.DEBUG)
 
-formatter = logging.Formatter('%(asctime)s - SCAutolib:%(name)s - %(levelname)s - %(message)s', datefmt="%H:%M:%S")
+formatter = logging.Formatter('(%(filename)s) %(module)s.%(funcName)s.%(lineno)d:%(levelname)s - %(message)s',)
 handler.setFormatter(formatter)
 
 # Basic logger
