@@ -1,14 +1,16 @@
 from posixpath import join
-import subprocess as subp
-from subprocess import PIPE, run, Popen
+from subprocess import run, PIPE, Popen, CalledProcessError
 from configparser import ConfigParser
 from os.path import (exists, split)
 from os import chmod
 from pathlib import Path
 from crypt import crypt
 import python_freeipa as pipa
-
-import yaml
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives import serialization, hashes
+from cryptography.x509.oid import NameOID
+from cryptography import x509
+import pwd
 from decouple import config
 from pysftp import Connection
 from SCAutolib import env_logger
@@ -306,12 +308,12 @@ def setup_ca_(env_file):
     ca_dir = read_env("CA_DIR")
     env_logger.debug("Start setup of local CA")
 
-    out = subp.run(["bash", SETUP_CA,
-                    "--dir", ca_dir,
-                    "--env", env_file])
-    assert out.returncode == 0, "Something break in setup script"
-
-    env_logger.debug("Setup of local CA is completed")
+    try:
+        run(["bash", SETUP_CA, "--dir", ca_dir, "--env", env_file])
+        env_logger.debug("Setup of local CA is completed")
+    except CalledProcessError:
+        env_logger.error("Error while setting up local CA")
+        exit(1)
 
 
 def setup_virt_card_(user: dict):
@@ -325,14 +327,15 @@ def setup_virt_card_(user: dict):
     username, card_dir, passwd = user["name"], user["card_dir"], user["passwd"]
     cmd = ["bash", SETUP_VSC, "--dir", card_dir, "--username", username]
     if user["local"]:
-        if subp.run(["id", username]).returncode != 0:
-            enc_passwd = crypt(passwd, '22')
-            subp.run(["useradd", username, "-m", "-p", enc_passwd])
+        try:
+            pwd.getpwnam(username)
+        except KeyError:
+            run(["useradd", username, "-m", ])
             env_logger.debug(f"Local user {username} is added to the system "
                              f"with a password {passwd}")
-        else:
-            with subp.Popen(['passwd', username, '--stdin'], stdin=subp.PIPE,
-                            stderr=subp.PIPE, encoding="utf-8") as proc:
+        finally:
+            with Popen(['passwd', username, '--stdin'], stdin=PIPE,
+                            stderr=PIPE, encoding="utf-8") as proc:
                 proc.communicate(passwd)
             env_logger.debug(f"Password for user {username} is updated to {passwd}")
         create_cnf(username, conf_dir=join(card_dir, "conf"))
@@ -367,16 +370,17 @@ def setup_virt_card_(user: dict):
 
     env_logger.debug(f"Start setup of virtual smart card for user {username} "
                      f"in {card_dir}")
-    out = subp.run(cmd, check=True, encoding="utf-8")
-    assert out.returncode == 0, "Something break in setup script of " \
-                                "virtual smart card :("
-    env_logger.debug(f"Setup of virtual smart card for user {username} "
-                     f"is completed")
+    try:
+        run(cmd, check=True, encoding="utf-8")
+        env_logger.debug(f"Setup of virtual smart card for user {username} "
+                         f"is completed")
+    except CalledProcessError:
+        env_logger.error("Error while setting up virtual smart card")
+        exit(1)
 
 
 def check_semodule():
-    result = subp.run(["semodule", "-l"], stdout=subp.PIPE, stderr=subp.PIPE,
-                      encoding="utf-8")
+    result = run(["semodule", "-l"], stdout=PIPE, stderr=PIPE, encoding="utf-8")
     if "virtcacard" not in result.stdout:
         env_logger.debug(
             "SELinux module for virtual smart cards is not present in the "
@@ -389,11 +393,23 @@ def check_semodule():
 (allow sssd_t named_cache_t(dir(read search)))"""
         with open(f"{conf_dir}/virtcacard.cil", "w") as f:
             f.write(module)
-        subp.run(
-            ["semodule", "-i", f"{conf_dir}/virtcacard.cil"], check=True)
-        env_logger.debug(
-            "SELinux module for virtual smart cards is installed")
-        subp.run(["systemctl", "restart", "pcscd"], check=True)
+        try:
+            run(
+                ["semodule", "-i", f"{conf_dir}/virtcacard.cil"], check=True)
+            env_logger.debug(
+                "SELinux module for virtual smart cards is installed")
+        except CalledProcessError:
+            env_logger.error("Error while installing SELinux module "
+                             "for virt_cacard")
+            exit(1)
+
+        try:
+            run(["systemctl", "restart", "pcscd"], check=True)
+            env_logger.debug("pcscd service is restarted")
+        except CalledProcessError:
+            env_logger.error("Error while resturting the pcscd service")
+            exit(1)
+
 
 def prepare_dir(dir_path, conf=True):
     Path(dir_path).mkdir(parents=True, exist_ok=True)
@@ -418,10 +434,13 @@ def install_ipa_client_(ip, passwd):
     env_logger.debug(f"Start installation of IPA client")
     args = ["bash", INSTALL_IPA_CLIENT, "--ip", ip, "--root", passwd]
     env_logger.debug(f"Aruments for script: {args}")
-
-    run(args, check=True, encoding="utf-8")
-    env_logger.debug("IPA client is configured on the system. "
-                     "Don't forget to add IPA user by add-ipa-user command :)")
+    try:
+        run(args, check=True, encoding="utf-8")
+        env_logger.debug("IPA client is configured on the system. "
+                         "Don't forget to add IPA user by add-ipa-user command :)")
+    except CalledProcessError:
+        env_logger.error("Error while installing IPA client on local host")
+        exit(1)
 
 
 def add_ipa_user_(user):
@@ -431,13 +450,34 @@ def add_ipa_user_(user):
     client = pipa.ClientMeta(ipa_hostname)
     client.login("admin", ipa_admin_passwd)
     try:
-        user = client.user_add('test3', 'John', 'Doe', 'John Doe' )
+        client.user_add(username, username, username, username )
     except pipa.exceptions.DuplicateEntry:
-        env_logger.error(f"User {username} already exists in the IPA server "
-                         f"{ipa_hostname}")
+        env_logger.warn(f"User {username} already exists in the IPA server "
+                        f"{ipa_hostname}")
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    with open(f"{user_dir}/private.key", "wb") as f:
+        f.write(key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.TraditionalOpenSSL,
+            encryption_algorithm=serialization.NoEncryption()))
+    try:
+        cmd = ["openssl", "req", "-new", "-days", "365",
+               "-nodes", "-key", f"{user_dir}/private.key", "-out",
+               f"{user_dir}/cert.csr", "-subj", f"/CN={username}"]
+        run(cmd, check=True, encoding="utf-8")
+    except CalledProcessError:
+        env_logger.error(f"Error while generating CSR for user {username}")
+        exit(1)
+    try:
+        cmd = ["ipa", "cert-request", f"{user_dir}/cert.csr", "--principal",
+               username, "--certificate-out", f"{user_dir}/cert.pem"]
+        run(cmd, check=True, encoding="utf-8")
+    except CalledProcessError:
+        env_logger.error(f"Error while requesting the certificate for user "
+                         f"{username} from IPA server")
         exit(1)
 
-    env_logger.debug(f"User {username} is added to IPA server. "
+    env_logger.debug(f"User {username} is updated on IPA server. "
                      f"Cert and key stored into {user_dir}")
 
 
@@ -449,7 +489,12 @@ def general_setup():
     args = ['bash', GENERAL_SETUP]
     if config("READY", cast=int, default=0) != 1:
         check_semodule()
-        run(args, check=True)
+        try:
+            run(args, check=True)
+        except CalledProcessError:
+            env_logger.error("Script for general setup is failed")
+            exit(1)
+
         with open(DOTENV, "a") as f:
             f.write("READY=1")
 

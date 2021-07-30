@@ -12,7 +12,7 @@ def cli():
               help="Flag for setting up virtual smart cards for local_user "
                    "and ipa_user from the configuration file")
 @click.option("--conf", "-c", type=click.Path(),
-              help="Path to YAML file with configurations.", required=False)
+              help="Path to YAML configuration file.", required=False)
 @click.option("--ipa", "-i", is_flag=True,
               help="Setup IPA client with existed IPA server (IP address in "
                    "conf file or specify by --ip parameter)")
@@ -22,9 +22,10 @@ def cli():
               help="Flag for setting up the local CA")
 def prepare(cards, conf, ipa, ip, ca):
     """
-    Prepair the whole test environment including temporary directories, necessary
+    Prepair the test environment including temporary directories, necessary
     configuration files and services. Also can automatically run setup for local
-    CA and virtual smart card.
+    CA, virtual smart card and installing IPA client with adding IPA users
+    defined in configrutation file.
     """
     load_env(conf)
 
@@ -70,13 +71,10 @@ def prepare(cards, conf, ipa, ip, ca):
 
 @click.command()
 @click.option("--conf", "-c", type=click.Path(), required=True,
-              help="Path to YAML file with configurations")
+              help="Path to YAML configuration file")
 def setup_ca(conf):
     """
     CLI command for setup the local CA.
-
-    Args:
-        conf: Path to YAML file with configurations
     """
     # TODO: generate certs for Kerberos
     env_path = load_env(conf)
@@ -90,11 +88,13 @@ def setup_ca(conf):
 @click.command()
 @click.option("-u", "--username", type=click.STRING)
 @click.option("-c", "--conf", type=click.STRING, default=None)
-@click.option("--key", "-k")
-@click.option("--cert", "-C")
-@click.option("--card-dir", "-d")
-@click.option("--password", "-p")
-@click.option("--local", "-l", is_flag=True)
+@click.option("--key", "-k", help="Path to private key for the user.")
+@click.option("--cert", "-C", help="Path to certificate for the user.")
+@click.option("--card-dir", "-d", help="Path to card directory where virtual "
+                                       "card to be created")
+@click.option("--password", "-p", help="Password fot the user to be set")
+@click.option("--local", "-l", is_flag=True,
+              help="Flag if this user should be a local user (added to the system)")
 def setup_virt_card(username, conf, key, cert, card_dir, password, local):
     """
     Setup virtual smart card. Has to be run after configuration of the local CA.
@@ -118,7 +118,7 @@ def setup_virt_card(username, conf, key, cert, card_dir, password, local):
 
 
 @click.command()
-@click.option("--conf", "-c", type=click.Path(), help="Path to YAML file with configurations")
+@click.option("--conf", "-c", type=click.Path(), help="Path to YAML configuration file")
 def cleanup_ca():
     """
     Cleanup the host after configuration of the testing environment.
@@ -142,8 +142,8 @@ def setup_ipa_server(ip):
 
 
 @click.command()
-@click.option("--conf", "-c", default='')
-@click.option("--ip", "-i", default='')
+@click.option("--conf", "-c", default='', help="Path to YAML configuration file")
+@click.option("--ip", "-i", default='', help="IP address of IPA server.")
 def install_ipa_client(ip, conf):
     if conf:
         load_env(conf)
@@ -158,14 +158,24 @@ def install_ipa_client(ip, conf):
 
 
 @click.command()
-@click.option("--username", "-u", required=True)
-@click.option("--user-dir", "-d")
+@click.option("--username", "-u", required=True,
+              help="Username to be added to IPA server. If username is present in the"
+                   "coniguration file, values from this object would be used")
+@click.option("--user-dir", "-d", default=None,
+              help="User directory to create on the system for placing cert and"
+                   "private key from IPA server.")
 def add_ipa_user(username, user_dir):
     user = read_config(username)
     if user is None:
+        env_logger.debug(f"User {username} is not present in the configuration "
+                         f"file. Creating a new one")
+        if user_dir is None:
+            env_logger.error("No user directory is specified. Exit")
+            exit(1)
         user = dict()
         user["name"] = username
         user["card_dir"] = user_dir
+    prepare_dir(user["card_dir"])
     add_ipa_user_(user)
 
 
