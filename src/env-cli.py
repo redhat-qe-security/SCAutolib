@@ -159,13 +159,19 @@ def install_ipa_client(ip, conf):
 
 @click.command()
 @click.option("--username", "-u", required=True)
-@click.option("--user-dir", "-d")
+@click.option("--user-dir", "-d", default=None)
 def add_ipa_user(username, user_dir):
     user = read_config(username)
     if user is None:
+        env_logger.debug(f"User {username} is not present in the configuration "
+                         f"file. Creating a new one")
+        if user_dir is None:
+            env_logger.error("No user directory is specified. Exit")
+            exit(1)
         user = dict()
         user["name"] = username
         user["card_dir"] = user_dir
+    prepare_dir(user["card_dir"])
     add_ipa_user_(user)
 
 

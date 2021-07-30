@@ -7,6 +7,10 @@ from os import chmod
 from pathlib import Path
 from crypt import crypt
 import python_freeipa as pipa
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives import serialization, hashes
+from cryptography.x509.oid import NameOID
+from cryptography import x509
 
 import yaml
 from decouple import config
@@ -431,13 +435,25 @@ def add_ipa_user_(user):
     client = pipa.ClientMeta(ipa_hostname)
     client.login("admin", ipa_admin_passwd)
     try:
-        user = client.user_add('test3', 'John', 'Doe', 'John Doe' )
+        user = client.user_add(username, username, username, username )
     except pipa.exceptions.DuplicateEntry:
-        env_logger.error(f"User {username} already exists in the IPA server "
-                         f"{ipa_hostname}")
-        exit(1)
+        env_logger.warn(f"User {username} already exists in the IPA server "
+                        f"{ipa_hostname}")
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    with open(f"{user_dir}/private.key", "wb") as f:
+        f.write(key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.TraditionalOpenSSL,
+            encryption_algorithm=serialization.NoEncryption()))
+    cmd = ["openssl", "req", "-new", "-days", "365",
+           "-nodes", "-key", f"{user_dir}/private.key", "-out",
+           f"{user_dir}/cert.csr", "-subj", f"/CN={username}"]
+    run(cmd, check=True, encoding="utf-8")
+    cmd = ["ipa", "cert-request", f"{user_dir}/cert.csr", "--principal",
+           username, "--certificate-out", f"{user_dir}/cert.pem"]
+    run(cmd, check=True, encoding="utf-8")
 
-    env_logger.debug(f"User {username} is added to IPA server. "
+    env_logger.debug(f"User {username} is updated on IPA server. "
                      f"Cert and key stored into {user_dir}")
 
 
