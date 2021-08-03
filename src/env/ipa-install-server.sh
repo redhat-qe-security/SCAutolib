@@ -1,4 +1,4 @@
-#!/usr/bin/sh
+#!/usr/bin/bash
 set -e
 
 bold=$(tput bold)
@@ -14,7 +14,7 @@ DOMAIN_NAME='sc.test.com'
 REALM="SC.TEST.COM"
 ADMIN_PASSWD="SECret.123"
 
-function log() {
+log() {
   echo -e "${GREEN}${bold}[LOG $(date +"%T")]${normal}${NC} $1"
 }
 

@@ -7,6 +7,7 @@ normal=$(tput sgr0)
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
 
 CA_DIR=""
 ENV_PATH=""
@@ -21,13 +22,17 @@ function help() {
   echo -e "\t${bold}--conf-dir${normal} directory with all necessary configuraion files"
 }
 
-function log() {
+log() {
   echo -e "${GREEN}${bold}[LOG $(date +"%T")]${normal}${NC} $1"
 }
 
-function err() {
+err() {
   echo -e "${RED}${bold}[ERROR $(date +"%T")]${normal}${NC} $1"
   exit 1
+}
+
+warn() {
+  echo -e "${YELLOW}${bold}[WARNING $(date +"%T")]${normal}${NC} $1"
 }
 
 while (("$#")); do
@@ -64,6 +69,13 @@ if [[ $RELEASE != *"Red Hat Enterprise Linux release 9"* ]]; then
   log "Copr repo for virt_cacard is enabled"
 fi
 
+packages="vpcd softhsm sssd-tools httpd virt_cacard sssd softhsm"
+for p in $packages; do
+  if rpm -q --quier "$p"; then
+    err "Package $p is not installed on the system, but is is required for testing environment"
+  fi
+done
+
 if [ "$ENV_PATH" != "" ]; then
   log "Env file $ENV_PATH is used"
   export "$(grep -v '^#' "$ENV_PATH" | xargs)"
@@ -71,15 +83,12 @@ fi
 
 CONF_DIR="/etc/SCAutolib/conf"
 
-dnf -y install vpcd softhsm python3-pip sssd-tools httpd virt_cacard sssd
 yum groupinstall "Smart Card Support" -y
 log "Necessary packages are installed"
 
-if [[ "$(semodule -l | grep virtcacard)" -ne 0 ]]
-then
+if [[ "$(semodule -l | grep virtcacard)" -ne 0 ]]; then
   log "SELinux module for virt_card is not installed"
-  if [ -f "$CONF_DIR/virtcacard.cil" ]
-  then
+  if [ -f "$CONF_DIR/virtcacard.cil" ]; then
     warning "No $CONF_DIR/virtcacard.cil file, creating..."
     echo -e \
     "(allow pcscd_t node_t (tcp_socket (node_bind)));
