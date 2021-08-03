@@ -60,15 +60,18 @@ class VirtCard:
         """Upload new certificates to the virtual smart card. TO BE DONE"""
         pass
 
-    def run_cmd(self, cmd: str = None, expect: str = None, pin: bool = True, passwd: str = None, shell=None):
+    def run_cmd(self, cmd: str = None, expect: str = None, reject: str = None, pin: bool = True, passwd: str = None, shell=None):
         """
-        Run the create a child from current shell to run cmd. Try to assert
+        Run to create a child from current shell to run cmd. Try to assert
         expect pattern in the output of the cmd. If cmd require, provide
-        login wth given PIN or password.
+        login wth given PIN or password. Hitting reject pattern during cmd
+        execution cause fail.
 
         Args:
             cmd: shell command to be executed
             expect: pattern to match in the output. Can be empty string ("")
+            reject: control pattern - cause failure if matched before pattern
+                    expect is matched
             pin: specify if passwd is a smart card PIN or a password for the
                     user. Base on this, corresnpondign pattern would be matched
                     in login output.
@@ -96,9 +99,14 @@ class VirtCard:
                                                  f"found in the output.")
                 shell.sendline(passwd)
 
+            if reject is not None:
+                out = shell.expect([reject, pexpect.EOF])
+                if out == 0:
+                    log.error("Disallowed pattern found")
+                    # add exception here
+
             if expect is not None:
                 out = shell.expect([pexpect.TIMEOUT, expect], timeout=20)
-
                 if out != 1:
                     if out == 0:
                         log.error("Time out")
