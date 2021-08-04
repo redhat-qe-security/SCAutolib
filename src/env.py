@@ -1,5 +1,5 @@
 from posixpath import join
-from subprocess import run, PIPE, Popen, CalledProcessError
+from subprocess import run, PIPE, Popen, CalledProcessError, check_output
 from configparser import ConfigParser
 from os.path import (exists, split)
 from os import chmod
@@ -447,7 +447,7 @@ def add_ipa_user_(user):
     username, user_dir = user["name"], user["card_dir"]
     env_logger.debug(f"Adding user {username} to IPA server")
     ipa_admin_passwd, ipa_hostname = read_config("ipa_server_admin_passwd", "ipa_server_hostname")
-    client = pipa.ClientMeta(ipa_hostname)
+    client = pipa.ClientMeta(ipa_hostname, verify_ssl=False)
     client.login("admin", ipa_admin_passwd)
     try:
         client.user_add(username, username, username, username )

@@ -128,7 +128,7 @@ def cleanup_ca():
     username = read_config("local_user.name")
     # TODO: check after adding kerberos user that everything is also OK
     # TODO: clean kerberos info
-    out = subp.run(
+    out = run(
         ["bash", CLEANUP_CA, "--username", username])
 
     assert out.returncode == 0, "Something break in cleanup script :("
@@ -177,6 +177,7 @@ def add_ipa_user(username, user_dir):
         user["card_dir"] = user_dir
     prepare_dir(user["card_dir"])
     add_ipa_user_(user)
+    create_sc(user)
 
 
 cli.add_command(setup_ca)
