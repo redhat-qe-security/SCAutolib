@@ -61,7 +61,9 @@ class VirtCard:
         """Upload new certificates to the virtual smart card. TO BE DONE"""
         pass
 
-    def run_cmd(self, cmd: str = None, expect: str = None, reject: str = None, pin: bool = True, passwd: str = None, shell=None):
+    def run_cmd(self, cmd: str = None, expect: str = None, pin: bool = True,
+                passwd: str = None, shell=None, zero_rc: bool = True,
+                reject: str = None, ):
         """
         Run to create a child from current shell to run cmd. Try to assert
         expect pattern in the output of the cmd. If cmd require, provide
@@ -78,7 +80,9 @@ class VirtCard:
                     in login output.
             passwd: smart card PIN or user password if login is needed
             shell: shell child where command need to be execute.
-
+            zero_rc: indicates that it is expected from the command to end with
+                     non-zero exit code. Otherwise exception NonZeroReturnCode
+                     would be raised
         Returns:
             child of current shell with given command
         """
@@ -109,10 +113,14 @@ class VirtCard:
             if expect is not None:
                 out = shell.expect([pexpect.TIMEOUT, expect], timeout=20)
                 if out != 1:
-                    if out == 0:
-                        log.error("Time out")
-                    raise pexpect.exceptions.EOF(f"Pattern '{expect}' is not "
-                                                 f"found in the output.")
+                    raise PatternNotFound(expect, f"Pattern '{expect}' is not "
+                                                  f"found in the output.")
+            shell.sendline("echo $?")
+            out = shell.expect([pexpect.TIMEOUT, "0"])
+            if out != 1:
+                if zero_rc:
+                    raise NonZeroReturnCode(
+                        cmd, f"Command {cmd} endede with non zero return code")
 
         except PatternNotFound as e:
             # Pattern is not found
