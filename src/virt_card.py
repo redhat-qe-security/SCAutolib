@@ -3,6 +3,7 @@ import time
 import pexpect
 import subprocess as subp
 from SCAutolib import log
+from SCAutolib.src.exceptions import *
 
 
 class VirtCard:
@@ -95,8 +96,8 @@ class VirtCard:
                         log.error("Timed out on passsword / PIN waiting")
                     expect = pattern
 
-                    raise pexpect.exceptions.EOF(f"Pattern '{pattern}' is not "
-                                                 f"found in the output.")
+                    raise PatternNotFound(pattern, f"Pattern '{pattern}' is not "
+                                                   f"found in the output.")
                 shell.sendline(passwd)
 
             if reject is not None:
@@ -113,14 +114,11 @@ class VirtCard:
                     raise pexpect.exceptions.EOF(f"Pattern '{expect}' is not "
                                                  f"found in the output.")
 
-        except pexpect.exceptions.EOF as e:
+        except PatternNotFound as e:
             # Pattern is not found
             log.error(f"Pattern '{expect}' not found in output.\n")
             log.error(f"Command: {cmd}")
             log.error(f"Output:\n{str(shell.before)}\n")
             raise e
-        except Exception as e:
-            log.error(f"Unexpected exception: {str(e)}")
-            log.error(f"Command: {cmd}")
-            raise e
-        return shell
+        finally:
+            return shell
