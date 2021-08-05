@@ -32,9 +32,9 @@ def prepare(cards, conf, ipa, ip, ca):
     prep_tmp_dirs()
     env_logger.debug("Temporary directories are created")
 
+    general_setup()
     create_sssd_config()
     check_semodule()
-    general_setup()
 
     if ipa:
         env_logger.debug("Start setup of IPA client")

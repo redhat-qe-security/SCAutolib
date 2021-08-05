@@ -4,87 +4,15 @@ from configparser import ConfigParser
 from os.path import (exists, split)
 from os import chmod
 from pathlib import Path
-from crypt import crypt
 import python_freeipa as pipa
 from cryptography.hazmat.primitives.asymmetric import rsa
-from cryptography.hazmat.primitives import serialization, hashes
-from cryptography.x509.oid import NameOID
-from cryptography import x509
+from cryptography.hazmat.primitives import serialization
 import pwd
 from decouple import config
-from pysftp import Connection
 from SCAutolib import env_logger
 from SCAutolib.src import *
 
 import utils
-
-
-def create_kdc_config(sftp: Connection):
-    realm = read_config("krb.realm_name")
-    kdc_conf = "/var/kerberos/krb5kdc/kdc.conf"
-    env_logger.debug(f"Realm name: {realm}")
-
-    sftp.get(kdc_conf, f"{BACKUP}/kdc-original.conf")
-    env_logger.debug(
-        f"File {kdc_conf} is copied to {BACKUP}/kdc-original.conf")
-
-    cnf = ConfigParser()
-    cnf.optionxform = str
-    with sftp.open(kdc_conf, "r") as f:
-        cnf.read_file(f, source="kdc.conf")
-
-        for sec in ["kdcdefaults", "realms"]:
-            if not cnf.has_section(sec):
-                env_logger.debug(
-                    f"Section {sec} is not present in {kdc_conf}.")
-                cnf.add_section(sec)
-                env_logger.debug(f"Section {sec} in {kdc_conf} is created.")
-        present = True
-        if not cnf.has_option("realms", realm):
-            env_logger.debug(
-                f"Option {realm} is not present in realms section in {kdc_conf}.")
-            cnf.set("realms", realm, "{}")
-            env_logger.debug(
-                f"Option {realm} is created in realms section in {kdc_conf}.")
-            present = False
-        # Parse options for realm in {...}
-
-        d = {"acl_file": "/var/kerberos/krb5kdc/kadm5.acl",
-             "dict_file": "/usr/share/dict/words",
-             "admin_keytab": "/var/kerberos/krb5kdc/kadm5.keytab",
-             "supported_enctypes": "aes256-cts:normal aes128-cts:normal "
-                                   "arcfour-hmac:normal camellia256-cts:normal "
-                                   "camellia128-cts:normal",
-             "pkinit_allow_upn": "on",
-             "pkinit_eku_checking": "scLogin",
-             "max_renewable_life": "7d"}
-
-        if present:
-            env_logger.debug(
-                f"Option {realm} presents in realms section in {kdc_conf}.")
-            d = {}
-            tmp = cnf.get("realms", realm) \
-                .replace("{", "").replace("}", "").split("\n")
-            tmp = list(filter(None, tmp))
-            for i in tmp:
-                key, value = [a.strip() for a in i.split("=")]
-                d[key] = value
-
-        d["pkinit_anchors"] = "FILE:/var/kerberos/krb5kdc/kdc-ca.pem"
-        d["pkinit_identity"] = "FILE:/var/kerberos/krb5kdc/kdc.pem," \
-                               "/var/kerberos/krb5kdc/kdckey.pem"
-
-        options = [f"{key} = {value}\n" for key, value in d.items()]
-        val = "{\n"
-        for opt in options:
-            val += opt
-        val += "}\n"
-        cnf.set("realms", realm, val)
-        env_logger.debug(f"Value for option {realm} is {value}")
-
-    with sftp.open(kdc_conf, "w") as f:
-        cnf.write(f)
-        env_logger.debug(f"File {kdc_conf} is updated")
 
 
 def create_cnf(user, conf_dir=None):
@@ -94,53 +22,54 @@ def create_cnf(user, conf_dir=None):
     if user == "ca":
         ca_dir = read_config("ca_dir")
         conf_dir = join(ca_dir, "conf")
-        ca_cnf = f"""[ ca ]
-                    default_ca = CA_default
+        ca_cnf = f"""
+[ ca ]
+default_ca = CA_default
 
-                    [ CA_default ]
-                    dir              = {ca_dir}
-                    database         = $dir/index.txt
-                    new_certs_dir    = $dir/newcerts
+[ CA_default ]
+dir              = {ca_dir}
+database         = $dir/index.txt
+new_certs_dir    = $dir/newcerts
 
-                    certificate      = $dir/rootCA.crt
-                    serial           = $dir/serial
-                    private_key      = $dir/rootCA.key
-                    RANDFILE         = $dir/rand
+certificate      = $dir/rootCA.crt
+serial           = $dir/serial
+private_key      = $dir/rootCA.key
+RANDFILE         = $dir/rand
 
-                    default_days     = 365
-                    default_crl_hours = 1
-                    default_md       = sha256
+default_days     = 365
+default_crl_hours = 1
+default_md       = sha256
 
-                    policy           = policy_any
-                    email_in_dn      = no
+policy           = policy_any
+email_in_dn      = no
 
-                    name_opt         = ca_default
-                    cert_opt         = ca_default
-                    copy_extensions  = copy
+name_opt         = ca_default
+cert_opt         = ca_default
+copy_extensions  = copy
 
-                    [ usr_cert ]
-                    authorityKeyIdentifier = keyid, issuer
+[ usr_cert ]
+authorityKeyIdentifier = keyid, issuer
 
-                    [ v3_ca ]
-                    subjectKeyIdentifier   = hash
-                    authorityKeyIdentifier = keyid:always,issuer:always
-                    basicConstraints       = CA:true
-                    keyUsage               = critical, digitalSignature, cRLSign, keyCertSign
+[ v3_ca ]
+subjectKeyIdentifier   = hash
+authorityKeyIdentifier = keyid:always,issuer:always
+basicConstraints       = CA:true
+keyUsage               = critical, digitalSignature, cRLSign, keyCertSign
 
-                    [ policy_any ]
-                    organizationName       = supplied
-                    organizationalUnitName = supplied
-                    commonName             = supplied
-                    emailAddress           = optional
+[ policy_any ]
+organizationName       = supplied
+organizationalUnitName = supplied
+commonName             = supplied
+emailAddress           = optional
 
-                    [ req ]
-                    distinguished_name = req_distinguished_name
-                    prompt             = no
+[ req ]
+distinguished_name = req_distinguished_name
+prompt             = no
 
-                    [ req_distinguished_name ]
-                    O  = Example
-                    OU = Example Test
-                    CN = Example Test CA"""
+[ req_distinguished_name ]
+O  = Example
+OU = Example Test
+CN = Example Test CA"""
         if conf_dir is None:
             raise Exception(f"No conf directory is provided for user {user}")
         with open(f"{conf_dir}/ca.cnf", "w") as f:
@@ -149,24 +78,25 @@ def create_cnf(user, conf_dir=None):
                 f"Configuration file for local CA is created {conf_dir}/ca.cnf")
         return
 
-    user_cnf = f"""[ req ]
-                distinguished_name = req_distinguished_name
-                prompt = no
+    user_cnf = f"""
+[ req ]
+distinguished_name = req_distinguished_name
+prompt = no
 
-                [ req_distinguished_name ]
-                O = Example
-                OU = Example Test
-                CN = {user}
+[ req_distinguished_name ]
+O = Example
+OU = Example Test
+CN = {user}
 
-                [ req_exts ]
-                basicConstraints = CA:FALSE
-                nsCertType = client, email
-                nsComment = "{user}"
-                subjectKeyIdentifier = hash
-                keyUsage = critical, nonRepudiation, digitalSignature
-                extendedKeyUsage = clientAuth, emailProtection, msSmartcardLogin
-                subjectAltName = otherName:msUPN;UTF8:{user}@EXAMPLE.COM, email:{user}@example.com
-                """
+[ req_exts ]
+basicConstraints = CA:FALSE
+nsCertType = client, email
+nsComment = "{user}"
+subjectKeyIdentifier = hash
+keyUsage = critical, nonRepudiation, digitalSignature
+extendedKeyUsage = clientAuth, emailProtection, msSmartcardLogin
+subjectAltName = otherName:msUPN;UTF8:{user}@EXAMPLE.COM, email:{user}@example.com
+"""
     with open(f"{conf_dir}/req_{user}.cnf", "w") as f:
         f.write(user_cnf)
         env_logger.debug(f"Configuration file for CSR for user {user} is created "
@@ -494,9 +424,6 @@ def general_setup():
         except CalledProcessError:
             env_logger.error("Script for general setup is failed")
             exit(1)
-
-        with open(DOTENV, "a") as f:
-            f.write("READY=1")
 
 
 def create_sc(sc_user):
