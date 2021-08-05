@@ -22,7 +22,7 @@ if [[ $RELEASE != *"Red Hat Enterprise Linux release 9"* ]]; then
   log "idm:DL1 module is enabled"
   dnf -y copr enable jjelen/vsmartcard
   log "Copr repo for virt_cacard is enabled"
-  dnf install virt_cacard -y
+  dnf install virt_cacard vpcd -y
   log "virt_cacard is installed"
 fi
 

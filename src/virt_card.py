@@ -123,7 +123,6 @@ class VirtCard:
                         cmd, f"Command {cmd} endede with non zero return code")
 
         except PatternNotFound as e:
-            # Pattern is not found
             log.error(f"Pattern '{expect}' not found in output.\n")
             log.error(f"Command: {cmd}")
             log.error(f"Output:\n{str(shell.before)}\n")
