@@ -9,7 +9,6 @@ from cryptography.x509.oid import NameOID
 from cryptography import x509
 from shutil import copy
 from decouple import config, UndefinedValueError
-import dotenv
 
 from SCAutolib import env_logger, log
 from SCAutolib.src import DIR_PATH
@@ -229,7 +228,8 @@ def generate_cert(username=None):
             x509.NameAttribute(NameOID.COMMON_NAME, f"root-{serial} Test Ca"),
         ])
         if "ROOT_CRT" not in environ:
-            dotenv.set_key(DOTNENV, "ROOT_CRT", cert_path)
+            with open(DOTNENV, "a") as f:
+                f.write(f"ROOT_CRT={cert_path}")
     else:
         key_usage = x509.KeyUsage(
             digital_signature=False, content_commitment=False,

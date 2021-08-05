@@ -1,11 +1,7 @@
 #!/usr/bin/bash
 set -e
 
-bold=$(tput bold)
-normal=$(tput sgr0)
-RED='\033[0;31m'
-NC='\033[0m' # No Color
-GREEN='\033[0;32m'
+. "$(dirname $0)/logs.sh" || exit 1
 
 rx='([1-9]?[0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])'
 
@@ -13,10 +9,6 @@ SERVER_HOSTNAME='ipa-server.sc.test.com'
 DOMAIN_NAME='sc.test.com'
 REALM="SC.TEST.COM"
 ADMIN_PASSWD="SECret.123"
-
-log() {
-  echo -e "${GREEN}${bold}[LOG $(date +"%T")]${normal}${NC} $1"
-}
 
 dnf install @idm:DL1 -y
 dnf install firewalld freeipa-server ipa-server-dns -y

@@ -2,19 +2,13 @@
 
 set -e
 
-bold=$(tput bold)
-normal=$(tput sgr0)
-RED='\033[0;31m'
-NC='\033[0m' # No Color
-GREEN='\033[0;32m'
+. "$(dirname $0)/logs.sh" || exit 1
 
 ADMIN_PASSWD="SECret.123"
 USERNAME="ipa-user"
 DIR="/root/$USERNAME"
 NO_NEW=0
-function log() {
-  echo -e "${GREEN}${bold}[LOG $(date +"%T")]${normal}${NC} $1"
-}
+
 
 while (("$#")); do
   case "$1" in
