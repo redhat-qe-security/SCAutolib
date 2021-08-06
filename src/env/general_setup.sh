@@ -29,10 +29,11 @@ log "virt_cacard and vpcd are installed"
 
 packages="vpcd softhsm sssd-tools httpd virt_cacard sssd"
 for p in $packages; do
-  package_version=$(rpm -qa --quiet "$p")
-  if [[ $package_version == "" ]]; then
+  package_version=$(rpm -qa "$p")
+  if [[ -z  "$package_version" ]] ; then
     err "Package $p is not installed on the system, but is is required for testing environment"
   fi
+
   log "Package $package_version presents in the system"
 done
 
