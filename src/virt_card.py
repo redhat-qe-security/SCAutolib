@@ -1,9 +1,10 @@
 import sys
 import time
 import pexpect
-import subprocess as subp
+from subprocess import check_output, PIPE
 from SCAutolib import log
 from SCAutolib.src.exceptions import *
+from traceback import format_exc
 
 
 class VirtCard:
@@ -35,26 +36,19 @@ class VirtCard:
     def __exit__(self, exp_type, exp_value, exp_traceback):
         if exp_type is not None:
             log.error("Exception in virtual smart card context")
-            log.error(f"Exception type: {exp_type}")
-            log.error(f"Exception value: {exp_value}")
-            log.error(f"Exception traceback: {exp_traceback}")
+            log.error(format_exc())
         self.remove()
 
     def remove(self):
         """Simulate removing of the smart card by stopping the systemd service."""
-        rc = subp.run(["systemctl", "stop", self.service_name])
+        check_output(["systemctl", "stop", self.service_name], stderr=PIPE, encoding='utf-8')
         time.sleep(2)
-        msg = "Smart card removal failed"
-        assert rc.returncode == 0, msg
         log.debug("Smart card removed")
 
     def insert(self):
         """Simulate inserting of the smart card by starting the systemd service."""
-        rc = subp.run(["systemctl", "start", self.service_name])
-
+        check_output(["systemctl", "start", self.service_name], stderr=PIPE, encoding='utf-8')
         time.sleep(2)
-        msg = "Smart card insert failed"
-        assert rc.returncode == 0, msg
         log.debug("Smart card is inserted")
 
     def enroll(self):
@@ -63,7 +57,7 @@ class VirtCard:
 
     def run_cmd(self, cmd: str = None, expect: str = None, pin: bool = True,
                 passwd: str = None, shell=None, zero_rc: bool = True,
-                reject: str = None, ):
+                reject: str = None, check_rc: bool = False):
         """
         Run to create a child from current shell to run cmd. Try to assert
         expect pattern in the output of the cmd. If cmd require, provide
@@ -76,10 +70,14 @@ class VirtCard:
             reject: control pattern - cause failure if matched before pattern
                     expect is matched
             pin: specify if passwd is a smart card PIN or a password for the
-                    user. Base on this, corresnpondign pattern would be matched
-                    in login output.
+                 user. Base on this, corresnpondign pattern would be matched
+                 in login output.
             passwd: smart card PIN or user password if login is needed
             shell: shell child where command need to be execute.
+            check_rc: inficates that return code of the cmd would be checked.
+                      If you put this parameter to False, but still want to
+                      check the return code of the cmd, use child.expect(["RC:0"])
+                      to check that return code of the cmd is 0.
             zero_rc: indicates that it is expected from the command to end with
                      non-zero exit code. Otherwise exception NonZeroReturnCode
                      would be raised
@@ -88,7 +86,8 @@ class VirtCard:
         """
         try:
             if shell is None and cmd is not None:
-                shell = pexpect.spawn(cmd, encoding='utf-8')
+                shell = pexpect.spawn("/bin/bash", ["-c", cmd + ' ; echo "RC:$?"'],
+                                      encoding='utf-8')
             shell.logfile = sys.stdout
 
             if passwd is not None:
@@ -100,8 +99,9 @@ class VirtCard:
                         log.error("Timed out on passsword / PIN waiting")
                     expect = pattern
 
-                    raise PatternNotFound(pattern, f"Pattern '{pattern}' is not "
-                                                   f"found in the output.")
+                    raise PatternNotFound(f"Pattern '{pattern}' is not "
+                                          f"found in the output.")
+
                 shell.sendline(passwd)
 
             if reject is not None:
@@ -113,19 +113,21 @@ class VirtCard:
             if expect is not None:
                 out = shell.expect([pexpect.TIMEOUT, expect], timeout=20)
                 if out != 1:
-                    raise PatternNotFound(expect, f"Pattern '{expect}' is not "
-                                                  f"found in the output.")
-            shell.sendline("echo $?")
-            out = shell.expect([pexpect.TIMEOUT, "0"])
-            if out != 1:
-                if zero_rc:
-                    raise NonZeroReturnCode(
-                        cmd, f"Command {cmd} endede with non zero return code")
+                    raise PatternNotFound(f"Pattern '{expect}' is not "
+                                          f"found in the output.")
 
-        except PatternNotFound as e:
-            log.error(f"Pattern '{expect}' not found in output.\n")
+            if check_rc:
+                out = shell.expect([pexpect.TIMEOUT, "RC:0", pexpect.EOF])
+                if out != 1:
+                    msg = f"Command {cmd} endede with non zero return code"
+                    if zero_rc:
+                        raise NonZeroReturnCode(cmd, msg)
+                    else:
+                        log.warn(msg)
+
+        except PatternNotFound:
+            log.error(f"Pattern '{expect}' not found in output.")
             log.error(f"Command: {cmd}")
             log.error(f"Output:\n{str(shell.before)}\n")
-            raise e
-        finally:
-            return shell
+            raise
+        return shell

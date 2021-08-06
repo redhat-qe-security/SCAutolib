@@ -1,5 +1,6 @@
 from SCAutolib import log
-import subprocess as subp
+from subprocess import check_output, PIPE
+from traceback import format_exc
 
 
 class Authselect:
@@ -38,9 +39,7 @@ class Authselect:
             args.append("with-mkhomedir")
         args.append("--force")
 
-        rc = subp.run(args,  stdout=subp.PIPE, stderr=subp.PIPE, encoding="utf=8")
-        msg = f"Authselect command failed.\nReturn code: {rc.returncode}\nOutput:{rc.stdout}"
-        assert rc.returncode == 0, msg
+        check_output(args, stderr=PIPE, encoding="utf=8")
         log.debug(f"SSSD is set to: {' '.join(args)}")
         log.debug(f"Backupfile: {self.backup_name}")
 
@@ -48,15 +47,11 @@ class Authselect:
         """
         Restore the previous configuration of authselect.
         """
-        rc = subp.run(["authselect", "backup-restore", self.backup_name,
-                       "--debug"], stdout=subp.PIPE, stderr=subp.PIPE, encoding="utf=8")
-        msg = f"Authselect backup-restore failed.\nReturn code: {rc.returncode}\nOutput:{rc.stdout}"
-        assert rc.returncode == 0, msg
+        check_output(["authselect", "backup-restore", self.backup_name,
+                      "--debug"], stderr=PIPE, encoding="utf=8")
 
-        rc = subp.run(["authselect", "backup-remove", self.backup_name,
-                       "--debug"],  stdout=subp.PIPE, stderr=subp.PIPE, encoding="utf=8")
-        msg = f"Authselect backup-remove failed. \nReturn code: {rc.returncode}\nOutput:{rc.stdout}"
-        assert rc.returncode == 0, msg
+        check_output(["authselect", "backup-remove", self.backup_name,
+                      "--debug"], stderr=PIPE, encoding="utf=8")
 
         log.debug("Authselect backup file is restored")
 
@@ -67,7 +62,5 @@ class Authselect:
     def __exit__(self, ext_type, ext_value, ext_traceback):
         if ext_type is not None:
             log.error("Exception in authselect context")
-            log.error(f"Exception type: {ext_type}")
-            log.error(f"Exception value: {ext_value}")
-            log.error(f"Exception traceback: {ext_traceback}")
+            log.error(format_exc())
         self._reset()

@@ -10,18 +10,24 @@ from cryptography.hazmat.primitives import serialization
 import pwd
 from decouple import config
 from SCAutolib import env_logger
+from SCAutolib.src import utils, exceptions
 from SCAutolib.src import *
 
-import utils
 
-
-def create_cnf(user, conf_dir=None):
+def create_cnf(user, conf_dir=None, ca_dir=None):
     """
     Create configuration files for OpenSSL to generate certificates and requests.
     """
     if user == "ca":
-        ca_dir = read_config("ca_dir")
-        conf_dir = join(ca_dir, "conf")
+        if ca_dir is None:
+            env_logger.warn("Parameter ca_dir is None. Try to read from config file")
+            ca_dir = read_config("ca_dir")
+            if ca_dir is None:
+                env_logger.error("No value for ca_dir in config file")
+                raise exceptions.NoDirProvided("ca_dir")
+
+        if conf_dir is None:
+            conf_dir = join(ca_dir, "conf")
         ca_cnf = f"""
 [ ca ]
 default_ca = CA_default
@@ -70,8 +76,7 @@ prompt             = no
 O  = Example
 OU = Example Test
 CN = Example Test CA"""
-        if conf_dir is None:
-            raise Exception(f"No conf directory is provided for user {user}")
+
         with open(f"{conf_dir}/ca.cnf", "w") as f:
             f.write(ca_cnf)
             env_logger.debug(
@@ -97,6 +102,8 @@ keyUsage = critical, nonRepudiation, digitalSignature
 extendedKeyUsage = clientAuth, emailProtection, msSmartcardLogin
 subjectAltName = otherName:msUPN;UTF8:{user}@EXAMPLE.COM, email:{user}@example.com
 """
+    if conf_dir is None:
+        raise exceptions.NoDirProvided("conf_dir")
     with open(f"{conf_dir}/req_{user}.cnf", "w") as f:
         f.write(user_cnf)
         env_logger.debug(f"Configuration file for CSR for user {user} is created "
