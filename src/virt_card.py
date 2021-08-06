@@ -100,8 +100,8 @@ class VirtCard:
                         log.error("Timed out on passsword / PIN waiting")
                     expect = pattern
 
-                    raise PatternNotFound(pattern, f"Pattern '{pattern}' is not "
-                                                   f"found in the output.")
+                    raise Exception(f"Pattern '{pattern}' is not "
+                                    f"found in the output.")
                 shell.sendline(passwd)
 
             if reject is not None:
@@ -127,11 +127,10 @@ class VirtCard:
                     log.warn(msg)
 
         except PatternNotFound as e:
-            log.error(f"Pattern '{expect}' not found in output.\n")
+            log.error(f"Pattern '{expect}' not found in output.")
             log.error(f"Command: {cmd}")
             log.error(f"Output:\n{str(shell.before)}\n")
             raise e
         except Exception as e:
             raise e
-        finally:
-            return shell
+        return shell
