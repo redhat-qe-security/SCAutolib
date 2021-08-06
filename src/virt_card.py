@@ -115,17 +115,23 @@ class VirtCard:
                 if out != 1:
                     raise PatternNotFound(expect, f"Pattern '{expect}' is not "
                                                   f"found in the output.")
+
             shell.sendline("echo $?")
             out = shell.expect([pexpect.TIMEOUT, "0"])
+
             if out != 1:
+                msg = f"Command {cmd} endede with non zero return code"
                 if zero_rc:
-                    raise NonZeroReturnCode(
-                        cmd, f"Command {cmd} endede with non zero return code")
+                    raise NonZeroReturnCode(cmd, msg)
+                else:
+                    log.warn(msg)
 
         except PatternNotFound as e:
             log.error(f"Pattern '{expect}' not found in output.\n")
             log.error(f"Command: {cmd}")
             log.error(f"Output:\n{str(shell.before)}\n")
+            raise e
+        except Exception as e:
             raise e
         finally:
             return shell
