@@ -1,9 +1,10 @@
 import sys
 import time
 import pexpect
-import subprocess as subp
+from subprocess import check_output, PIPE
 from SCAutolib import log
 from SCAutolib.src.exceptions import *
+from traceback import format_exc
 
 
 class VirtCard:
@@ -35,26 +36,19 @@ class VirtCard:
     def __exit__(self, exp_type, exp_value, exp_traceback):
         if exp_type is not None:
             log.error("Exception in virtual smart card context")
-            log.error(f"Exception type: {exp_type}")
-            log.error(f"Exception value: {exp_value}")
-            log.error(f"Exception traceback: {exp_traceback}")
+            log.error(format_exc())
         self.remove()
 
     def remove(self):
         """Simulate removing of the smart card by stopping the systemd service."""
-        rc = subp.run(["systemctl", "stop", self.service_name])
+        check_output(["systemctl", "stop", self.service_name], stderr=PIPE, encoding='utf-8')
         time.sleep(2)
-        msg = "Smart card removal failed"
-        assert rc.returncode == 0, msg
         log.debug("Smart card removed")
 
     def insert(self):
         """Simulate inserting of the smart card by starting the systemd service."""
-        rc = subp.run(["systemctl", "start", self.service_name])
-
+        check_output(["systemctl", "start", self.service_name], stderr=PIPE, encoding='utf-8')
         time.sleep(2)
-        msg = "Smart card insert failed"
-        assert rc.returncode == 0, msg
         log.debug("Smart card is inserted")
 
     def enroll(self):
@@ -100,8 +94,8 @@ class VirtCard:
                         log.error("Timed out on passsword / PIN waiting")
                     expect = pattern
 
-                    raise Exception(f"Pattern '{pattern}' is not "
-                                    f"found in the output.")
+                    raise PatternNotFound(f"Pattern '{pattern}' is not "
+                                          f"found in the output.")
                 shell.sendline(passwd)
 
             if reject is not None:
@@ -113,8 +107,8 @@ class VirtCard:
             if expect is not None:
                 out = shell.expect([pexpect.TIMEOUT, expect], timeout=20)
                 if out != 1:
-                    raise PatternNotFound(expect, f"Pattern '{expect}' is not "
-                                                  f"found in the output.")
+                    raise PatternNotFound(f"Pattern '{expect}' is not "
+                                          f"found in the output.")
 
             shell.sendline("echo $?")
             out = shell.expect([pexpect.TIMEOUT, "0"])
@@ -126,11 +120,9 @@ class VirtCard:
                 else:
                     log.warn(msg)
 
-        except PatternNotFound as e:
+        except PatternNotFound:
             log.error(f"Pattern '{expect}' not found in output.")
             log.error(f"Command: {cmd}")
             log.error(f"Output:\n{str(shell.before)}\n")
-            raise e
-        except Exception as e:
-            raise e
+            raise
         return shell
