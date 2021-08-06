@@ -3,14 +3,21 @@
 
 import pytest
 from SCAutolib.src.authselect import Authselect
-import subprocess as sub
+from subprocess import check_output
 
-def test_set():
-    auth = Authselect(path_="/root")
+
+def test_authselect_init():
+    auth = Authselect()
     assert not auth._lock_on_removal
     assert not auth._mk_homedir
     assert not auth._required
-    rc = auth._set()
-    assert rc == 0, "authselect Set is failed"
-    out = sub.run(["authselect", "current"], stdout=sub.PIPE)
-    print(out.stdout.decode('utf-8'))
+
+
+def test_authselect_set():
+    auth = Authselect()
+    auth._set()
+    out = check_output(["authselect", "current"], encoding="utf-8")
+    try:
+        assert "with-smartcard" in out
+    finally:
+        check_output(["authselect", "backup-restore", auth.backup_name], encoding="utf-8")
