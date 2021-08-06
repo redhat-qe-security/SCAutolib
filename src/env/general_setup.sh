@@ -22,7 +22,6 @@ if [[ $RELEASE != *"Red Hat Enterprise Linux release 9"* ]]; then
   log "idm:DL1 module is enabled"
   dnf -y copr enable jjelen/vsmartcard
   log "Copr repo for virt_cacard is enabled"
-
 fi
 
 dnf install virt_cacard vpcd -y
@@ -30,11 +29,11 @@ log "virt_cacard and vpcd are installed"
 
 packages="vpcd softhsm sssd-tools httpd virt_cacard sssd"
 for p in $packages; do
-  if [[ $(rpm -q --quiet "$p") == 0 ]]; then
-    log "Package $p presents in the system"
-  else
+  package_version=$(rpm -qa --quiet "$p")
+  if [[ $package_version == "" ]]; then
     err "Package $p is not installed on the system, but is is required for testing environment"
   fi
+  log "Package $package_version presents in the system"
 done
 
 yum groupinstall "Smart Card Support" -y
