@@ -20,7 +20,9 @@ def cli():
               help="IP address of IPA server to setup with", required=False)
 @click.option("--ca", is_flag=True, required=False,
               help="Flag for setting up the local CA")
-def prepare(cards, conf, ipa, ip, ca):
+@click.option("--install-missing", "-m", is_flag=True, required=False,
+              help="Silently install missing packages, if it would be needed")
+def prepare(cards, conf, ipa, ip, ca, install_missing):
     """
     Prepair the test environment including temporary directories, necessary
     configuration files and services. Also can automatically run setup for local
@@ -32,7 +34,7 @@ def prepare(cards, conf, ipa, ip, ca):
     prep_tmp_dirs()
     env_logger.debug("Temporary directories are created")
 
-    general_setup()
+    general_setup(install_missing)
     create_sssd_config()
     check_semodule()
 
@@ -175,7 +177,6 @@ def add_ipa_user(username, user_dir):
         user = dict()
         user["name"] = username
         user["card_dir"] = user_dir
-    prepare_dir(user["card_dir"])
     add_ipa_user_(user)
     create_sc(user)
 
