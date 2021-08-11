@@ -101,7 +101,6 @@ class VirtCard:
 
                     raise PatternNotFound(f"Pattern '{pattern}' is not "
                                           f"found in the output.")
-
                 shell.sendline(passwd)
 
             if reject is not None:
