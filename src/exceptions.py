@@ -5,14 +5,19 @@ class SCAutolibException(Exception):
 
 
 class NonZeroReturnCode(SCAutolibException):
-    def __init__(self, cmd=None, msg: str = "Command exited with non zero return code"):
+    def __init__(self, msg: str = "Command exited with non zero return code"):
         self.msg = msg
-        self.cmd = cmd
         super().__init__(self.msg)
 
 
 class PatternNotFound(SCAutolibException):
     def __init__(self, msg: str = "Pattern not found in the output"):
+        self.msg = msg
+        super().__init__(msg)
+
+
+class DisallowedPatternFound(SCAutolibException):
+    def __init__(self, msg: str = "Disallowed pattern found in the output"):
         self.msg = msg
         super().__init__(msg)
 
