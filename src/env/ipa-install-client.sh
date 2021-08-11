@@ -64,11 +64,12 @@ then
   exit 1
 fi
 
-
-yum install @idm:DL1 -y
-dnf -y copr enable jjelen/vsmartcard
-dnf install https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm -y
-yum install freeipa-client virt_cacard softhsm sshpass -y
+RELEASE=$(cat /etc/redhat-release)
+if [[ $RELEASE != *"Red Hat Enterprise Linux release 9"* ]]; then
+  dnf install @idm:DL1 -y
+  dnf install https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm -y
+fi
+dnf install freeipa-client sshpass -y
 log "Necessary packages are installed"
 
 echo "$IP $SERVER_HOSTNAME" >> /etc/hosts
@@ -108,6 +109,6 @@ else
     log "SSSD is update for no_ocsp for certificate verification"
 fi
 
-sshpass -p "$IPA_ROOT" ssh -q -o StrictHostKeyChecking=no root@"$IP" ipa-advise config-client-for-smart-card-auth > ipa-client-sc.sh
+sshpass -p "$IPA_ROOT" ssh -q -o StrictHostKeyChecking=no root@"$IP" "echo $ADMIN_PASSWD | kinit admin && ipa-advise config-client-for-smart-card-auth" > ipa-client-sc.sh
 chmod +x ipa-client-sc.sh && ./ipa-client-sc.sh /etc/ipa/ca.crt
 log "Setup of IPA client for smart card is finished"

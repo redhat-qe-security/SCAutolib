@@ -392,6 +392,9 @@ def add_ipa_user_(user):
         env_logger.warn(f"User {username} already exists in the IPA server "
                         f"{ipa_hostname}")
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+
+    prepare_dir(user_dir)
+
     with open(f"{user_dir}/private.key", "wb") as f:
         f.write(key.private_bytes(
             encoding=serialization.Encoding.PEM,
@@ -422,8 +425,10 @@ def setup_ipa_server_():
     run(["bash", SETUP_IPA_SERVER])
 
 
-def general_setup():
+def general_setup(install_missing):
     args = ['bash', GENERAL_SETUP]
+    if install_missing:
+        args += ["--install-missing"]
     if config("READY", cast=int, default=0) != 1:
         check_semodule()
         try:
