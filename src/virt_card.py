@@ -55,9 +55,8 @@ class VirtCard:
         """Upload new certificates to the virtual smart card. TO BE DONE"""
         pass
 
-    def run_cmd(self, cmd: str = None, expect: str = None, pin: bool = True,
-                passwd: str = None, shell=None, zero_rc: bool = True,
-                reject: str = None, check_rc: bool = False):
+    def run_cmd(self, cmd: str = None, pin: bool = True,
+                passwd: str = None, shell=None):
         """
         Run to create a child from current shell to run cmd. Try to assert
         expect pattern in the output of the cmd. If cmd require, provide
@@ -66,23 +65,13 @@ class VirtCard:
 
         Args:
             cmd: shell command to be executed
-            expect: pattern to match in the output. Can be empty string ("")
-            reject: control pattern - cause failure if matched before pattern
-                    expect is matched
             pin: specify if passwd is a smart card PIN or a password for the
                  user. Base on this, corresnpondign pattern would be matched
                  in login output.
             passwd: smart card PIN or user password if login is needed
             shell: shell child where command need to be execute.
-            check_rc: inficates that return code of the cmd would be checked.
-                      If you put this parameter to False, but still want to
-                      check the return code of the cmd, use child.expect(["RC:0"])
-                      to check that return code of the cmd is 0.
-            zero_rc: indicates that it is expected from the command to end with
-                     non-zero exit code. Otherwise exception NonZeroReturnCode
-                     would be raised
         Returns:
-            child of current shell with given command
+            stdout of executed command (cmd; see above)
         """
         try:
             if shell is None and cmd is not None:
@@ -103,30 +92,53 @@ class VirtCard:
                                           f"found in the output.")
                 shell.sendline(passwd)
 
-            if reject is not None:
-                out = shell.expect([reject, pexpect.EOF])
-                if out == 0:
-                    log.error("Disallowed pattern found")
-                    # add exception here
-
-            if expect is not None:
-                out = shell.expect([pexpect.TIMEOUT, expect], timeout=20)
-                if out != 1:
-                    raise PatternNotFound(f"Pattern '{expect}' is not "
-                                          f"found in the output.")
-
-            if check_rc:
-                out = shell.expect([pexpect.TIMEOUT, "RC:0", pexpect.EOF])
-                if out != 1:
-                    msg = f"Command {cmd} endede with non zero return code"
-                    if zero_rc:
-                        raise NonZeroReturnCode(cmd, msg)
-                    else:
-                        log.warn(msg)
-
         except PatternNotFound:
-            log.error(f"Pattern '{expect}' not found in output.")
             log.error(f"Command: {cmd}")
             log.error(f"Output:\n{str(shell.before)}\n")
             raise
-        return shell
+        return shell.read()
+
+    def check_output(self, output, expect: list = [], reject: list = [],
+                     zero_rc: bool = True, check_rc: bool = False):
+        """
+        Check "output" for presence of expected and unexpected patterns.
+
+        Check for presence of expected (required) and unexpected (disallowed)
+        patterns in the text and raise exceptions if required pattern is missing
+        or if any of disallowed patterns is present. Check also presence of
+        pattern "RC:[0-9]+" that in current implementation of run_cmd represents
+        exit value of executed command and raise an exception in case of
+        non-zero value.
+
+        Args:
+            expect: list of patterns to be matched in the output
+            reject: list of patterns that cause failure if matched in the output
+            check_rc: indicates that presence of pattern "RC:0" would be checked
+                      and an exception would be raised if the pattern is missing
+            zero_rc: indicates that pattern "RC:[1-9]+" should be present
+                     instead of "RC:0" and exception would not be raised
+        """
+
+        # TODO: add switch and functionality
+        #  to check patterns in specified order
+
+        for pattern in reject:
+            if pattern in output:
+                raise DisallowedPatternFound(f"Disallowed pattern '{pattern}' "
+                                             f"was found in the output")
+
+        for pattern in expect:
+            if pattern not in output:
+                log.error(f"Pattern: {pattern} not found in output")
+                log.error(f"Output:\n{output}\n")
+                raise PatternNotFound(f"Pattern '{expect}' is not "
+                                      f"found in the output.")
+
+        if check_rc:
+            if "RC:0" not in output:
+                msg = f"Non zero return code indicated"
+                if zero_rc:
+                    raise NonZeroReturnCode(cmd, msg)
+                else:
+                    log.warn(msg)
+
