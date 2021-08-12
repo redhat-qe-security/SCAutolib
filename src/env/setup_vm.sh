@@ -9,15 +9,24 @@ NAME='default-name'
 IMG_NAME='rhel-guest-image-8.4.x86_64.qcow2'
 IMG_PATH='/var/lib/libvirt/images'
 SCRIPT=""
-NFS_DIR=1
 KEY=""
 RUN=0
 RHEL="8.5"
 REPO_FILE=""
-
+NFS_DIR=1
+GDM=0
+SC=0
 
 while (("$#")); do
   case "$1" in
+  --sc)
+    SC=1
+    shift
+    ;;
+  --gdm)
+    GDM=1
+    shift
+    ;;
   --rhel)
     if [ -n "$2" ] && [ ${2:0:1} != "-" ]; then
       RHEL=$2
@@ -113,7 +122,7 @@ virt-sysprep \
   --upload "$REPO_FILE":/etc/yum.repos.d/redhat.repo\
   -a "$IMG_PATH/$IMG_NAME"
 
-log "Installation RHEL8"
+log "Installation RHEL-$RHEL"
 log "Default VM name: ${bold}$NAME${normal}"
 virt-install \
   --import \
@@ -155,16 +164,20 @@ log "Updating system complete"
 ssh -o StrictHostKeyChecking=no -i "$KEY" root@"$ip_rhel" "dnf install vim -y "
 log "VIM installed"
 
-ssh -o StrictHostKeyChecking=no -i "$KEY" root@"$ip_rhel" "dnf install gdm -y "
-log "GDM installed"
+if [[ $GDM -eq 1 ]]; then
+  ssh -o StrictHostKeyChecking=no -i "$KEY" root@"$ip_rhel" "dnf install gdm -y "
+  log "GDM installed"
+fi
 
 ssh -o StrictHostKeyChecking=no -i "$KEY" root@"$ip_rhel" "dnf install python3 python3-pip -y "
 log "Python3 installed"
 
-ssh -o StrictHostKeyChecking=no -i "$KEY" root@"$ip_rhel" "yum groupinstall 'Smart Card Support' -y"
-log "Group Smart Card Support is installed"
+if [[ $SC -eq 1 ]]; then
+  ssh -o StrictHostKeyChecking=no -i "$KEY" root@"$ip_rhel" "yum groupinstall 'Smart Card Support' -y"
+  log "Group Smart Card Support is installed"
+fi
 
-if [[ "$NFS_DIR" -eq 1 ]]
+if [[ $NFS_DIR -eq 1 ]]
 then
   for path in $(showmount -e localhost | grep -P -o  "\/[a-zA-Z\/_\-0-9]* ")
   do
