@@ -3,7 +3,7 @@
 set -e
 . "$(dirname "$0")/logs.sh" || exit 1
 INSTALL_MISSING=0
-packages="softhsm sssd-tools httpd sssd"
+packages="softhsm sssd-tools httpd sssd sshpass"
 
 install_pkgs(){
   install="$1"
