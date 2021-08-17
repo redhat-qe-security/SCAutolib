@@ -6,6 +6,7 @@ from os.path import isfile, join
 from shutil import rmtree, copyfile
 import re
 from pytest import raises
+from SCAutolib.test.fixtures import *
 
 
 def test_create_sssd_config(tmpdir):
@@ -65,7 +66,7 @@ def test_create_cnf_ca():
 def test_create_cnf_exception():
     username = "test-user"
 
-    with raises(NoDirProvided, match=r"No directory is provided.*"):
+    with raises(UnspecifiedParameter):
         create_cnf(username)
 
 
@@ -105,3 +106,16 @@ def test_create_virt_card_service():
 
     rmtree(card_dir)
     remove(service_path)
+
+
+def test_check_config_true(config_file_coorect, caplog):
+    result = check_config()
+    assert result
+    assert "Configuration file is OK." in caplog.messages
+
+
+def test_check_config_false(config_file_incorrect, caplog):
+    result = check_config()
+    assert not result
+    assert "Configuration file is OK." not in caplog.messages
+    assert "Field root_passwd is not present in the config." in caplog.messages

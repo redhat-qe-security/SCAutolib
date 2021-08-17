@@ -22,8 +22,8 @@ class DisallowedPatternFound(SCAutolibException):
         super().__init__(msg)
 
 
-class NoDirProvided(SCAutolibException):
-    def __init__(self, parameter: str = None, msg: str = "No directory is provided"):
+class UnspecifiedParameter(SCAutolibException):
+    def __init__(self, parameter: str = None, msg: str = "Parameter is not specified"):
         self.msg = msg
         self.parameter = parameter
         if self.parameter is not None:

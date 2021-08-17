@@ -5,24 +5,10 @@ from SCAutolib.src import utils
 from SCAutolib.src.exceptions import *
 from shutil import copy
 from os import path, system, remove
+from fixtures import *
 
 CUR_PATH = path.dirname(path.abspath(__file__))
 FILES = f"{CUR_PATH}/files"
-
-
-@pytest.fixture()
-def simple_output():
-    return "My name is Tom"
-
-
-@pytest.fixture()
-def zero_rc_output(simple_output):
-    return f"{simple_output}\nRC:0\n{simple_output}"
-
-
-@pytest.fixture()
-def non_zero_rc_output(simple_output):
-    return f"{simple_output}\nRC:256\n{simple_output}"
 
 
 def test_service_restart():

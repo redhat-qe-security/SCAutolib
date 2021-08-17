@@ -30,6 +30,10 @@ def prepare(cards, conf, ipa, ip, ca, install_missing):
     defined in configrutation file.
     """
     load_env(conf)
+    if not check_config():
+        env_logger.error("Configuration file miss required fields. Check logs for"
+                         "more information.")
+        exit(1)
 
     prep_tmp_dirs()
     env_logger.debug("Temporary directories are created")
@@ -54,7 +58,7 @@ def prepare(cards, conf, ipa, ip, ca, install_missing):
 
     if ca:
         env_logger.debug("Start setup of local CA")
-        prepare_dir(config("CA_DIR"))
+        prepare_dir(read_env("CA_DIR"))
         create_cnf('ca')
         setup_ca_(DOTENV)
 
@@ -81,7 +85,7 @@ def setup_ca(conf):
     # TODO: generate certs for Kerberos
     env_path = load_env(conf)
     general_setup()
-    prepare_dir(config("CA_DIR"))
+    prepare_dir(read_env("CA_DIR"))
     prep_tmp_dirs()
     create_cnf('ca')
     setup_ca_(env_path)
@@ -106,6 +110,8 @@ def setup_virt_card(username, conf, key, cert, card_dir, password, local):
     user = read_config(username)
     general_setup()
     if user is None:
+        if not all([key, cert, username, card_dir, password, local]):
+            raise
         env_logger.debug(f"User {username} is not in the configuration file. "
                          f"Using values from parameters")
         user = dict()

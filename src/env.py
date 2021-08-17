@@ -8,13 +8,13 @@ import python_freeipa as pipa
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization
 import pwd
-from decouple import config
+from decouple import config, UndefinedValueError
 from SCAutolib import env_logger
 from SCAutolib.src import utils, exceptions
 from SCAutolib.src import *
 
 
-def create_cnf(user, conf_dir=None, ca_dir=None):
+def create_cnf(user: str, conf_dir=None, ca_dir=None):
     """
     Create configuration files for OpenSSL to generate certificates and requests.
     """
@@ -24,7 +24,7 @@ def create_cnf(user, conf_dir=None, ca_dir=None):
             ca_dir = read_config("ca_dir")
             if ca_dir is None:
                 env_logger.error("No value for ca_dir in config file")
-                raise exceptions.NoDirProvided("ca_dir")
+                raise exceptions.UnspecifiedParameter("ca_dir", "CA directory is not provided")
 
         if conf_dir is None:
             conf_dir = join(ca_dir, "conf")
@@ -103,7 +103,7 @@ extendedKeyUsage = clientAuth, emailProtection, msSmartcardLogin
 subjectAltName = otherName:msUPN;UTF8:{user}@EXAMPLE.COM, email:{user}@example.com
 """
     if conf_dir is None:
-        raise exceptions.NoDirProvided("conf_dir")
+        raise exceptions.UnspecifiedParameter("conf_dir", "Directory with configurations is not provided")
     with open(f"{conf_dir}/req_{user}.cnf", "w") as f:
         f.write(user_cnf)
         env_logger.debug(f"Configuration file for CSR for user {user} is created "
@@ -146,7 +146,7 @@ def create_sssd_config():
     chmod(sssd_conf, 0o600)
 
 
-def create_softhsm2_config(card_dir):
+def create_softhsm2_config(card_dir: str):
     """
     Create SoftHSM2 configuration file in conf_dir. Same directory has to be used
     in setup-ca function, otherwise configuration file wouldn't be found causing
@@ -163,7 +163,7 @@ def create_softhsm2_config(card_dir):
                          f"in {conf_dir}/softhsm2.conf.")
 
 
-def create_virt_card_service(username, card_dir):
+def create_virt_card_service(username: str, card_dir: str):
     """
     Create systemd service for for virtual smart card (virt_cacard.service).
     """
@@ -196,7 +196,7 @@ def create_virt_card_service(username, card_dir):
                      "is created.")
 
 
-def read_env(item, *args, **kwargs):
+def read_env(item: str, *args, **kwargs):
     return config(item, *args, **kwargs)
 
 
@@ -230,7 +230,7 @@ def read_config(*items):
         value = config_data
         for part in parts:
             if value is None:
-                env_logger.debug(
+                env_logger.warn(
                     f"Key {part} not present in the configuration file. Skip.")
                 return None
 
@@ -241,7 +241,7 @@ def read_config(*items):
     return return_list if len(items) > 1 else return_list[0]
 
 
-def setup_ca_(env_file):
+def setup_ca_(env_file: str):
     ca_dir = read_env("CA_DIR")
     env_logger.debug("Start setup of local CA")
 
@@ -272,7 +272,7 @@ def setup_virt_card_(user: dict):
                              f"with a password {passwd}")
         finally:
             with Popen(['passwd', username, '--stdin'], stdin=PIPE,
-                            stderr=PIPE, encoding="utf-8") as proc:
+                       stderr=PIPE, encoding="utf-8") as proc:
                 proc.communicate(passwd)
             env_logger.debug(f"Password for user {username} is updated to {passwd}")
         create_cnf(username, conf_dir=join(card_dir, "conf"))
@@ -348,7 +348,7 @@ def check_semodule():
             exit(1)
 
 
-def prepare_dir(dir_path, conf=True):
+def prepare_dir(dir_path: str, conf=True):
     Path(dir_path).mkdir(parents=True, exist_ok=True)
     env_logger.debug(f"Directory {dir_path} is created")
     if conf:
@@ -367,7 +367,7 @@ def prep_tmp_dirs():
         prepare_dir(path, conf=False)
 
 
-def install_ipa_client_(ip, passwd):
+def install_ipa_client_(ip: str, passwd: str):
     env_logger.debug(f"Start installation of IPA client")
     args = ["bash", INSTALL_IPA_CLIENT, "--ip", ip, "--root", passwd]
     env_logger.debug(f"Aruments for script: {args}")
@@ -380,14 +380,14 @@ def install_ipa_client_(ip, passwd):
         exit(1)
 
 
-def add_ipa_user_(user):
+def add_ipa_user_(user: dict):
     username, user_dir = user["name"], user["card_dir"]
     env_logger.debug(f"Adding user {username} to IPA server")
     ipa_admin_passwd, ipa_hostname = read_config("ipa_server_admin_passwd", "ipa_server_hostname")
     client = pipa.ClientMeta(ipa_hostname, verify_ssl=False)
     client.login("admin", ipa_admin_passwd)
     try:
-        client.user_add(username, username, username, username )
+        client.user_add(username, username, username, username)
     except pipa.exceptions.DuplicateEntry:
         env_logger.warn(f"User {username} already exists in the IPA server "
                         f"{ipa_hostname}")
@@ -425,7 +425,7 @@ def setup_ipa_server_():
     run(["bash", SETUP_IPA_SERVER])
 
 
-def general_setup(install_missing):
+def general_setup(install_missing: bool = False):
     args = ['bash', GENERAL_SETUP]
     if install_missing:
         args += ["--install-missing"]
@@ -438,7 +438,7 @@ def general_setup(install_missing):
             exit(1)
 
 
-def create_sc(sc_user):
+def create_sc(sc_user: dict):
     name, card_dir = sc_user["name"], sc_user["card_dir"]
     prepare_dir(card_dir)
     create_softhsm2_config(card_dir)
@@ -447,3 +447,27 @@ def create_sc(sc_user):
     create_virt_card_service(name, card_dir)
     env_logger.debug(f"Start setup of virtual smart cards for local user {name}")
     setup_virt_card_(sc_user)
+
+
+def check_config() -> bool:
+    """Check if all required fields are present in the config file. Warn user if
+    some fields are missing.
+
+    Return:
+        True if config file contain everyting what is needed. Otherwise False.
+    """
+    with open(read_env("CONF"), "r") as file:
+        config_data = yaml.load(file, Loader=yaml.FullLoader)
+        assert config_data, "Data are not loaded correctly."
+    result = True
+    fields = ("root_passwd", "ca_dir", "ipa_server_root", "ipa_server_ip",
+              "ipa_server_hostname", "ipa_client_hostname", "ipa_domain",
+              "ipa_realm", "ipa_server_admin_passwd", "local_user", "ipa_user")
+    config_fields = config_data.keys()
+    for f in fields:
+        if f not in config_fields:
+            env_logger.warning(f"Field {f} is not present in the config.")
+            result = False
+    if result:
+        env_logger.debug("Configuration file is OK.")
+    return result
