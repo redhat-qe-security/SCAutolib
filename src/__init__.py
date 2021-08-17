@@ -36,19 +36,22 @@ def load_env(conf_file: str) -> str:
     """
 
     env_file = f"{DIR_PATH}/.env"
-    if not exists(env_file):
-        env_logger.debug(f"File {env_file} does not exist. Creating...")
-        with open(conf_file, "r") as f:
-            env_logger.debug(f"Reading configurations from {conf_file}")
-            data = yaml.load(f, Loader=yaml.FullLoader)
-            ca_dir = data["ca_dir"]
+    with open(conf_file, "r") as f:
+        env_logger.debug(f"Reading configurations from {conf_file}")
+        data = yaml.load(f, Loader=yaml.FullLoader)
+        ca_dir = data["ca_dir"]
+    data["restore"] = []
 
-        with open(env_file, "w") as f:
-            f.write(f"TMP={join(ca_dir, 'tmp')}\n")
-            f.write(f"KEYS={join(ca_dir, 'tmp', 'keys')}\n")
-            f.write(f"CERTS={join(ca_dir, 'tmp', 'certs')}\n")
-            f.write(f"BACKUP={join(ca_dir, 'tmp', 'backup')}\n")
-            f.write(f"CONF={conf_file}\n")
-            f.write(f"CA_DIR={ca_dir}\n")
-        env_logger.debug(f"File {env_file} is created")
+    with open(conf_file, "w") as f:
+        yaml.dump(data, f)
+        env_logger.debug("restore section is added to te configuration file")
+
+    with open(env_file, "w") as f:
+        f.write(f"TMP={join(ca_dir, 'tmp')}\n")
+        f.write(f"KEYS={join(ca_dir, 'tmp', 'keys')}\n")
+        f.write(f"CERTS={join(ca_dir, 'tmp', 'certs')}\n")
+        f.write(f"BACKUP={join(ca_dir, 'tmp', 'backup')}\n")
+        f.write(f"CONF={conf_file}\n")
+        f.write(f"CA_DIR={ca_dir}\n")
+    env_logger.debug(f"File {env_file} is created")
     return env_file

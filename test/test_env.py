@@ -1,20 +1,28 @@
+# author: Pavel Yadlouski <pyadlous@redhat.com>
+# Unit tests for of SCAutolib.src.env module
 from SCAutolib.src.env import *
 from SCAutolib.src.exceptions import *
 from configparser import ConfigParser
-from os import stat, mkdir, remove
-from os.path import isfile, join
+from os import stat, mkdir, environ
+from os.path import isfile, exists
 from shutil import rmtree, copyfile
 import re
 from pytest import raises
 from SCAutolib.test.fixtures import *
+from dotenv import load_dotenv
+from yaml import load, FullLoader
 
 
 def test_create_sssd_config(tmpdir):
     """Check correct creation og sssd.conf with basic sections and permission."""
+    # Arrange
     sssd_conf = "/etc/sssd/sssd.conf"
-    backp_sssd_conf = join(tmpdir, "sssd.conf")
-    copyfile(sssd_conf, backp_sssd_conf)
+    backp_sssd_conf = None
+    if exists(sssd_conf):
+        backp_sssd_conf = join(tmpdir, "sssd.conf")
+        copyfile(sssd_conf, backp_sssd_conf)
 
+    # Act
     create_sssd_config()
     cnf = ConfigParser()
     cnf.optionxform = str
@@ -23,13 +31,18 @@ def test_create_sssd_config(tmpdir):
     sections = cnf.sections()
     perms = oct(stat(sssd_conf).st_mode & 0o777)
     try:
+        # Assert
         assert "sssd" in sections
         assert "pam" in sections
         assert "nss" in sections
         assert "domain/shadowutils" in sections
         assert perms == oct(0o600), "wrong permission on sssd.conf"
     finally:
-        copyfile(backp_sssd_conf, sssd_conf)
+        # Clean up
+        if backp_sssd_conf is None:
+            remove(sssd_conf)
+        else:
+            copyfile(backp_sssd_conf, sssd_conf)
 
 
 def test_create_cnf():
@@ -108,14 +121,63 @@ def test_create_virt_card_service():
     remove(service_path)
 
 
-def test_check_config_true(config_file_coorect, caplog):
-    result = check_config()
+def test_check_config_true(config_file_correct, caplog):
+    result = check_config(config_file_correct)
     assert result
     assert "Configuration file is OK." in caplog.messages
 
 
 def test_check_config_false(config_file_incorrect, caplog):
-    result = check_config()
+    result = check_config(config_file_incorrect)
     assert not result
     assert "Configuration file is OK." not in caplog.messages
     assert "Field root_passwd is not present in the config." in caplog.messages
+
+
+def test_load_env(config_file_correct):
+    env_path = load_env(config_file_correct)
+    assert exists(env_path)
+    load_dotenv(env_path)
+    for field in ("TMP", "KEYS", "CERTS", "BACKUP", "CONF", "CA_DIR"):
+        assert field in environ
+    with open(config_file_correct, "r") as f:
+        data = load(f, Loader=FullLoader)
+    assert "restore" in data.keys()
+    assert len(data["restore"]) == 0
+
+
+def test_add_restore(tmp_path_factory, loaded_env):
+    _, config_file = loaded_env
+    src = f'{tmp_path_factory.mktemp("source")}/some.file'
+    dest = f'{tmp_path_factory.mktemp("destination")}/some.file'
+
+    add_restore("file", src, dest)
+
+    with open(config_file, "r") as f:
+        data = load(f, Loader=FullLoader)
+    assert len(data["restore"]) == 1
+
+    restore = data["restore"][0]
+
+    assert restore["type"] == "file"
+    assert restore["backup_dir"] == dest
+    assert restore["src"] == src
+
+
+def test_add_restore_wrong_type(caplog, loaded_env):
+    _, config_file = loaded_env
+
+    add_restore("file", "src", "dest")
+    add_restore("wrong_type", "src", "dest")
+
+    with open(config_file, "r") as f:
+        data = load(f, Loader=FullLoader)
+
+    assert len(data["restore"]) == 2
+
+    restore = data["restore"][0]
+    msg = "Type wrong_type is not know, so this item can't be correctly restored"
+    assert restore["type"] == "file"
+    assert restore["backup_dir"] == "dest"
+    assert restore["src"] == "src"
+    assert msg in caplog.messages

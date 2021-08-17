@@ -2,8 +2,9 @@ import datetime
 import subprocess as subp
 import sys
 from os import environ, path
+from os.path import isdir, isfile
 from random import randint
-from shutil import copy
+from shutil import copy2, copytree
 from time import sleep
 
 import pexpect
@@ -116,13 +117,13 @@ def restore_file_(target, name, service=None):
     """
     check_env()
     source = path.join(BACKUP, name)
-    copy(source, target)
+    copy2(source, target)
     subp.run(["restorecon", "-v", target])
     restart_service(service)
     log.debug(f"File from {source} is restored to {target}")
 
 
-def backup_(file_path, name=None, sftp=None):
+def backup_(file_path, name=""):
     """
     Backup the file given in file_path to BACKUP directory.
 
@@ -131,14 +132,13 @@ def backup_(file_path, name=None, sftp=None):
         file_path: path to fle
         name: file name in BACKUP directory
     """
-    check_env()
     target = f"{BACKUP}/{name}"
-    if sftp:
-        sftp.get(file_path, target)
-    else:
-        copy(file_path, target)
-
-    log.debug(f"File from {file_path} is copied to {target}")
+    if isfile(file_path):
+        copy2(file_path, target)
+    elif isdir(file_path):
+        copytree(file_path, target)
+    log.debug(f"Source from {file_path} is copied to {target}")
+    return target
 
 
 def edit_config_(config: str, string: str, holder: str, section: bool):

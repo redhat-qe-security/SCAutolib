@@ -3,6 +3,7 @@ from os.path import dirname, join
 from os import remove
 from SCAutolib.src import env
 from SCAutolib.src import load_env
+from pathlib import Path
 from yaml import dump
 
 
@@ -44,6 +45,7 @@ def local_user():
 
 @pytest.fixture()
 def create_yaml_content(tmpdir, ipa_user, local_user) -> dict:
+    """Create standart content of configuration file in YAML format"""
     card_dir = join(tmpdir, ipa_user)
     content = {
         "root_passwd": "redhat",
@@ -76,7 +78,8 @@ def create_yaml_content(tmpdir, ipa_user, local_user) -> dict:
 
 
 @pytest.fixture()
-def yaml_file_correct(tmpdir, create_yaml_content):
+def config_file_correct(tmpdir, create_yaml_content):
+    """Create configuration file in YAML format with all required fields."""
     ymal_path = join(tmpdir, "test_configuration.yaml")
     with open(ymal_path, "w") as f:
         dump(create_yaml_content, f)
@@ -84,7 +87,8 @@ def yaml_file_correct(tmpdir, create_yaml_content):
 
 
 @pytest.fixture()
-def yaml_file_incorrect(tmpdir, create_yaml_content):
+def config_file_incorrect(tmpdir, create_yaml_content):
+    """Create configuration file in YAML format with missing root_passwd field"""
     ymal_path = join(tmpdir, "test_configuration.yaml")
     content = create_yaml_content
     content.pop("root_passwd")
@@ -94,22 +98,36 @@ def yaml_file_incorrect(tmpdir, create_yaml_content):
 
 
 @pytest.fixture()
-def config_file_coorect(yaml_file_correct):
-    env_path = load_env(yaml_file_correct)
+def loaded_env(config_file_correct):
+    env_path = load_env(config_file_correct)
     try:
-        yield env_path
-    except Exception as e:
-        raise e
+        yield env_path, config_file_correct
     finally:
         remove(env_path)
 
 
 @pytest.fixture()
-def config_file_incorrect(yaml_file_incorrect):
-    env_path = load_env(yaml_file_incorrect)
-    try:
-        yield env_path
-    except Exception as e:
-        raise e
-    finally:
-        remove(env_path)
+def real_factory(tmp_path_factory):
+    class Factory:
+        _created_dir = list()
+        _created_file = list()
+
+        @staticmethod
+        def create_dir():
+            dir_path = tmp_path_factory.mktemp(f"dir-{len(Factory._created_dir)}")
+            dir_path.mkdir(exist_ok=True)
+            # assert exists(dir_path)
+            Factory._created_dir.append(dir_path)
+            return dir_path
+
+        @staticmethod
+        def create_file(dir_name=""):
+            if dir_name == "":
+                dir_name = Factory.create_dir()
+            file_path = f"{dir_name}/file-{len(Factory._created_file)}"
+            Path(file_path).touch(exist_ok=True)
+            # assert exists(file_path)
+            Factory._created_file.append(file_path)
+            return file_path
+
+    return Factory

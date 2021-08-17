@@ -2,13 +2,15 @@ from posixpath import join
 from subprocess import run, PIPE, Popen, CalledProcessError, check_output
 from configparser import ConfigParser
 from os.path import (exists, split)
-from os import chmod
+from os import chmod, remove
+from shutil import rmtree, copytree, copyfile
 from pathlib import Path
 import python_freeipa as pipa
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization
 import pwd
 from decouple import config, UndefinedValueError
+
 from SCAutolib import env_logger
 from SCAutolib.src import utils, exceptions
 from SCAutolib.src import *
@@ -137,7 +139,8 @@ def create_sssd_config():
 
     sssd_conf = "/etc/sssd/sssd.conf"
     if exists(sssd_conf):
-        utils.backup_(sssd_conf, name="sssd-original.conf")
+        bakcup_dir = utils.backup_(sssd_conf, name="sssd-original.conf")
+        add_restore("file", sssd_conf, bakcup_dir)
 
     with open(sssd_conf, "w") as f:
         cnf.write(f)
@@ -187,7 +190,8 @@ def create_virt_card_service(username: str, card_dir: str):
     if exists(path):
         name = split(path)[1].split(".", 1)
         name = name[0] + "-original." + name[1]
-        utils.backup_(path, name)
+        backup_dir = utils.backup_(path, name)
+        add_restore("file", path, backup_dir)
 
     with open(path, "w") as f:
         cnf.read_dict(default)
@@ -246,7 +250,8 @@ def setup_ca_(env_file: str):
     env_logger.debug("Start setup of local CA")
 
     try:
-        run(["bash", SETUP_CA, "--dir", ca_dir, "--env", env_file])
+        check_output(["bash", SETUP_CA, "--dir", ca_dir, "--env", env_file],
+                     encoding="utf-8")
         env_logger.debug("Setup of local CA is completed")
     except CalledProcessError:
         env_logger.error("Error while setting up local CA")
@@ -267,7 +272,7 @@ def setup_virt_card_(user: dict):
         try:
             pwd.getpwnam(username)
         except KeyError:
-            run(["useradd", username, "-m", ])
+            check_output(["useradd", username, "-m", ], encoding="utf-8")
             env_logger.debug(f"Local user {username} is added to the system "
                              f"with a password {passwd}")
         finally:
@@ -308,16 +313,16 @@ def setup_virt_card_(user: dict):
     env_logger.debug(f"Start setup of virtual smart card for user {username} "
                      f"in {card_dir}")
     try:
-        run(cmd, check=True, encoding="utf-8")
+        check_output(cmd, encoding="utf-8")
         env_logger.debug(f"Setup of virtual smart card for user {username} "
                          f"is completed")
     except CalledProcessError:
         env_logger.error("Error while setting up virtual smart card")
-        exit(1)
+        raise
 
 
 def check_semodule():
-    result = run(["semodule", "-l"], stdout=PIPE, stderr=PIPE, encoding="utf-8")
+    result = check_output(["semodule", "-l"], stderr=PIPE, encoding="utf-8")
     if "virtcacard" not in result.stdout:
         env_logger.debug(
             "SELinux module for virtual smart cards is not present in the "
@@ -331,21 +336,21 @@ def check_semodule():
         with open(f"{conf_dir}/virtcacard.cil", "w") as f:
             f.write(module)
         try:
-            run(
-                ["semodule", "-i", f"{conf_dir}/virtcacard.cil"], check=True)
+            check_output(["semodule", "-i", f"{conf_dir}/virtcacard.cil"],
+                         encoding="utf-8")
             env_logger.debug(
                 "SELinux module for virtual smart cards is installed")
         except CalledProcessError:
             env_logger.error("Error while installing SELinux module "
                              "for virt_cacard")
-            exit(1)
+            raise
 
         try:
-            run(["systemctl", "restart", "pcscd"], check=True)
+            check_output(["systemctl", "restart", "pcscd"], encoding="utf-8")
             env_logger.debug("pcscd service is restarted")
         except CalledProcessError:
             env_logger.error("Error while resturting the pcscd service")
-            exit(1)
+            raise
 
 
 def prepare_dir(dir_path: str, conf=True):
@@ -372,12 +377,12 @@ def install_ipa_client_(ip: str, passwd: str):
     args = ["bash", INSTALL_IPA_CLIENT, "--ip", ip, "--root", passwd]
     env_logger.debug(f"Aruments for script: {args}")
     try:
-        run(args, check=True, encoding="utf-8")
+        check_output(args, encoding="utf-8")
         env_logger.debug("IPA client is configured on the system. "
                          "Don't forget to add IPA user by add-ipa-user command :)")
     except CalledProcessError:
         env_logger.error("Error while installing IPA client on local host")
-        exit(1)
+        raise
 
 
 def add_ipa_user_(user: dict):
@@ -404,38 +409,38 @@ def add_ipa_user_(user: dict):
         cmd = ["openssl", "req", "-new", "-days", "365",
                "-nodes", "-key", f"{user_dir}/private.key", "-out",
                f"{user_dir}/cert.csr", "-subj", f"/CN={username}"]
-        run(cmd, check=True, encoding="utf-8")
+        check_output(cmd, encoding="utf-8")
     except CalledProcessError:
         env_logger.error(f"Error while generating CSR for user {username}")
-        exit(1)
+        raise
     try:
         cmd = ["ipa", "cert-request", f"{user_dir}/cert.csr", "--principal",
                username, "--certificate-out", f"{user_dir}/cert.pem"]
-        run(cmd, check=True, encoding="utf-8")
+        check_output(cmd, encoding="utf-8")
     except CalledProcessError:
         env_logger.error(f"Error while requesting the certificate for user "
                          f"{username} from IPA server")
-        exit(1)
+        raise
 
     env_logger.debug(f"User {username} is updated on IPA server. "
                      f"Cert and key stored into {user_dir}")
 
 
 def setup_ipa_server_():
-    run(["bash", SETUP_IPA_SERVER])
+    check_output(["bash", SETUP_IPA_SERVER], encoding="utf-8")
 
 
 def general_setup(install_missing: bool = False):
     args = ['bash', GENERAL_SETUP]
     if install_missing:
         args += ["--install-missing"]
-    if config("READY", cast=int, default=0) != 1:
+    if read_env("READY", cast=int, default=0) != 1:
         check_semodule()
         try:
-            run(args, check=True)
+            check_output(args, encoding="utf-8")
         except CalledProcessError:
             env_logger.error("Script for general setup is failed")
-            exit(1)
+            raise
 
 
 def create_sc(sc_user: dict):
@@ -449,14 +454,15 @@ def create_sc(sc_user: dict):
     setup_virt_card_(sc_user)
 
 
-def check_config() -> bool:
+def check_config(conf: str) -> bool:
     """Check if all required fields are present in the config file. Warn user if
     some fields are missing.
-
+    Args:
+        conf: path to configuration file in YAML format
     Return:
         True if config file contain everyting what is needed. Otherwise False.
     """
-    with open(read_env("CONF"), "r") as file:
+    with open(conf, "r") as file:
         config_data = yaml.load(file, Loader=yaml.FullLoader)
         assert config_data, "Data are not loaded correctly."
     result = True
@@ -471,3 +477,55 @@ def check_config() -> bool:
     if result:
         env_logger.debug("Configuration file is OK.")
     return result
+
+
+def add_restore(type_: str, src: str, backup: str = None):
+    """Add new item to be restored in the cleanup phase.
+
+    Args:
+        type_: type of item. Cane be one of user, file or dir. If type is not
+               matches any of mentioned types, warning is written, but item
+               is added.
+        src: for file and dir should be an original path. For type == user
+             should be username
+        backup: applicable only for file and dir type. Path where original
+                source was placed.
+    """
+    with open(read_env("CONF"), "r") as f:
+        data = yaml.load(f, Loader=yaml.FullLoader)
+
+    if type_ not in ("user", "file", "dir"):
+        env_logger.warning(f"Type {type_} is not know, so this item can't be "
+                           f"correctly restored")
+    data["restore"].append({"type": type_, "src": src, "backup_dir": backup})
+
+    with open(read_env("CONF"), "w") as f:
+        yaml.dump(data, f)
+
+
+def cleanup_(restore_items: dict):
+    for item in restore_items:
+        type_ = item['type']
+        src = item['src'] if type_ != "user" else item["username"]
+        backup_dir = item["backup_dir"] if "backup_dir" in item.keys() else None
+
+        if type_ == "file":
+            if backup_dir:
+                copyfile(backup_dir, src)
+                env_logger.debug(f"File {src} is restored form {backup_dir}")
+            else:
+                remove(src)
+                env_logger.debug(f"File {src} is deleted")
+        elif type_ == "dir":
+            rmtree(src, ignore_errors=True)
+            env_logger.debug(f"Directory {src} is deleted")
+            if backup_dir:
+                copytree(backup_dir, src)
+                env_logger.debug(f"Directory {src} is restored form {backup_dir}")
+
+        elif type_ == "user":
+            username = item["username"]
+            check_output(["userdel", username, "-r"], encoding="utf-8")
+            env_logger.debug(f"User {username} is delete with it home directory")
+        else:
+            env_logger.warning(f"Skip item with unknow type '{type_}'")

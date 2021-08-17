@@ -1,5 +1,6 @@
 import click
 from SCAutolib.src.env import *
+from SCAutolib.src.exceptions import *
 
 
 @click.group()
@@ -29,11 +30,12 @@ def prepare(cards, conf, ipa, ip, ca, install_missing):
     CA, virtual smart card and installing IPA client with adding IPA users
     defined in configrutation file.
     """
-    load_env(conf)
-    if not check_config():
+    if not check_config(conf):
         env_logger.error("Configuration file miss required fields. Check logs for"
                          "more information.")
         exit(1)
+
+    load_env(conf)
 
     prep_tmp_dirs()
     env_logger.debug("Temporary directories are created")
@@ -93,25 +95,33 @@ def setup_ca(conf):
 
 @click.command()
 @click.option("-u", "--username", type=click.STRING)
-@click.option("-c", "--conf", type=click.STRING, default=None)
+@click.option("-c", "--conf", type=click.File(lazy=True), default=None)
 @click.option("--key", "-k", help="Path to private key for the user.")
 @click.option("--cert", "-C", help="Path to certificate for the user.")
 @click.option("--card-dir", "-d", help="Path to card directory where virtual "
                                        "card to be created")
 @click.option("--password", "-p", help="Password fot the user to be set")
 @click.option("--local", "-l", is_flag=True,
-              help="Flag if this user should be a local user (added to the system)")
-def setup_virt_card(username, conf, key, cert, card_dir, password, local):
+              help="True if a user for virtual smart card is a local user "
+                   "(would be added to the system). False if a user is "
+                   "IPA user (has to already exist on IPA server)")
+def setup_virt_card(username, key, cert, card_dir, password, local):
     """
     Setup virtual smart card. Has to be run after configuration of the local CA.
     """
-    if conf is not None:
-        load_env(conf)
+    if read_env("READY", cast=int, default=0) != 1:
+        env_logger.error("Please, run prepare commnad with configuration file.")
+        exit(1)
+
     user = read_config(username)
     general_setup()
     if user is None:
         if not all([key, cert, username, card_dir, password, local]):
-            raise
+            env_logger.error("Not all required parameters are set for addign "
+                             f"virtual smart card to user {username}. "
+                             f"Add all parameters via configuration file or via"
+                             f"CLI parameters.")
+            exit(1)
         env_logger.debug(f"User {username} is not in the configuration file. "
                          f"Using values from parameters")
         user = dict()
@@ -126,21 +136,22 @@ def setup_virt_card(username, conf, key, cert, card_dir, password, local):
 
 
 @click.command()
-@click.option("--conf", "-c", type=click.Path(), help="Path to YAML configuration file")
-def cleanup_ca():
+def cleanup():
     """
-    Cleanup the host after configuration of the testing environment.
+    Cleanup the host after configuration of the testing environment. Delete
+    created directories/files, or restore if directory/file already existed.
     """
-    env_logger.debug("Start cleanup of local CA")
+    env_logger.debug("Start cleanup")
 
-    username = read_config("local_user.name")
-    # TODO: check after adding kerberos user that everything is also OK
-    # TODO: clean kerberos info
-    out = run(
-        ["bash", CLEANUP_CA, "--username", username])
+    restore_items = read_config("restore")
+    try:
+        cleanup_(restore_items)
+    except:
+        env_logger.error("Cleup is failed. Check logs for more info")
+        exit(1)
 
-    assert out.returncode == 0, "Something break in cleanup script :("
-    env_logger.debug("Cleanup of local CA is completed")
+    env_logger.debug("Cleanup is completed")
+    exit(0)
 
 
 @click.command()
@@ -150,17 +161,14 @@ def setup_ipa_server(ip):
 
 
 @click.command()
-@click.option("--conf", "-c", default='', help="Path to YAML configuration file")
 @click.option("--ip", "-i", default='', help="IP address of IPA server.")
-def install_ipa_client(ip, conf):
-    if conf:
-        load_env(conf)
+def install_ipa_client(ip):
     if not ip:
         ip = read_config("ipa_server_ip")
     if ip is None:
         msg = "No IP address for IPA server is provided. Can't continue..."
         env_logger.error(msg)
-        raise click.MissingParameter(msg)
+        exit(1)
     root_passwd = read_config("ipa_server_root")
     install_ipa_client_(ip, root_passwd)
 
@@ -189,7 +197,7 @@ def add_ipa_user(username, user_dir):
 
 cli.add_command(setup_ca)
 cli.add_command(setup_virt_card)
-cli.add_command(cleanup_ca)
+cli.add_command(cleanup)
 cli.add_command(prepare)
 cli.add_command(setup_ipa_server)
 cli.add_command(install_ipa_client)

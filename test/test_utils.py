@@ -1,5 +1,5 @@
-# author: Pavel Yadlouski
-# Unit tests for of SCAutolib
+# author: Pavel Yadlouski <pyadlous@redhat.com>
+# Unit tests for of SCAutolib.src.utils module
 import pytest
 from SCAutolib.src import utils
 from SCAutolib.src.exceptions import *
