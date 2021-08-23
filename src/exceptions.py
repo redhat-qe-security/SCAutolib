@@ -29,3 +29,14 @@ class UnspecifiedParameter(SCAutolibException):
         if self.parameter is not None:
             msg += f" for parameter {self.parameter}"
         super().__init__(self.msg)
+
+
+class UnknownOption(SCAutolibException):
+    def __init__(self, option_name: str, msg: str = "Unknow option is given",
+                 option_val: str = None):
+        self.msg = msg
+        if option_name:
+            self.msg += f": '{option_name}'"
+        if option_val:
+            self.msg += f" = {option_val}"
+        super(UnknownOption, self).__init__(self.msg)

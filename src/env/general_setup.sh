@@ -2,16 +2,22 @@
 # author: Pavel Yadlouski <pyadlous@redhat.com>
 set -e
 . "$(dirname "$0")/logs.sh" || exit 1
-INSTALL_MISSING=0
+INSTALL_MISSING=""
 packages="softhsm sssd-tools httpd sssd sshpass"
 
 install_pkgs(){
-  install="$1"
-  if [[ -z "$install" ]]; then
+  RELEASE=$(cat /etc/redhat-release)
+  if [[ $RELEASE != *"Red Hat Enterprise Linux release 9"* ]]; then
+    dnf install @idm:DL1 -y
+    dnf install https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm -y
+  fi
+
+  pkg="$1"
+  if [[ -z "$INSTALL_MISSING" ]]; then
     while true; do
       warn "Do you want to install missing pakages? [y/n]"
-      read -r install
-      if [[ $install != "y" && $install != "n" ]]; then
+      read -r INSTALL_MISSING
+      if [[ $INSTALL_MISSING != "y" && $INSTALL_MISSING != "n" ]]; then
         warn "Unknown option, try again..."
         continue
       else
@@ -20,18 +26,16 @@ install_pkgs(){
     done
   fi
 
-  if [[ $install == "y" ]]; then
-    for p in $packages; do
-      dnf install "$p" -y
-      log "Package $p is installed"
-    done
+  if [[ $INSTALL_MISSING == "y" ]]; then
+      dnf install "$pkg" -y
+      log "Package $pkg is installed"
   fi
 }
 
 while (("$#")); do
   case "$1" in
   --install-missing)
-    INSTALL_MISSING=1
+    INSTALL_MISSING="y"
     shift
     ;;
   -h | --help)
@@ -55,16 +59,11 @@ fi
 dnf install virt_cacard vpcd -y
 log "virt_cacard and vpcd are installed"
 
-if [[ $INSTALL_MISSING -eq 1 ]]; then
-  install_pkgs "y"
-else
-  install_pkgs ""
-fi
-
 for p in $packages; do
   package_version=$(rpm -qa "$p")
   if [[ -z  "$package_version" ]] ; then
-    err "Package $p is not installed on the system, but is is required for testing environment"
+    warn "Package $p is not installed on the system, but is is required for testing environment"
+    install_pkgs "$p"
   fi
   log "Package $package_version presents in the system"
 done

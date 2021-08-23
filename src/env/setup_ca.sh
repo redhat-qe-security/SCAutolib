@@ -2,10 +2,9 @@
 # author: Pavel Yadlouski <pyadlous@redhat.com>
 set -e
 
-. "$(dirname $0)/logs.sh" || exit 1
+. "$(dirname "$0")/logs.sh" || exit 1
 
 CA_DIR=""
-ENV_PATH=""
 
 while (("$#")); do
   case "$1" in
@@ -18,26 +17,12 @@ while (("$#")); do
       exit 1
     fi
     ;;
-  -e | --env)
-    if [ -n "$2" ] && [ ${2:0:1} != "-" ]; then
-      ENV_PATH=$2
-      shift 2
-    else
-      echo "Error: Argument for $1 is missing" >&2
-      exit 1
-    fi
-    ;;
-  -* | --*=) # unsupported flags
+  -*) # unsupported flags
     echo "Error: Unsupported flag $1" >&2
     exit 1
     ;;
   esac
 done
-
-if [[ "$ENV_PATH" != "" ]]; then
-  log "Env file $ENV_PATH is used"
-  export $(grep -v '^#' $ENV_PATH | xargs)
-fi
 
 if [[ -z "$CA_DIR" ]]
 then
@@ -61,12 +46,12 @@ log "Key for local CA is created"
 
 openssl req -batch -config "$CONF_DIR"/ca.cnf -x509 -new -nodes \
   -key rootCA.key -sha256 -days 10000 -set_serial 0 \
-  -extensions v3_ca -out "$CA_DIR"/rootCA.crt
+  -extensions v3_ca -out "$CA_DIR"/rootCA.pem
 log "Certificate for local CA is created"
 
 openssl ca -config "$CONF_DIR"/ca.cnf -gencrl -out crl/root.crl
 log "CRL is created"
-cat "$CA_DIR/rootCA.crt" >> /etc/sssd/pki/sssd_auth_ca_db.pem
+cat "$CA_DIR/rootCA.pem" >> /etc/sssd/pki/sssd_auth_ca_db.pem
 log "Root certificate is copied to /etc/sssd/pki/sssd_auth_ca_db.pem"
 
 log "CA setup is finished"

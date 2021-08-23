@@ -1,30 +1,26 @@
-import logging
-import coloredlogs
+import colorlog
 
-
-fmt = '%(module)s.%(funcName)s.%(lineno)d [%(levelname)s] %(message)s'
+handler = colorlog.StreamHandler()
+formatter = colorlog.ColoredFormatter(
+    '%(log_color)s%(module)s.%(funcName)s.%(lineno)d [%(levelname)s] %(message)s',
+    log_colors={
+        'DEBUG': 'cyan',
+        'INFO': 'green',
+        'WARNING': 'yellow',
+        'ERROR': 'red',
+        'CRITICAL': 'red,bg_white'})
+handler.setFormatter(formatter)
 
 # Basic logger
-log = logging.getLogger("base")
+base_logger = colorlog.getLogger("base")
+base_logger.addHandler(handler)
+base_logger.setLevel(colorlog.DEBUG)
 
 # Logger for environment events
-env_logger = logging.getLogger("env")
-color_dict = {'critical': {'bold': True, 'color': 'red'},
-              'debug': {'color': 'green'},
-              'error': {'color': 'red'},
-              'info': {},
-              'notice': {'color': 'magenta'},
-              'spam': {'color': 'green', 'faint': True},
-              'success': {'bold': True, 'color': 'green'},
-              'verbose': {'color': 'blue'},
-              'warning': {'color': 'yellow'}}
-
-color_dict_fields = {'levelname': {'color': 'white', "bright": True},
-                     "module": {"color": 63}}
-
-coloredlogs.install(level='DEBUG', logger=env_logger, fmt=fmt, field_styles=color_dict_fields, level_styles=color_dict)
-coloredlogs.install(level='DEBUG', logger=log, fmt=fmt, field_styles=color_dict_fields, level_styles=color_dict)
+env_logger = colorlog.getLogger("env")
+env_logger.addHandler(handler)
+env_logger.setLevel(colorlog.DEBUG)
 
 
 def hello():
-    print("Hello. Just check that it is imported")
+    print("Hello. Just check that SCAutolib is imported")

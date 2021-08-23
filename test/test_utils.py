@@ -1,11 +1,11 @@
 # author: Pavel Yadlouski <pyadlous@redhat.com>
 # Unit tests for of SCAutolib.src.utils module
-import pytest
+from os import path, system
+from shutil import copy
+
 from SCAutolib.src import utils
 from SCAutolib.src.exceptions import *
-from shutil import copy
-from os import path, system, remove
-from fixtures import *
+from SCAutolib.test.fixtures import *
 
 CUR_PATH = path.dirname(path.abspath(__file__))
 FILES = f"{CUR_PATH}/files"
@@ -31,7 +31,7 @@ def test_service_restart_fail():
     assert rc == 0
 
 
-def test_gen_cer():
+def test_gen_cer(prep_ca):
     """Test for generating correct root certificate."""
     cert, key = utils.generate_cert()
     assert path.exists(key)
@@ -46,16 +46,16 @@ def test_run_cmd_simple_cmd():
     assert "RC:0" in output
 
 
-def test_run_cmd_login_root_with_passwd():
-    output = utils.run_cmd("su user  -c 'su - -c whoami'",
+def test_run_cmd_login_root_with_passwd(test_user):
+    output = utils.run_cmd(f"su {test_user}  -c 'su - -c whoami'",
                            pin=False, passwd="redhat")
     assert "root" in output
     assert "RC:0" in output
 
 
-def test_run_cmd_pattern_not_found_password():
+def test_run_cmd_pattern_not_found_password(test_user):
     with pytest.raises(PatternNotFound):
-        utils.run_cmd("su user  -c 'su - -c whoami'",
+        utils.run_cmd(f"su {test_user}  -c 'su - -c whoami'",
                       pin=True, passwd="redhat")
 
 

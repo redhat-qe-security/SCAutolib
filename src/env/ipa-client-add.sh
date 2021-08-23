@@ -38,11 +38,11 @@ done
 
 echo "$ADMIN_PASSWD" | kinit admin
 
-#if [[ "$NO_NEW" -eq 0 ]]
-#then
+if [[ "$NO_NEW" -eq 0 ]]
+then
   ipa user-add "$USERNAME" --last last --first first --cn "$USERNAME"
   log "User '$USERNAME' is added to IPA server"
-#fi
+fi
 
 mkdir -p "$DIR" && pushd "$DIR"
 openssl req -new -newkey rsa:2048 -days 365 -nodes -keyout private.key \

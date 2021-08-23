@@ -1,6 +1,5 @@
 import click
 from SCAutolib.src.env import *
-from SCAutolib.src.exceptions import *
 
 
 @click.group()
@@ -21,7 +20,7 @@ def cli():
               help="IP address of IPA server to setup with", required=False)
 @click.option("--ca", is_flag=True, required=False,
               help="Flag for setting up the local CA")
-@click.option("--install-missing", "-m", is_flag=True, required=False,
+@click.option("--install-missing", "-m", is_flag=True, required=False, default=True,
               help="Silently install missing packages, if it would be needed")
 def prepare(cards, conf, ipa, ip, ca, install_missing):
     """
@@ -41,6 +40,8 @@ def prepare(cards, conf, ipa, ip, ca, install_missing):
     env_logger.debug("Temporary directories are created")
 
     general_setup(install_missing)
+    env_logger.debug("General setup is done")
+
     create_sssd_config()
     check_semodule()
 
@@ -62,7 +63,7 @@ def prepare(cards, conf, ipa, ip, ca, install_missing):
         env_logger.debug("Start setup of local CA")
         prepare_dir(read_env("CA_DIR"))
         create_cnf('ca')
-        setup_ca_(DOTENV)
+        setup_ca_()
 
     if cards:
         if ca:
@@ -75,6 +76,8 @@ def prepare(cards, conf, ipa, ip, ca, install_missing):
             add_ipa_user_(user)
             env_logger.debug(f"Start setup of virtual smart cards for IPA user {user}")
             create_sc(user)
+    env_logger.info("Preparation of the environments is completed")
+    exit(0)
 
 
 @click.command()
@@ -90,7 +93,7 @@ def setup_ca(conf):
     prepare_dir(read_env("CA_DIR"))
     prep_tmp_dirs()
     create_cnf('ca')
-    setup_ca_(env_path)
+    setup_ca_()
 
 
 @click.command()
@@ -143,7 +146,7 @@ def cleanup():
     """
     env_logger.debug("Start cleanup")
 
-    restore_items = read_config("restore")
+    restore_items: list = read_config("restore")
     try:
         cleanup_(restore_items)
     except:

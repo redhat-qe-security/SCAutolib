@@ -4,4 +4,4 @@ pyyaml
 python-decouple
 python-freeipa
 cryptography
-coloredlogs
+colorlog

@@ -1,47 +1,24 @@
 import datetime
 import subprocess as subp
-import sys
 from os import environ, path
-from os.path import isdir, isfile
+from os.path import isdir, isfile, join
 from random import randint
 from shutil import copy2, copytree
-from time import sleep
 
 import pexpect
+import sys
+from SCAutolib import env_logger, base_logger
+from SCAutolib.src import DIR_PATH, read_env
+from SCAutolib.src.exceptions import *
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
-from decouple import UndefinedValueError, config
-from SCAutolib import env_logger, log
-from SCAutolib.src import DIR_PATH
-from SCAutolib.src.exceptions import *
+from decouple import UndefinedValueError
+from time import sleep
 
 DOTNENV = f"{DIR_PATH}/.env"
-
 SERVICES = {"sssd": "/etc/sssd/sssd.conf", "krb": "/etc/krb5.conf"}
-TMP = None
-KEYS = None
-CERTS = None
-BACKUP: str = ""
-
-
-def check_env():
-    """
-    Insure that environment variables are loaded from .env file.
-    """
-    global BACKUP
-    global KEYS
-    global CERTS
-    global TMP
-    if BACKUP == "":
-        BACKUP = config("BACKUP")
-    if KEYS is None:
-        KEYS = config("KEYS")
-    if CERTS is None:
-        CERTS = config("CERTS")
-    if TMP is None:
-        CERTS = config("TMP")
 
 
 def edit_config(service: str, string: str, holder: str, section: bool = True):
@@ -115,12 +92,11 @@ def restore_file_(target, name, service=None):
         service: service which should be restarted after file is restored.
                  By default is None (no need to restart any services).
     """
-    check_env()
-    source = path.join(BACKUP, name)
+    source = path.join(read_env("BACKUP"), name)
     copy2(source, target)
     subp.run(["restorecon", "-v", target])
     restart_service(service)
-    log.debug(f"File from {source} is restored to {target}")
+    base_logger.debug(f"File from {source} is restored to {target}")
 
 
 def backup_(file_path, name=""):
@@ -128,25 +104,24 @@ def backup_(file_path, name=""):
     Backup the file given in file_path to BACKUP directory.
 
     Args:
-        sftp: SFTP connection to server for backup from this server
         file_path: path to fle
         name: file name in BACKUP directory
     """
-    target = f"{BACKUP}/{name}"
+    target = f"{read_env('BACKUP')}/{name}"
     if isfile(file_path):
         copy2(file_path, target)
     elif isdir(file_path):
         copytree(file_path, target)
-    log.debug(f"Source from {file_path} is copied to {target}")
+    base_logger.debug(f"Source from {file_path} is copied to {target}")
     return target
 
 
-def edit_config_(config: str, string: str, holder: str, section: bool):
+def edit_config_(conf: str, string: str, holder: str, section: bool):
     """
     Function for actual editing the config file.
 
     Args:
-        config: path to config file
+        conf: path to config file
         string: string to be add
         holder: section or substring to update
         section: specify if holder is a section
@@ -154,20 +129,20 @@ def edit_config_(config: str, string: str, holder: str, section: bool):
     old = f"#<[{holder}]>" if section else holder
     new = f"{string}\n{old}" if section else string
 
-    with open(config, "r") as file:
+    with open(conf, "r") as file:
         content = file.read()
         if (old is not None) and (old not in content):
-            log.error(f"File {config} is not updated. "
-                      f"Maybe placeholder in the config {config} "
+            base_logger.error(f"File {conf} is not updated. "
+                      f"Maybe placeholder in the config {conf} "
                       f"for the section {holder} is missing?")
-            raise Exception(f"Placeholder {old} is not present in {config}")
+            raise Exception(f"Placeholder {old} is not present in {conf}")
 
     content = content.replace(old, new)
-    with open(config, "w+") as file:
+    with open(conf, "w+") as file:
         file.write(content)
 
-    log.debug(f"{'Section' if section else 'Substring'} {holder} in config "
-              f"file {config} is updated")
+    base_logger.debug(f"{'Section' if section else 'Substring'} {holder} in config "
+              f"file {conf} is updated")
 
 
 def restart_service(service: str) -> int:
@@ -201,15 +176,15 @@ def generate_cert(username=None):
     Returns:
         tuple with path to the certificate and to the key files.
     """
-    check_env()
+    certs = read_env("CERTS")
+    keys = read_env("KEYS")
     prefix = username if username == "root" else "User"
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     serial = randint(1, 1000)
-    cert_path = f"{CERTS}/rootCA-{serial}.pem"
-    key_path = f"{KEYS}/private-key-{serial}.pem"
+    cert_path = f"{certs}/rootCA{serial}.pem"
+    key_path = f"{keys}/private-key-{serial}.pem"
     subject = issuer = ""
     basic_constraints = x509.BasicConstraints(ca=True, path_length=None)
-    key_usage = None
     builder = x509.CertificateBuilder()
 
     with open(key_path, "wb") as f:
@@ -230,9 +205,6 @@ def generate_cert(username=None):
             x509.NameAttribute(NameOID.ORGANIZATIONAL_UNIT_NAME, f"root-{serial} Test"),
             x509.NameAttribute(NameOID.COMMON_NAME, f"root-{serial} Test Ca"),
         ])
-        if "ROOT_CRT" not in environ:
-            with open(DOTNENV, "a") as f:
-                f.write(f"ROOT_CRT={cert_path}")
     else:
         key_usage = x509.KeyUsage(
             digital_signature=False, content_commitment=False,
@@ -241,13 +213,9 @@ def generate_cert(username=None):
             crl_sign=False, encipher_only=False,
             decipher_only=False)
         try:
-            root_cert_path = config("ROOT_CRT")
-            root_crt = None
-            if "pem" in root_cert_path:
-                with open(root_cert_path, "rb") as f:
-                    root_crt = x509.load_pem_x509_certificate(f.read())
-            else:
-                root_crt = x509.load_der_x509_certificate(root_cert_path)
+            root_cert_path = join(read_env("CA_DIR"), "rootCA.pem")
+            with open(root_cert_path, "rb") as f:
+                root_crt = x509.load_pem_x509_certificate(f.read())
             issuer = root_crt.issuer
             subject = x509.Name([
                 x509.NameAttribute(NameOID.ORGANIZATION_NAME, f"{prefix}-{serial}"),
@@ -255,7 +223,7 @@ def generate_cert(username=None):
                 x509.NameAttribute(NameOID.COMMON_NAME, f"{prefix}-{serial} Test Ca"),
             ])
         except UndefinedValueError:
-            log.error("You are trying to generate user certificate, but .env "
+            base_logger.error("You are trying to generate user certificate, but .env "
                       "file do not have name for certificate issuer."
                       "Did you generate self-signed CA certificate?")
 
@@ -281,8 +249,9 @@ def generate_cert(username=None):
 
     return cert_path, key_path
 
-def run_cmd(cmd: str = None, pin: bool = True,
-            passwd: str = None, shell=None):
+
+def run_cmd(cmd: str = None, pin: bool = True, passwd: str = None, shell=None,
+            return_val: str = "stdout"):
     """
     Run to create a child from current shell to run cmd. Try to assert
     expect pattern in the output of the cmd. If cmd require, provide
@@ -296,13 +265,14 @@ def run_cmd(cmd: str = None, pin: bool = True,
                 in login output.
         passwd: smart card PIN or user password if login is needed
         shell: shell child where command need to be execute.
+        return_val: return sheel (shell) or stdout (stdout - default) or both (all)
     Returns:
         stdout of executed command (cmd; see above)
     """
     try:
         if shell is None and cmd is not None:
-            shell = pexpect.spawn("/bin/bash", ["-c", cmd + ' ; echo "RC:$?"'],
-                                    encoding='utf-8')
+            cmd = ["-c", f'{cmd} ; echo "RC:$?"']
+            shell = pexpect.spawn("/bin/bash", cmd, encoding='utf-8')
         shell.logfile = sys.stdout
 
         if passwd is not None:
@@ -311,21 +281,30 @@ def run_cmd(cmd: str = None, pin: bool = True,
 
             if out != 1:
                 if out == 0:
-                    log.error("Timed out on passsword / PIN waiting")
+                    base_logger.error("Timed out on passsword / PIN waiting")
                 expect = pattern
 
                 raise PatternNotFound(f"Pattern '{pattern}' is not "
-                                        f"found in the output.")
+                                      f"found in the output.")
             shell.sendline(passwd)
 
     except PatternNotFound:
-        log.error(f"Command: {cmd}")
-        log.error(f"Output:\n{str(shell.before)}\n")
+        base_logger.error(f"Command: {cmd}")
+        base_logger.error(f"Output:\n{str(shell.before)}\n")
         raise
-    return shell.read()
 
-def check_output(output, expect: list = [], reject: list = [],
-                    zero_rc: bool = True, check_rc: bool = False):
+    if return_val == "stdout":
+        return shell.read()
+    elif return_val == "shell":
+        return shell
+    elif return_val == "all":
+        return shell, shell.read()
+    else:
+        raise UnknownOption(option_val=return_val, option_name="return_val")
+
+
+def check_output(output: str, expect: list = [], reject: list = [],
+                 zero_rc: bool = True, check_rc: bool = False):
     """
     Check "output" for presence of expected and unexpected patterns.
 
@@ -337,27 +316,35 @@ def check_output(output, expect: list = [], reject: list = [],
     non-zero value.
 
     Args:
+        output: string where to look for expect/reject patterns. If check_rc
+                and zero_rc are True, than string has to contain substring
+                RC:<rc> where <rc> is a return value of the command. NOTE:
+                substring with return value is automatically added by run_cmd
+                function.
         expect: list of patterns to be matched in the output
         reject: list of patterns that cause failure if matched in the output
         check_rc: indicates that presence of pattern "RC:0" would be checked
-                    and an exception would be raised if the pattern is missing
+                  and an exception would be raised if the pattern is missing
         zero_rc: indicates that pattern "RC:[1-9]+" should be present
-                    instead of "RC:0" and exception would not be raised
+                 instead of "RC:0" and exception would not be raised
     """
 
     # TODO: add switch and functionality
     #  to check patterns in specified order
+    import re
     for pattern in reject:
-        if pattern in output:
+        pattern = re.compile(pattern)
+        if pattern.search(output) is not None:
             raise DisallowedPatternFound(f"Disallowed pattern '{pattern}' "
-                                            f"was found in the output")
+                                         f"was found in the output")
 
     for pattern in expect:
-        if pattern not in output:
-            log.error(f"Pattern: {pattern} not found in output")
-            log.error(f"Output:\n{output}\n")
+        pattern = re.compile(pattern)
+        if pattern.search(output) is None:
+            base_logger.error(f"Pattern: {pattern} not found in output")
+            base_logger.error(f"Output:\n{output}\n")
             raise PatternNotFound(f"Pattern '{expect}' is not "
-                                    f"found in the output.")
+                                  f"found in the output.")
 
     if check_rc:
         if "RC:0" not in output:
@@ -365,6 +352,6 @@ def check_output(output, expect: list = [], reject: list = [],
             if zero_rc:
                 raise NonZeroReturnCode(msg)
             else:
-                log.warning(msg)
+                base_logger.warning(msg)
 
     return True

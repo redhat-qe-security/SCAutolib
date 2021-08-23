@@ -1,4 +1,4 @@
-from SCAutolib import log
+from SCAutolib import base_logger
 from subprocess import check_output, PIPE
 from traceback import format_exc
 
@@ -40,8 +40,8 @@ class Authselect:
         args.append("--force")
 
         check_output(args, stderr=PIPE, encoding="utf=8")
-        log.debug(f"SSSD is set to: {' '.join(args)}")
-        log.debug(f"Backupfile: {self.backup_name}")
+        base_logger.debug(f"SSSD is set to: {' '.join(args)}")
+        base_logger.debug(f"Backupfile: {self.backup_name}")
 
     def _reset(self):
         """
@@ -53,7 +53,7 @@ class Authselect:
         check_output(["authselect", "backup-remove", self.backup_name,
                       "--debug"], stderr=PIPE, encoding="utf=8")
 
-        log.debug("Authselect backup file is restored")
+        base_logger.debug("Authselect backup file is restored")
 
     def __enter__(self):
         self._set()
@@ -61,6 +61,6 @@ class Authselect:
 
     def __exit__(self, ext_type, ext_value, ext_traceback):
         if ext_type is not None:
-            log.error("Exception in authselect context")
-            log.error(format_exc())
+            base_logger.error("Exception in authselect context")
+            base_logger.error(format_exc())
         self._reset()

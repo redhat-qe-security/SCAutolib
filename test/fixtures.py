@@ -1,10 +1,13 @@
-import pytest
+import pwd
+from os import remove, environ
 from os.path import dirname, join
-from os import remove
-from SCAutolib.src import env
-from SCAutolib.src import load_env
 from pathlib import Path
-from yaml import dump
+from subprocess import check_output
+
+import pytest
+from SCAutolib.src import load_env, env
+from dotenv import load_dotenv
+from yaml import dump, load, FullLoader
 
 
 @pytest.fixture()
@@ -98,11 +101,19 @@ def config_file_incorrect(tmpdir, create_yaml_content):
 
 
 @pytest.fixture()
-def loaded_env(config_file_correct):
+def loaded_env(config_file_correct, real_factory):
     env_path = load_env(config_file_correct)
+    load_dotenv(env_path)
+    ca_dir = environ['CA_DIR']
+    for dir_path in ("CA_DIR", "TMP", "CERTS", "KEYS", "BACKUP"):
+        real_factory.create_dir(Path(environ[dir_path]))
+    real_factory.create_dir(Path(f"{ca_dir}/conf"))
+
     try:
         yield env_path, config_file_correct
     finally:
+        # Need to be manualy removed because .env file is created in the
+        # source code directory
         remove(env_path)
 
 
@@ -113,10 +124,10 @@ def real_factory(tmp_path_factory):
         _created_file = list()
 
         @staticmethod
-        def create_dir():
-            dir_path = tmp_path_factory.mktemp(f"dir-{len(Factory._created_dir)}")
+        def create_dir(dir_path=""):
+            if dir_path == "":
+                dir_path = tmp_path_factory.mktemp(f"dir-{len(Factory._created_dir)}")
             dir_path.mkdir(exist_ok=True)
-            # assert exists(dir_path)
             Factory._created_dir.append(dir_path)
             return dir_path
 
@@ -131,3 +142,34 @@ def real_factory(tmp_path_factory):
             return file_path
 
     return Factory
+
+
+@pytest.fixture()
+def prep_ca(loaded_env, real_factory):
+    """Prepare directories and files needed for local CA deployment"""
+    env.create_cnf("ca")
+    env.setup_ca_()
+    return environ['CA_DIR']
+
+
+@pytest.fixture()
+def clean_conf(loaded_env):
+    try:
+        yield
+    finally:
+        load_dotenv(loaded_env[0])
+        with open(environ["CONF"], "r") as f:
+            data = load(f, Loader=FullLoader)
+        data["restore"] = []
+        with open(environ["CONF"], "w") as f:
+            dump(data, f)
+
+
+@pytest.fixture()
+def test_user():
+    username = "test-user"
+    try:
+        pwd.getpwnam(username)
+    except KeyError:
+        check_output(["useradd", username, "-m"])
+    return username
