@@ -166,25 +166,6 @@ echo
 
 chmod 600 /etc/sssd/sssd.conf
 
-if [ ! -f /etc/sytemd/system/virt_cacard_"$USERNAME".service ]
-then
-  echo \
-  "[Unit]
-Description = virtual card for $USERNAME
-Requires = pcscd.service
-
-[Service]
-Environment = SOFTHSM2_CONF=\"/root/$USERNAME/conf/softhsm2.conf\"
-WorkingDirectory = /root/$USERNAME
-ExecStart = /usr/bin/virt_cacard >> /var/log/virt_cacard.debug 2>&1
-KillMode = process
-
-[Install]
-WantedBy = multi-user.target" > /etc/systemd/system/virt_cacard_"$USERNAME".service
-  systemctl daemon-reload
-  log "virt_cacard service is crated"
-fi
-
 systemctl stop pcscd.service pcscd.socket virt_cacard_"$USERNAME" sssd
 rm -rf /var/lib/sss/{db,mc}/*
 systemctl start pcscd sssd

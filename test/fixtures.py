@@ -137,7 +137,6 @@ def real_factory(tmp_path_factory):
                 dir_name = Factory.create_dir()
             file_path = f"{dir_name}/file-{len(Factory._created_file)}"
             Path(file_path).touch(exist_ok=True)
-            # assert exists(file_path)
             Factory._created_file.append(file_path)
             return file_path
 
@@ -173,3 +172,12 @@ def test_user():
     except KeyError:
         check_output(["useradd", username, "-m"])
     return username
+
+
+@pytest.fixture()
+def loaded_env_ready(loaded_env):
+    env_path = loaded_env[0]
+    with open(env_path, "a") as f:
+        f.write("READY=1")
+    load_dotenv(env_path)
+    return env_path, environ["CONF"]

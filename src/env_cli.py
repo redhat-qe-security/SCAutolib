@@ -37,22 +37,22 @@ def prepare(cards, conf, ipa, ip, ca, install_missing):
     load_env(conf)
 
     prep_tmp_dirs()
-    env_logger.debug("Temporary directories are created")
+    env_logger.info("Temporary directories are created")
 
     general_setup(install_missing)
-    env_logger.debug("General setup is done")
+    env_logger.info("General setup is done")
 
     create_sssd_config()
     check_semodule()
 
     if ipa:
-        env_logger.debug("Start setup of IPA client")
+        env_logger.info("Start setup of IPA client")
         if not ip:
             env_logger.debug("No IP address for IPA server is given.")
             env_logger.debug("Try to get IP address of IPA server from "
                              "configuration file.")
             ip = read_config("ipa_server_ip")
-        if ip is None:
+        if not ip:
             env_logger.error("Can't find IP address of IPA server in "
                              "configuration file")
             exit(1)
@@ -60,7 +60,7 @@ def prepare(cards, conf, ipa, ip, ca, install_missing):
         install_ipa_client_(ip, root_passwd)
 
     if ca:
-        env_logger.debug("Start setup of local CA")
+        env_logger.info("Start setup of local CA")
         prepare_dir(read_env("CA_DIR"))
         create_cnf('ca')
         setup_ca_()
@@ -68,13 +68,13 @@ def prepare(cards, conf, ipa, ip, ca, install_missing):
     if cards:
         if ca:
             user = read_config("local_user")
-            env_logger.debug(f"Start setup of virtual smart cards for local user {user}")
+            env_logger.info(f"Start setup of virtual smart cards for local user {user}")
             create_sc(user)
 
         if ipa:
             user = read_config("ipa_user")
             add_ipa_user_(user)
-            env_logger.debug(f"Start setup of virtual smart cards for IPA user {user}")
+            env_logger.info(f"Start setup of virtual smart cards for IPA user {user}")
             create_sc(user)
     env_logger.info("Preparation of the environments is completed")
     exit(0)

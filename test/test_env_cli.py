@@ -6,7 +6,7 @@ from SCAutolib.src import env_cli
 from SCAutolib.test.fixtures import *
 from os.path import basename, exists
 from yaml import load, dump, Loader
-from subprocess import check_output
+from subprocess import check_output, run, PIPE
 import pwd
 
 
@@ -25,6 +25,69 @@ def test_prepare_fail_config(config_file_incorrect, caplog, runner):
     assert msg in caplog.text
 
 
+@pytest.mark.slow()
+@pytest.mark.service_restart()
+def test_preapre_simple_no_params(config_file_correct, runner, caplog):
+    packages = ["softhsm", "sssd-tools", "httpd", "sssd", "sshpass"]
+    check_output(["dnf", "remove", *packages, "-y"], encoding="utf-8")
+    result = runner.invoke(env_cli.prepare, ["--conf", config_file_correct])
+
+    try:
+        assert result.exit_code == 0
+        from subprocess import run, PIPE
+        output = run(["rpm", "-qa", *packages], encoding="utf-8", stdout=PIPE, check=True)
+        for p in packages:
+            assert p in output.stdout
+        assert "Preparation of the environments is completed" in caplog.messages
+    finally:
+        check_output(["semodule", "-r", "virtcacard"])
+        packages = ["softhsm", "sssd-tools", "httpd", "sssd", "sshpass"]
+        check_output(["dnf", "remove", *packages, "-y"])
+
+
+def test_prepare_ipa_no_ip(loaded_env_ready, caplog, runner):
+    conf_file = loaded_env_ready[1]
+    result = runner.invoke(env_cli.prepare, ["--conf", conf_file, "--ipa"])
+    assert result.exit_code == 1
+    assert "No IP address for IPA server is given." in caplog.messages
+    assert "Can't find IP address of IPA server in configuration file" in caplog.messages
+
+
+def test_prepare_ca(loaded_env_ready, caplog, runner):
+    _, conf_file = loaded_env_ready
+    result = runner.invoke(env_cli.prepare, ["--conf", conf_file, "--ca"])
+    assert result.exit_code == 0
+    assert "Start setup of local CA" in caplog.messages
+    assert "Setup of local CA is completed" in caplog.messages
+
+
+@pytest.mark.slow()
+@pytest.mark.service_restart()
+def test_prepare_ca_cards(config_file_correct, caplog, runner):
+    with open(config_file_correct, "r") as f:
+        data = load(f, Loader=FullLoader)
+    user = data["local_user"]
+    username = user["name"]
+    card_dir = user["card_dir"]
+    conf_dir = join(card_dir, "conf")
+
+    result = runner.invoke(env_cli.prepare, ["--conf", config_file_correct, "--ca", "--cards"])
+
+    assert result.exit_code == 0
+    assert f"Start setup of virtual smart cards for local user {user}" in caplog.messages
+    assert exists(join(conf_dir, "softhsm2.conf"))
+    service_path = f"/etc/systemd/system/virt_cacard_{username}.service"
+    assert exists(service_path)
+    with open(service_path, "r") as f:
+        content = f.read()
+
+    assert f"virtual card for {username}" in content
+    assert f'SOFTHSM2_CONF="{conf_dir}/softhsm2.conf"' in content
+    assert f'WorkingDirectory = {card_dir}' in content
+    run(['systemctl', 'start', f'virt_cacard_{username}'], encoding='utf-8', stderr=PIPE, stdout=PIPE, check=True)
+
+
+@pytest.mark.slow()
 def test_cleanup(real_factory, loaded_env, caplog, runner, clean_conf, test_user):
     """Test that cleanup command cleans and resotres necessary
     items."""

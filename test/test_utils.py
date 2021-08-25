@@ -11,6 +11,7 @@ CUR_PATH = path.dirname(path.abspath(__file__))
 FILES = f"{CUR_PATH}/files"
 
 
+@pytest.mark.slow()
 def test_service_restart():
     """Test for restarting the service"""
     rc = utils.restart_service("sssd")
@@ -19,6 +20,7 @@ def test_service_restart():
     assert stat == 0
 
 
+@pytest.mark.slow()
 def test_service_restart_fail():
     """Test for fault of service restart."""
     copy(f"{FILES}/test.service", "/etc/systemd/system/test.service")
