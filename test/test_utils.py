@@ -1,5 +1,6 @@
 # author: Pavel Yadlouski <pyadlous@redhat.com>
 # Unit tests for of SCAutolib.src.utils module
+from configparser import ConfigParser
 from os import path, system
 from shutil import copy
 
@@ -33,7 +34,7 @@ def test_service_restart_fail():
     assert rc == 0
 
 
-def test_gen_cer(prep_ca):
+def test_gen_cert(prep_ca):
     """Test for generating correct root certificate."""
     cert, key = utils.generate_cert()
     assert path.exists(key)
@@ -97,3 +98,43 @@ def test_check_output_expect_and_zero_rc(zero_rc_output):
     result = utils.check_output(
         zero_rc_output, expect=["Tom", "is"], check_rc=True, zero_rc=True)
     assert result
+
+
+def test_edit_config_no_restore(dummy_config, loaded_env):
+    @utils.edit_config(dummy_config, section="first", key="one", value="10")
+    def inner_fnc():
+        return
+
+    inner_fnc()
+    cnf = ConfigParser()
+
+    with open(dummy_config, "r") as f:
+        cnf.read_file(f)
+
+    assert "first" in cnf.sections(), "Section 'first' is not in the sections"
+    assert "10" == cnf.get("first", "one")
+
+
+def test_edit_config_restore(dummy_config, loaded_env):
+    @utils.edit_config(dummy_config, section="first", key="one", value="10")
+    def inner_fnc():
+        return
+
+    inner_fnc()
+    cnf = ConfigParser()
+
+    with open(dummy_config, "r") as f:
+        cnf.read_file(f)
+
+    assert "first" in cnf.sections(), "Section 'first' is not in the sections"
+    assert "1" == cnf.get("first", "one")
+
+
+def test_edit_config_no_section(dummy_config, loaded_env, caplog):
+    @utils.edit_config(dummy_config, section="no-section", key="one", value="10")
+    def inner_fnc():
+        return
+
+    with pytest.raises(UnknownOption):
+        inner_fnc()
+    assert f"Section no-section is not present in config file {dummy_config}" in caplog.messages

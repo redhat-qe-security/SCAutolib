@@ -1,5 +1,6 @@
 # author: Pavel Yadlouski <pyadlous@redhat.com>
 # Unit tests for of SCAutolib.src.env_cli module
+import subprocess
 import pytest
 from click.testing import CliRunner
 from SCAutolib.src import env_cli
@@ -27,22 +28,28 @@ def test_prepare_fail_config(config_file_incorrect, caplog, runner):
 
 @pytest.mark.slow()
 @pytest.mark.service_restart()
-def test_preapre_simple_no_params(config_file_correct, runner, caplog):
-    packages = ["softhsm", "sssd-tools", "httpd", "sssd", "sshpass"]
-    check_output(["dnf", "remove", *packages, "-y"], encoding="utf-8")
+def test_prepare_simple_fail_on_packages(config_file_correct, runner, caplog):
+    package = "softhsm"
+    subprocess.check_output(["dnf", "remove", package, "-y"], encoding="utf-8")
+    # Act
     result = runner.invoke(env_cli.prepare, ["--conf", config_file_correct])
 
-    try:
-        assert result.exit_code == 0
-        from subprocess import run, PIPE
-        output = run(["rpm", "-qa", *packages], encoding="utf-8", stdout=PIPE, check=True)
-        for p in packages:
-            assert p in output.stdout
-        assert "Preparation of the environments is completed" in caplog.messages
-    finally:
-        check_output(["semodule", "-r", "virtcacard"])
-        packages = ["softhsm", "sssd-tools", "httpd", "sssd", "sshpass"]
-        check_output(["dnf", "remove", *packages, "-y"])
+    # Assert
+    assert result.exit_code == 1
+    assert f"Package {package} is required for testing, but it is not installed on the system." in caplog.messages
+    assert "General setup is failed" in caplog.messages
+
+
+@pytest.mark.slow()
+@pytest.mark.service_restart()
+def test_prepare_simple_install_missing(config_file_correct, runner, caplog):
+    # Act
+    result = runner.invoke(env_cli.prepare, ["--conf", config_file_correct, "-m"])
+
+    # Assert
+    assert result.exit_code == 0
+    assert "General setup is done" in caplog.messages
+    assert "Preparation of the environments is completed" in caplog.messages
 
 
 def test_prepare_ipa_no_ip(loaded_env_ready, caplog, runner):
@@ -63,28 +70,91 @@ def test_prepare_ca(loaded_env_ready, caplog, runner):
 
 @pytest.mark.slow()
 @pytest.mark.service_restart()
-def test_prepare_ca_cards(config_file_correct, caplog, runner):
+def test_prepare_ca_cards(config_file_correct, caplog, runner, src_path):
+    result = runner.invoke(
+        env_cli.prepare, ["--conf", config_file_correct, "--ca", "--cards"])
+
+    load_dotenv(f"{src_path}/.env")
+    config_file_correct = environ["CONF"]
     with open(config_file_correct, "r") as f:
         data = load(f, Loader=FullLoader)
-    user = data["local_user"]
-    username = user["name"]
-    card_dir = user["card_dir"]
-    conf_dir = join(card_dir, "conf")
-
-    result = runner.invoke(env_cli.prepare, ["--conf", config_file_correct, "--ca", "--cards"])
+        user = data["local_user"]
+        username = user["name"]
+        card_dir = user["card_dir"]
+        conf_dir = join(card_dir, "conf")
 
     assert result.exit_code == 0
-    assert f"Start setup of virtual smart cards for local user {user}" in caplog.messages
+    assert f"Start setup of virtual smart cards for local user {user}" in caplog.text
     assert exists(join(conf_dir, "softhsm2.conf"))
     service_path = f"/etc/systemd/system/virt_cacard_{username}.service"
     assert exists(service_path)
+
     with open(service_path, "r") as f:
         content = f.read()
 
     assert f"virtual card for {username}" in content
     assert f'SOFTHSM2_CONF="{conf_dir}/softhsm2.conf"' in content
     assert f'WorkingDirectory = {card_dir}' in content
-    run(['systemctl', 'start', f'virt_cacard_{username}'], encoding='utf-8', stderr=PIPE, stdout=PIPE, check=True)
+    run(['systemctl', 'start', f'virt_cacard_{username}'],
+        encoding='utf-8', stderr=PIPE, stdout=PIPE, check=True)
+
+
+@pytest.mark.slow()
+@pytest.mark.service_restart()
+@pytest.mark.ipa()
+def test_prepare_ipa(config_file_correct, caplog, runner, ipa_ip, ipa_hostname, remove_env):
+    result = runner.invoke(env_cli.prepare,
+                           ["--conf", config_file_correct, "--ipa", "--server-ip",
+                            ipa_ip, "--server-hostname", ipa_hostname])
+    try:
+        assert result.exit_code == 0
+        with open("/etc/hosts", "r") as f:
+            assert f"{ipa_ip} {ipa_hostname}" in f.read()
+        assert run(["ipa", "user-find"]).returncode == 0
+        assert "Start setup of IPA client" in caplog.messages
+        assert f"New entry {ipa_ip} {ipa_hostname} is added to /etc/hosts" in caplog.messages
+    finally:
+        check_output(["ipa", "dnsrecord-del", "sc.test.com", "ipa-client",
+                      "--del-all"])
+        check_output(["ipa-client-install", "--uninstall"], input=b"no")
+
+
+@pytest.mark.slow()
+@pytest.mark.service_restart()
+@pytest.mark.ipa()
+@pytest.mark.filterwarnings('ignore:Unverified HTTPS request is being made to host.*')
+def test_prepare_ipa_cards(config_file_correct, caplog, runner, ipa_ip,
+                           ipa_hostname, src_path):
+    result = runner.invoke(env_cli.prepare,
+                           ["--conf", config_file_correct, "--ipa", "--server-ip",
+                            ipa_ip, "--server-hostname", ipa_hostname, "--cards"])
+    load_dotenv(f"{src_path}/.env")
+
+    config_file_correct = environ["CONF"]
+
+    with open(config_file_correct, "r") as f:
+        data = load(f, Loader=FullLoader)
+
+    user = data["ipa_user"]
+    username = user['name']
+    card_dir = user["card_dir"]
+    conf_dir = join(card_dir, "conf")
+    try:
+        assert result.exit_code == 0
+        msg = f"User {username} is updated on IPA server. Cert and key stored into"
+        assert msg in caplog.text
+        service_path = f"/etc/systemd/system/virt_cacard_{username}.service"
+        assert exists(service_path)
+        with open(service_path, "r") as f:
+            content = f.read()
+        assert f"virtual card for {username}" in content
+
+        assert f'SOFTHSM2_CONF="{conf_dir}/softhsm2.conf"' in content
+        assert f'WorkingDirectory = {card_dir}' in content
+    finally:
+        check_output(["ipa", "dnsrecord-del", "sc.test.com", "ipa-client",
+                      "--del-all"])
+        check_output(["ipa-client-install", "--uninstall"], input=b"no")
 
 
 @pytest.mark.slow()
@@ -115,8 +185,10 @@ def test_cleanup(real_factory, loaded_env, caplog, runner, clean_conf, test_user
     with open(config_file, "r") as f:
         data = load(f, Loader=Loader)
 
-    data["restore"].append({"type": "dir", "src": str(src_dir_parh), "backup_dir": str(dest_dir_path)})
-    data["restore"].append({"type": "file", "src": str(src_file), "backup_dir": str(dest_file)})
+    data["restore"].append({"type": "dir", "src": str(
+        src_dir_parh), "backup_dir": str(dest_dir_path)})
+    data["restore"].append({"type": "file", "src": str(
+        src_file), "backup_dir": str(dest_file)})
     data["restore"].append({"type": "dir", "src": str(src_dir_not_backup)})
     data["restore"].append({"type": "file", "src": str(src_file_not_bakcup)})
     data["restore"].append({"type": "user", "username": test_user})

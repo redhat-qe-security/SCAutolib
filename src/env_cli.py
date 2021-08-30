@@ -1,4 +1,5 @@
 import click
+from SCAutolib.src import env
 from SCAutolib.src.env import *
 
 
@@ -16,18 +17,20 @@ def cli():
 @click.option("--ipa", "-i", is_flag=True,
               help="Setup IPA client with existed IPA server (IP address in "
                    "conf file or specify by --ip parameter)")
-@click.option("--ip", type=click.STRING,
+@click.option("--server-ip", type=click.STRING,
               help="IP address of IPA server to setup with", required=False)
+@click.option("--server-hostname", type=click.STRING, required=False, default=None,
+              help="Hostname of IPA server. This name would be added to /etc/hosts")
 @click.option("--ca", is_flag=True, required=False,
               help="Flag for setting up the local CA")
-@click.option("--install-missing", "-m", is_flag=True, required=False, default=True,
+@click.option("--install-missing", "-m", is_flag=True, required=False, default=False,
               help="Silently install missing packages, if it would be needed")
-def prepare(cards, conf, ipa, ip, ca, install_missing):
+def prepare(cards, conf, ipa, server_ip, ca, install_missing, server_hostname):
     """
     Prepair the test environment including temporary directories, necessary
     configuration files and services. Also can automatically run setup for local
     CA, virtual smart card and installing IPA client with adding IPA users
-    defined in configrutation file.
+    defined in configuration file.
     """
     if not check_config(conf):
         env_logger.error("Configuration file miss required fields. Check logs for"
@@ -38,26 +41,29 @@ def prepare(cards, conf, ipa, ip, ca, install_missing):
 
     prep_tmp_dirs()
     env_logger.info("Temporary directories are created")
-
-    general_setup(install_missing)
-    env_logger.info("General setup is done")
+    env_logger.debug("Start general setup")
+    try:
+        general_setup(install_missing)
+    except:
+        exit(1)
 
     create_sssd_config()
     check_semodule()
 
     if ipa:
         env_logger.info("Start setup of IPA client")
-        if not ip:
+        if not server_ip:
             env_logger.debug("No IP address for IPA server is given.")
             env_logger.debug("Try to get IP address of IPA server from "
                              "configuration file.")
-            ip = read_config("ipa_server_ip")
-        if not ip:
+            server_ip = read_config("ipa_server_ip")
+        if not server_ip:
             env_logger.error("Can't find IP address of IPA server in "
                              "configuration file")
             exit(1)
-        root_passwd = read_config("ipa_server_root")
-        install_ipa_client_(ip, root_passwd)
+        server_root_passwd = read_config("ipa_server_root")
+        install_ipa_client_(server_ip, server_root_passwd, server_hostname)
+        env_logger.info("IPA client is installed on the system")
 
     if ca:
         env_logger.info("Start setup of local CA")
@@ -73,7 +79,7 @@ def prepare(cards, conf, ipa, ip, ca, install_missing):
 
         if ipa:
             user = read_config("ipa_user")
-            add_ipa_user_(user)
+            add_ipa_user_(user, server_hostname)
             env_logger.info(f"Start setup of virtual smart cards for IPA user {user}")
             create_sc(user)
     env_logger.info("Preparation of the environments is completed")

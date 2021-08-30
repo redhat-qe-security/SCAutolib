@@ -1,5 +1,6 @@
 import datetime
 import subprocess as subp
+from configparser import RawConfigParser
 from os import environ, path
 from os.path import isdir, isfile, join
 from random import randint
@@ -21,27 +22,28 @@ DOTNENV = f"{DIR_PATH}/.env"
 SERVICES = {"sssd": "/etc/sssd/sssd.conf", "krb": "/etc/krb5.conf"}
 
 
-def edit_config(service: str, string: str, holder: str, section: bool = True):
+def edit_config(config_path: str, section: str, key: str, value: str = "",
+                restore=False, *restart):
     """
     Decorator for editing config file. Before editing, config file is backuped.
 
     Args:
-        service: service for which config file will be edited
-        string: string to add or replace
-        holder: what is need to be replace. In case of adding the string to
-                the file, specify section where string should be added
-                section: specify if holder is a name of a section in the config file
-        section: specifies if holder is a section or a substring in the file
+        config_path: path to config file to be updated
+        section: section in config file where a key is placed
+        key: key to by updated
+        value: value to be set for a given key
+        restore: if true, original file would be restored after funciton is finished
 
     Returns:
         decorated function
     """
 
     def wrapper(test):
-        @backup(SERVICES[service], service, restore=True)
+        @backup(*restart, file_path=config_path, restore=restore)
         def inner_wrapper(*args, **kwargs):
-            edit_config_(SERVICES[service], string, holder, section)
-            restart_service(service)
+            edit_config_(config_path, section, key, value)
+            for service in restart:
+                restart_service(service)
             test(*args, **kwargs)
 
         return inner_wrapper
@@ -49,16 +51,13 @@ def edit_config(service: str, string: str, holder: str, section: bool = True):
     return wrapper
 
 
-def backup(file_path: str, service: str = None, name: str = None, restore=True):
+def backup(*restart, file_path: str, name: str = None, restore=True,):
     """
     Decorator for backup the file into BACKUP directory. Can restor the file
     after execution of function and restart given service.
 
     Args:
         file_path: path to file to be backuped
-        service: service to be restarted after restoring the file.
-                 By default is None - no service is need to be
-                 restarted (optional).
         name: name for backup file (optional)
         restore: specifies if given file should be restored after function execution
 
@@ -74,28 +73,25 @@ def backup(file_path: str, service: str = None, name: str = None, restore=True):
             backup_(file_path=file_path, name=name)
             test(*args, **kwargs)
             if restore:
-                restore_file_(target=file_path, name=name, service=service)
-                restart_service(service)
-
+                restore_file_(target=file_path, name=name)
+                for service in restart:
+                    restart_service(service)
         return inner_wrapper
 
     return wrapper
 
 
-def restore_file_(target, name, service=None):
+def restore_file_(target, name):
     """
     Restoring file from BACKUP directory to target. Target has to be a file.
 
     Args:
         target: target path
         name: name of the file in BACKUP directory
-        service: service which should be restarted after file is restored.
-                 By default is None (no need to restart any services).
     """
     source = path.join(read_env("BACKUP"), name)
     copy2(source, target)
     subp.run(["restorecon", "-v", target])
-    restart_service(service)
     base_logger.debug(f"File from {source} is restored to {target}")
 
 
@@ -116,33 +112,33 @@ def backup_(file_path, name=""):
     return target
 
 
-def edit_config_(conf: str, string: str, holder: str, section: bool):
+def edit_config_(conf: str, section: str, key: str, value: str = ""):
     """
     Function for actual editing the config file.
 
     Args:
         conf: path to config file
-        string: string to be add
-        holder: section or substring to update
-        section: specify if holder is a section
+        key: key to be updated
+        value: value to be set for key
+        section: section where a key is placed.
     """
-    old = f"#<[{holder}]>" if section else holder
-    new = f"{string}\n{old}" if section else string
+    cnf = RawConfigParser()
+    cnf.optionxform = str
 
     with open(conf, "r") as file:
-        content = file.read()
-        if (old is not None) and (old not in content):
-            base_logger.error(f"File {conf} is not updated. "
-                      f"Maybe placeholder in the config {conf} "
-                      f"for the section {holder} is missing?")
-            raise Exception(f"Placeholder {old} is not present in {conf}")
+        cnf.read_file(file)
 
-    content = content.replace(old, new)
-    with open(conf, "w+") as file:
-        file.write(content)
+    if section not in cnf.sections():
+        base_logger.error(f"Section {section} is not present in config file {conf}")
+        raise UnknownOption(msg=f"Section {section} is not present in config file {conf}")
 
-    base_logger.debug(f"{'Section' if section else 'Substring'} {holder} in config "
-              f"file {conf} is updated")
+    cnf.set(section, key, value)
+
+    with open(conf, "w") as file:
+        cnf.write(file)
+
+    base_logger.debug(f"Value for key {key} in section {section} is set to {value} "
+                      f"in file {conf}")
 
 
 def restart_service(service: str) -> int:
@@ -176,13 +172,13 @@ def generate_cert(username=None):
     Returns:
         tuple with path to the certificate and to the key files.
     """
-    certs = read_env("CERTS")
-    keys = read_env("KEYS")
+    tmp = read_env("TMP")
+
     prefix = username if username == "root" else "User"
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     serial = randint(1, 1000)
-    cert_path = f"{certs}/rootCA{serial}.pem"
-    key_path = f"{keys}/private-key-{serial}.pem"
+    cert_path = f"{tmp}/rootCA{serial}.pem"
+    key_path = f"{tmp}/private-key-{serial}.pem"
     subject = issuer = ""
     basic_constraints = x509.BasicConstraints(ca=True, path_length=None)
     builder = x509.CertificateBuilder()

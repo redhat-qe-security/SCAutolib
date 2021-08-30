@@ -51,7 +51,7 @@ def load_env(conf_file: str) -> str:
         f.write(f"KEYS={join(ca_dir, 'tmp', 'keys')}\n")
         f.write(f"CERTS={join(ca_dir, 'tmp', 'certs')}\n")
         f.write(f"BACKUP={join(ca_dir, 'tmp', 'backup')}\n")
-        f.write(f"CONF={conf_file}\n")
+        f.write(f"CONF={abspath(conf_file)}\n")
         f.write(f"CA_DIR={ca_dir}\n")
     env_logger.debug(f"File {env_file} is created")
     return env_file
@@ -96,7 +96,7 @@ def read_config(*items) -> list or object:
         value = config_data
         for part in parts:
             if value is None:
-                env_logger.warn(
+                env_logger.warning(
                     f"Key {part} not present in the configuration file. Skip.")
                 return None
 

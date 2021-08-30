@@ -32,7 +32,7 @@ class UnspecifiedParameter(SCAutolibException):
 
 
 class UnknownOption(SCAutolibException):
-    def __init__(self, option_name: str, msg: str = "Unknow option is given",
+    def __init__(self, option_name: str = "", msg: str = "Unknow option is given",
                  option_val: str = None):
         self.msg = msg
         if option_name:

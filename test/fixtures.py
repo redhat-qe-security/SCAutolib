@@ -1,4 +1,5 @@
 import pwd
+from configparser import ConfigParser
 from os import remove, environ
 from os.path import dirname, join
 from pathlib import Path
@@ -101,7 +102,7 @@ def config_file_incorrect(tmpdir, create_yaml_content):
 
 
 @pytest.fixture()
-def loaded_env(config_file_correct, real_factory):
+def loaded_env(config_file_correct, real_factory, remove_env):
     env_path = load_env(config_file_correct)
     load_dotenv(env_path)
     ca_dir = environ['CA_DIR']
@@ -109,12 +110,7 @@ def loaded_env(config_file_correct, real_factory):
         real_factory.create_dir(Path(environ[dir_path]))
     real_factory.create_dir(Path(f"{ca_dir}/conf"))
 
-    try:
-        yield env_path, config_file_correct
-    finally:
-        # Need to be manualy removed because .env file is created in the
-        # source code directory
-        remove(env_path)
+    return env_path, config_file_correct
 
 
 @pytest.fixture()
@@ -144,7 +140,7 @@ def real_factory(tmp_path_factory):
 
 
 @pytest.fixture()
-def prep_ca(loaded_env, real_factory):
+def prep_ca(loaded_env):
     """Prepare directories and files needed for local CA deployment"""
     env.create_cnf("ca")
     env.setup_ca_()
@@ -181,3 +177,26 @@ def loaded_env_ready(loaded_env):
         f.write("READY=1")
     load_dotenv(env_path)
     return env_path, environ["CONF"]
+
+
+@pytest.fixture()
+def remove_env(src_path):
+    try:
+        yield
+    finally:
+        remove(join(src_path, ".env"))
+
+
+@pytest.fixture(scope="function")
+def dummy_config(tmpdir):
+    conf = join(tmpdir, "dymmu_config.conf")
+    cnf = ConfigParser()
+    cnf.optionxform = str
+    conf_dict = {'first': {"one": "1", "two": 2, "bool": True},
+                 "second": {"three": "", "four": "/tmp/"}}
+    cnf.read_dict(conf_dict)
+
+    with open(conf, "w") as f:
+        cnf.write(f)
+
+    return conf
