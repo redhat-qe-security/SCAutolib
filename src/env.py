@@ -1,16 +1,19 @@
 import pwd
+import subprocess
 from configparser import ConfigParser
-from os import chmod, environb, remove
-from os.path import split, exists
+from os import chmod, mkdir, remove, removedirs
+from os.path import split, exists, basename
 from pathlib import Path
 from posixpath import join
 from shutil import rmtree, copytree, copyfile
 from subprocess import PIPE, Popen, CalledProcessError
-import subprocess
+from traceback import format_exc
 
+import paramiko
 import python_freeipa as pipa
-from SCAutolib.src import *
-from SCAutolib.src import utils, exceptions
+import yaml
+from SCAutolib.src import (utils, env_logger, read_config, read_env, SETUP_VSC,
+                           SETUP_CA, INSTALL_IPA_CLIENT, SETUP_IPA_SERVER)
 from SCAutolib.src.exceptions import UnspecifiedParameter, SCAutolibException
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -29,7 +32,7 @@ def create_cnf(user: str, conf_dir=None):
     if user == "ca":
         ca_dir = read_config("ca_dir")
         conf_dir = join(ca_dir, "conf")
-        
+
         ca_cnf = f"""[ ca ]
 default_ca = CA_default
 
@@ -83,7 +86,7 @@ CN = Example Test CA
             f.write(ca_cnf)
             env_logger.debug(
                 f"Configuration file for local CA is created {conf_dir}/ca.cnf")
-        return
+        return f"{conf_dir}/ca.cnf"
 
     user_cnf = f"""
 [ req ]
@@ -105,11 +108,13 @@ extendedKeyUsage = clientAuth, emailProtection, msSmartcardLogin
 subjectAltName = otherName:msUPN;UTF8:{user}@EXAMPLE.COM, email:{user}@example.com
 """
     if conf_dir is None:
-        raise exceptions.UnspecifiedParameter("conf_dir", "Directory with configurations is not provided")
+        raise UnspecifiedParameter(
+            "conf_dir", "Directory with configurations is not provided")
     with open(f"{conf_dir}/req_{user}.cnf", "w") as f:
         f.write(user_cnf)
         env_logger.debug(f"Configuration file for CSR for user {user} is created "
                          f"{conf_dir}/req_{user}.cnf")
+    return f"{conf_dir}/req_{user}.cnf"
 
 
 def create_sssd_config():
@@ -139,7 +144,7 @@ def create_sssd_config():
 
     sssd_conf = "/etc/sssd/sssd.conf"
     if exists(sssd_conf):
-        bakcup_dir = utils.backup_(sssd_conf, name="sssd-original.conf")
+        bakcup_dir = utils.backup_(sssd_conf)
         add_restore("file", sssd_conf, bakcup_dir)
 
     with open(sssd_conf, "r") as f:
@@ -147,6 +152,9 @@ def create_sssd_config():
 
     for key, value in default.items():
         cnf[key] = value
+
+    for section in cnf.sections():
+        cnf.set(section, 'debug_level', '9')
 
     with open(sssd_conf, "w") as f:
         cnf.write(f)
@@ -200,10 +208,8 @@ def create_virt_card_service(username: str, card_dir: str):
     cnf.optionxform = str
 
     if exists(path):
-        name = split(path)[1].split(".", 1)
-        name = name[0] + "-original." + name[1]
-        backup_dir = utils.backup_(path, name)
-        add_restore("file", path, backup_dir)
+        destination = utils.backup_(path)
+        add_restore("file", path, destination)
 
     with open(path, "w") as f:
         cnf.read_dict(default)
@@ -237,7 +243,21 @@ def setup_virt_card_(user: dict):
     """
 
     username, card_dir, passwd = user["name"], user["card_dir"], user["passwd"]
-    cmd = ["bash", SETUP_VSC, "--dir", card_dir, "--username", username]
+    cert, key, csr = join(card_dir, f"{username}.crt"), join(
+        card_dir, f"{username}.key"), join(card_dir, f"{username}.csr")
+    new_cert = True
+    if "cert" in user.keys() and "key" in user.keys():
+        cert, key = user["cert"], user["key"]
+        new_cert = False
+
+    nssdb = join(card_dir, "db")
+    p11lib = '/usr/lib64/pkcs11/libsofthsm2.so'
+    ca_dir = read_env("CA_DIR")
+    conf_dir = join(ca_dir, "conf")
+    newcerts = join(ca_dir, "newcerts")
+    pin = '123456'
+    sopin = '12345678'
+    softhsm_conf = join(card_dir, "conf", "softhsm2.conf")
     if user["local"]:
         try:
             pwd.getpwnam(username)
@@ -249,8 +269,10 @@ def setup_virt_card_(user: dict):
             with Popen(['passwd', username, '--stdin'], stdin=PIPE,
                        stderr=PIPE, encoding="utf-8") as proc:
                 proc.communicate(passwd)
-            env_logger.debug(f"Password for user {username} is updated to {passwd}")
-        create_cnf(username, conf_dir=join(card_dir, "conf"))
+            env_logger.debug(
+                f"Password for user {username} is updated to {passwd}")
+        cnf_file = create_cnf(username, conf_dir=join(card_dir, "conf"))
+
         cnf = ConfigParser()
         cnf.optionxform = str
         with open("/etc/sssd/sssd.conf", "r") as f:
@@ -263,30 +285,93 @@ def setup_virt_card_(user: dict):
                 f"<SUBJECT>.*CN={username}.*")
         with open("/etc/sssd/sssd.conf", "w") as f:
             cnf.write(f)
-        env_logger.debug("Match rule for local user is added to /etc/sssd/sssd.conf")
-    try:
-        if user["cert"]:
-            cmd += ["--cert", user["cert"]]
-        else:
-            raise KeyError
-        if user["key"]:
-            cmd += ["--key", user["key"]]
-        else:
-            raise KeyError()
-    except KeyError:
-        ca_dir = read_env("CA_DIR")
-        cmd += ["--ca", ca_dir]
-        env_logger.debug(f"Key or certificate for user {username} "
-                         f"is not present. New pair of key and cert will "
-                         f"be generated by local CA from {ca_dir}")
+        env_logger.debug(
+            "Match rule for local user is added to /etc/sssd/sssd.conf")
 
     env_logger.debug(f"Start setup of virtual smart card for user {username} "
                      f"in {card_dir}")
     try:
-        run(cmd)
-        env_logger.info(f"Setup of virtual smart card for user {username} "
-                        f"is completed")
-    except CalledProcessError:
+        for dir_ in (card_dir, conf_dir, nssdb, join(card_dir, "tokens"), newcerts):
+            if not exists(dir_):
+                env_logger.warning(f"Directory {dir_} not exists. Creating...")
+                mkdir(dir_)
+        # Can be dropped as this step is can be done before this function call
+        if not exists(join(card_dir, "conf", "softhsm2.conf")):
+            env_logger.warning(
+                f"SoftHSM config is missing in the {join(card_dir, 'conf')}. \
+                    Creating...")
+            create_softhsm2_config(card_dir)
+
+        with open("/usr/lib/systemd/system/pcscd.service", "r") as f:
+            data = f.read()
+        data.replace("--auto-exit", "")
+        with open("/etc/systemd/system/pcscd.service", "w") as f:
+            f.write(data)
+
+        run("systemctl daemon-reload")
+        run("systemctl restart pcscd")
+
+        env_logger.debug("pcscd.service is updated")
+
+        run(["softhsm2-util", "--init-token", "--free", "--label", "SC test",
+             "--so-pin", sopin, "--pin", pin],
+            env={"SOFTHSM2_CONF": softhsm_conf})
+        env_logger.debug("SoftHSM token is initialized with label 'SC test'")
+
+        run(f"modutil -create -dbdir sql:{nssdb} -force")
+        env_logger.debug("NSS database is initialized")
+
+        out = run(f"modutil -list -dbdir sql:{nssdb}")
+        if "library name: p11-kit-proxy.so" not in out.stdout:
+            run(["modutil", "-force", "-add", 'SoftHSM PKCS#11', "-dbdir",
+                f"sql:{nssdb}", "-libfile", p11lib])
+            env_logger.debug("SoftHSM support is added to NSS database")
+
+        if new_cert:
+            run(f"openssl genrsa -out {key} 2048")
+            env_logger.debug("User key is created")
+
+            run(["openssl", "req", "-new", "-nodes", "-key", key,
+                "-reqexts", "req_exts", "-config", cnf_file, "-out", csr])
+            env_logger.debug(f"User CSR is created {csr} using {cnf_file}")
+
+            run(["openssl", "ca", "-config", join(conf_dir, "ca.cnf"),
+                 "-batch", "-keyfile", join(ca_dir, "rootCA.key"), "-in", csr,
+                 "-notext", "-days", "365", "-extensions", "usr_cert",
+                 "-out", cert])
+            env_logger.debug(f"User certificates is created {cert}.")
+
+        run(["pkcs11-tool", "--module", "libsofthsm2.so", "--slot-index", "0",
+             "-w", key, "-y", "privkey", "--label", f"'{username}'", "-p", pin,
+             "--set-id", "0", "-d", "0"], env={"SOFTHSM2_CONF": softhsm_conf})
+        env_logger.debug(f"User key {key} is added to SoftHSM token")
+
+        run(['pkcs11-tool', '--module', 'libsofthsm2.so', '--slot-index', '0',
+             '-w', cert, '-y', 'cert', '--label', f"'{username}'", '-p', pin,
+             '--set-id', '0', '-d', '0'], env={"SOFTHSM2_CONF": softhsm_conf})
+
+        env_logger.debug(
+            f"User certificate {cert} is added to SoftHSM token")
+
+        run("systemctl daemon-reload")
+        with open("/usr/share/p11-kit/modules/opensc.module", "r") as f:
+            data = f.read()
+        if "disable-in: virt_cacard" not in data:
+            with open("/usr/share/p11-kit/modules/opensc.module", "a") as f:
+                f.write("disable-in: virt_cacard")
+            env_logger.debug("opensc.module is updated")
+
+        run(
+            f"systemctl stop pcscd.service pcscd.socket virt_cacard_{username} sssd")
+        rmtree("/var/lib/sss/mc/*", ignore_errors=True)
+        rmtree("/var/lib/sss/db/*", ignore_errors=True)
+        env_logger.debug(
+            "Directories /var/lib/sss/mc/ and /var/lib/sss/db/ removed")
+        run("systemctl start pcscd sssd")
+        env_logger.debug("Services start, pcscd, sssd are restarted")
+
+    except Exception as e:
+        env_logger.error(format_exc())
         env_logger.error("Error while setting up virtual smart card.")
         raise
 
@@ -295,46 +380,46 @@ def check_semodule():
     """Checks if specific SELinux module for virtual smart card is installed.
     This is implemted be checking the hardcoded name for the module (virtcacard)
     to be present in the list of SELinux modules. If this name is not present in
-    the list, than virtcacard.cil file would be created in conf/ sub-directory
+    the list, than virtcacard.cil file would be created in conf / sub-directory
     in the CA directory specified by the configuration file.
     """
-    result = run(["semodule", "-l"])
+    result = run("semodule -l")
     if "virtcacard" not in result.stdout:
         env_logger.debug(
             "SELinux module for virtual smart cards is not present in the "
             "system. Installing...")
-        conf_dir = join(read_env("CA_DIR"), 'conf')
-        module = """
+    conf_dir = join(read_env("CA_DIR"), 'conf')
+    module = """
 (allow pcscd_t node_t(tcp_socket(node_bind)))
-
 ; allow p11_child to read softhsm cache - not present in RHEL by default
 (allow sssd_t named_cache_t(dir(read search)))"""
-        with open(f"{conf_dir}/virtcacard.cil", "w") as f:
-            f.write(module)
-        try:
-            run(["semodule", "-i", f"{conf_dir}/virtcacard.cil"])
-            env_logger.debug(
-                "SELinux module for virtual smart cards is installed")
-        except CalledProcessError:
-            env_logger.error("Error while installing SELinux module "
-                             "for virt_cacard")
-            raise
+    with open(f"{conf_dir}/virtcacard.cil", "w") as f:
+        f.write(module)
+    try:
+        run(["semodule", "-i", f"{conf_dir}/virtcacard.cil"])
+        env_logger.debug(
+            "SELinux module for virtual smart cards is installed")
+    except CalledProcessError:
+        env_logger.error("Error while installing SELinux module "
+                         "for virt_cacard")
+        raise
 
-        try:
-            run(["systemctl", "restart", "pcscd"])
-            env_logger.debug("pcscd service is restarted")
-        except CalledProcessError:
-            env_logger.error("Error while restarting the pcscd service")
-            raise
+    try:
+        run(["systemctl", "restart", "pcscd"])
+        env_logger.debug("pcscd service is restarted")
+    except CalledProcessError:
+        env_logger.error("Error while restarting the pcscd service")
+        raise
 
 
 def prepare_dir(dir_path: str, conf=True):
-    """Create diretory on given path and optionly create the conf/ sub-directory
-     insied.
-     Args:
-         dir_path: path where directory need to be created.
-         conf: specifies if conf/ sub-derectory need to be created in the given
-               directory (default True).
+    """Create diretory on given path and optionally create the conf/ sub-directory
+    insied.
+
+    Args:
+        dir_path: path where directory need to be created.
+        conf: specifies if conf / sub-directory need to be created in the given
+              directory (default True).
      """
     Path(dir_path).mkdir(parents=True, exist_ok=True)
     env_logger.debug(f"Directory {dir_path} is created")
@@ -345,8 +430,7 @@ def prepare_dir(dir_path: str, conf=True):
 
 def prep_tmp_dirs():
     """
-    Prepair directory structure for test environment. All paths are taken from
-    previously loaded env file.
+    Prepair directory structure for test environment. All paths are taken from     previously loaded env file.
     """
     paths = [read_env(path, cast=str) for path in ("CA_DIR", "TMP", "BACKUP")] + \
             [join(read_env("CA_DIR"), "conf")]
@@ -355,25 +439,28 @@ def prep_tmp_dirs():
 
 
 def install_ipa_client_(ip: str, passwd: str, server_hostname: str = None):
-    """Install ipa-client packge to the system and run ipa-advice script for
-    configuring the client for smart card support.
-    Args:
+    """Install ipa-client package to the system and run ipa-advice script for
+    configuring the client for smart card support.     Args:
         ip: IP address of IPA server
-        passwd: root password from IPA server (needed to obtain ipa-advice
-                script). NOTE: currently passwd would be used both for login to
-                the system with root and for obtaining admin kerberos ticke on
-                the server.
+        passwd: root password from IPA server(needed to obtain ipa-advice script).
+                NOTE: currently passwd would be used both for login to the system
+                with root and for obtaining admin kerberos ticket on the server.
         server_hostname: hostname of IPA server
     """
     env_logger.debug(f"Start installation of IPA client")
     if server_hostname is None:
         server_hostname = read_config("ipa_server_hostname")
 
+    client_hostname = read_config("ipa_client_hostname")
     entry = f"{ip} {server_hostname}"
+    domain = read_config("ipa_domain")
+    realm = read_config("ipa_realm")
+    admin_passwd = read_config("ipa_server_admin_passwd")
     hosts_entry_present = False
     with open("/etc/hosts", "r") as f:
         if entry in f.read():
             hosts_entry_present = True
+
     if not hosts_entry_present:
         with open("/etc/hosts", "a") as f:
             f.write(f"{entry}\n")
@@ -381,11 +468,57 @@ def install_ipa_client_(ip: str, passwd: str, server_hostname: str = None):
     env_logger.debug(f"New entry {entry} is added to /etc/hosts")
 
     try:
-        run(["bash", INSTALL_IPA_CLIENT, "--ip", ip, "--root", passwd,
-            "--server-hostname", server_hostname])
+        with open("/etc/resolv.conf", "r") as f:
+            data = f.readlines()
+
+        data = [f"nameserver {ip}\n"] + data
+        with open("/etc/resolv.conf", "w") as f:
+            f.writelines(data)
+
+        env_logger.debug(
+            "IPA server is added to /etc/resolv.conf as first nameserver")
+
+        run(f"hostnamectl set-hostname {client_hostname} --static")
+        env_logger.debug(f"Hostname is set to {client_hostname}")
+
+        run(["ipa-client-install", "-p", "admin", "--password", admin_passwd,
+             "--server", server_hostname, "--domain", domain, "--realm",
+             realm, "--hostname", client_hostname, "--all-ip-addresses",
+             "--force", "--force-join", "--no-ntp", "-U"], input="yes")
+        env_logger.debug("IPA client is installed")
+        cnf = ConfigParser()
+        cnf.optionxform = str
+        with open("/etc/sssd/sssd.conf", 'r') as f:
+            cnf.read_file(f)
+        cnf.set('sssd', 'certificate_verification', 'no_ocsp')
+
+        with open('/etc/sssd/sssd.conf', "w") as f:
+            cnf.write(f)
+        env_logger.debug(
+            "SSSD is update for no_ocsp for certificate verification")
+        run("systemctl restart sssd")
+
+        run("kinit admin", input=admin_passwd)
+        env_logger.debug("Kerberos ticket for admin user is obtained")
+
+        ssh = paramiko.SSHClient()
+        ssh.load_system_host_keys()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        ssh.connect(ip, username="root", password=passwd, look_for_keys=False)
+
+        _, ssh_stdout, _ = ssh.exec_command(
+            f"echo {admin_passwd} | kinit admin && ipa-advise config-client-for-smart-card-auth")
+
+        with open("ipa-client-sc.sh", "wb") as f:
+            f.write(ssh_stdout.read())
+
+        run('bash ipa-client-sc.sh /etc/ipa/ca.crt')
+
+        env_logger.debug("Setup of IPA client for smart card is finished")
+
         env_logger.debug("IPA client is configured on the system. "
                          "Don't forget to add IPA user by add-ipa-user command :)")
-    except CalledProcessError:
+    except:
         env_logger.error("Error while installing IPA client on local host")
         raise
 
@@ -395,18 +528,20 @@ def add_ipa_user_(user: dict, ipa_hostname: str = None):
     smart card for this user. Also, function generate CSR for this user and
     requests the certificate from the CA located on IPA server.
     Args:
-        user:  dictionary with username ('name' field), directory where
-               virtual smart card to be created ('card_dir' field). This directory
-               would contain also cerficiate & private key, all other sub-directories
-               need be virtual smart card (tokens, db, etc.). Also, dictionary can
-               contain custom paths to key, certificate and CSR where to save
-               corresponding items.
-        ipa_hostname: hostname of IPA server. If non, tryes to read
-                         ipa_server_hostname field from the configuration file
+        user:dictionary with username('name' field), directory where
+              virtual smart card to be created ('card_dir' field). This directory
+              would contain also certificate & private key, all other sub-directories
+              need be virtual smart card(tokens, db, etc.). Also, dictionary can
+              contain custom paths to key, certificate and CSR where to save
+              corresponding items.
+        ipa_hostname: hostname of IPA server. If non, tries to read
+                      ipa_server_hostname field from the configuration file
     """
     username, user_dir = user["name"], user["card_dir"]
-    cert_path = user["cert"] if "cert" in user.keys() else f"{user_dir}/cert.pem"
-    key_path = user["key"] if "key" in user.keys() else f"{user_dir}/private.key"
+    cert_path = user["cert"] if "cert" in user.keys(
+    ) else f"{user_dir}/cert.pem"
+    key_path = user["key"] if "key" in user.keys(
+    ) else f"{user_dir}/private.key"
     csr_path = user["csr"] if "csr" in user.keys() else f"{user_dir}/cert.csr"
     env_logger.debug(f"Adding user {username} to IPA server")
     ipa_admin_passwd = read_config("ipa_server_admin_passwd")
@@ -456,14 +591,14 @@ def setup_ipa_server_():
 
 def general_setup(install_missing: bool = True):
     """Executes script for general setup of the system. General setup includes
-    check for presense of required packages. Once this function is called,
+    check for presense of required packages. Once this function is called,     
     READY environment variable is added to .env file and set to 1. When READY
     is 1, script is not executed again, even if this function is called again.
+
     Args:
         install_missing: specifies if missing packages need to be automatically
                          installed.
     """
-
     if read_env("READY", cast=int, default=0) != 1:
         check_semodule()
         packages = ["softhsm", "sssd-tools", "httpd", "sssd", "sshpass"]
@@ -473,10 +608,10 @@ def general_setup(install_missing: bool = True):
                     run("dnf module enable -y idm:DL1")
                     run("dnf install @idm:DL1 -y")
                     env_logger.debug("idm:DL1 module is installed")
-                    
+
                     run("dnf -y copr enable jjelen/vsmartcard")
                     env_logger.debug("Copr repo for virt_cacard is enabled")
-                    
+
                     run("dnf install https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm -y")
                     env_logger.debug("EPEL repository is installed")
             run("dnf install virt_cacard vpcd -y")
@@ -487,22 +622,24 @@ def general_setup(install_missing: bool = True):
 
                 if pkg not in out.stdout:
                     if install_missing:
-                        env_logger.warning(f"Package {pkg} is not installed on the system. Installing...")
+                        env_logger.warning(
+                            f"Package {pkg} is not installed on the system. Installing...")
                         run(f"dnf install {pkg} -y")
+                        pkg = run(["rpm", "-qa", pkg]).stdout
                         env_logger.debug(f"Package {pkg} is installed")
                     else:
                         env_logger.error(
                             f"Package {pkg} is required for testing, "
                             "but it is not installed on the system.")
                         raise SCAutolibException(
-                        f"Package {pkg} is required for testing, but it is not "
-                        f"installed on the system.")
+                            f"Package {pkg} is required for testing, but it is not "
+                            f"installed on the system.")
                 else:
-                    env_logger.debug(f"Package {out.stdout.strip()} is present")
+                    env_logger.debug(
+                        f"Package {out.stdout.strip()} is present")
             run(['dnf', 'groupinstall', "Smart Card Support", '-y'])
             env_logger.debug("Smart Card Support group in installed.")
-        except Exception as e:
-            env_logger.error(e)
+        except:
             env_logger.error("General setup is failed")
             raise
     env_logger.info("General setup is done")
@@ -510,11 +647,12 @@ def general_setup(install_missing: bool = True):
 
 def create_sc(sc_user: dict):
     """Function that joins steps for creating virtual smart card.
-    Args:
-        sc_user: dictionary with username ('name' field), directory where
-        virtual smart card to be created ('card_dir' field). This directory
-        would contain also cerficiate & private key, all other sub-directories
-        need be virtual smart card (tokens, db, etc.)
+
+    Args:         
+        sc_user: dictionary with username('name' field), directory where
+                 virtual smart card to be created ('card_dir' field). This 
+                 directory would contain also a certificate & private key, all 
+                 other sub-directories need be virtual smart card(tokens, db, etc.)
     """
     name, card_dir = sc_user["name"], sc_user["card_dir"]
     prepare_dir(card_dir)
@@ -526,6 +664,7 @@ def create_sc(sc_user: dict):
 def check_config(conf: str) -> bool:
     """Check if all required fields are present in the config file. Warn user if
     some fields are missing.
+
     Args:
         conf: path to configuration file in YAML format
     Return:
@@ -535,7 +674,7 @@ def check_config(conf: str) -> bool:
         config_data = yaml.load(file, Loader=yaml.FullLoader)
         assert config_data, "Data are not loaded correctly."
     result = True
-    fields = ("root_passwd", "ca_dir", "ipa_server_root", "ipa_server_ip",
+    fields = ("root_passwd", "ca_dir", "ipa_server_root",
               "ipa_server_hostname", "ipa_client_hostname", "ipa_domain",
               "ipa_realm", "ipa_server_admin_passwd", "local_user", "ipa_user")
     config_fields = config_data.keys()
@@ -575,16 +714,19 @@ def add_restore(type_: str, src: str, backup: str = None):
 
 def cleanup_(restore_items: list):
     """Cleans the system after library setup testing environment.
+
     Args:
         restore_items: list of items to be restore. Item is a dict with specific
-        fields. Item has to tocntain at list type (file, dir, user) and src
-        (username if type is 'user'). Type field can also be some custom type,
-        but it wouldnt be restore by this function.
+                       fields. Item has to contain at list type (file/dir/user) 
+                       and src (or username if type is 'user'). Type field can 
+                       also be some custom type, but it wouldn't be restore by 
+                       this function.
     """
     for item in restore_items:
         type_ = item['type']
         src = item['src'] if type_ != "user" else item["username"]
-        backup_dir = item["backup_dir"] if "backup_dir" in item.keys() else None
+        backup_dir = item["backup_dir"] if "backup_dir" in item.keys(
+        ) else None
 
         if type_ == "file":
             if backup_dir:
@@ -598,18 +740,21 @@ def cleanup_(restore_items: list):
             env_logger.debug(f"Directory {src} is deleted")
             if backup_dir:
                 copytree(backup_dir, src)
-                env_logger.debug(f"Directory {src} is restored form {backup_dir}")
+                env_logger.debug(
+                    f"Directory {src} is restored form {backup_dir}")
 
         elif type_ == "user":
             username = item["username"]
             run(["userdel", username, "-r"])
-            env_logger.debug(f"User {username} is delete with it home directory")
+            env_logger.debug(
+                f"User {username} is delete with it home directory")
         else:
             env_logger.warning(f"Skip item with unknow type '{type_}'")
 
 
-def run(cmd) -> subprocess.CompletedProcess:
+def run(cmd, *args, **kwargs) -> subprocess.CompletedProcess:
     if type(cmd) == str:
         cmd = cmd.split(" ")
-    return subprocess.run(cmd, stdout=PIPE, check=True, encoding="utf-8", 
-                          stderr=PIPE)
+    out = subprocess.run(cmd, check=True, stdout=PIPE,
+                         encoding="utf-8", stderr=PIPE, *args, **kwargs)
+    return out

@@ -44,7 +44,8 @@ def test_prepare_simple_fail_on_packages(config_file_correct, runner, caplog):
 @pytest.mark.service_restart()
 def test_prepare_simple_install_missing(config_file_correct, runner, caplog):
     # Act
-    result = runner.invoke(env_cli.prepare, ["--conf", config_file_correct, "-m"])
+    result = runner.invoke(
+        env_cli.prepare, ["--conf", config_file_correct, "-m"])
 
     # Assert
     assert result.exit_code == 0

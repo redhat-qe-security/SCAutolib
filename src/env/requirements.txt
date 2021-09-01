@@ -5,3 +5,4 @@ python-decouple
 python-freeipa
 cryptography
 colorlog
+paramiko

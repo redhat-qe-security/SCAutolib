@@ -2,7 +2,7 @@ import datetime
 import subprocess as subp
 from configparser import RawConfigParser
 from os import environ, path
-from os.path import isdir, isfile, join
+from os.path import isdir, isfile, join, basename
 from random import randint
 from shutil import copy2, copytree
 
@@ -70,10 +70,10 @@ def backup(*restart, file_path: str, name: str = None, restore=True,):
 
     def wrapper(test):
         def inner_wrapper(*args, **kwargs):
-            backup_(file_path=file_path, name=name)
+            destination = backup_(file_path)
             test(*args, **kwargs)
             if restore:
-                restore_file_(target=file_path, name=name)
+                restore_file_(file_path, destination)
                 for service in restart:
                     restart_service(service)
         return inner_wrapper
@@ -81,33 +81,30 @@ def backup(*restart, file_path: str, name: str = None, restore=True,):
     return wrapper
 
 
-def restore_file_(target, name):
+def restore_file_(source, destination):
     """
     Restoring file from BACKUP directory to target. Target has to be a file.
-
-    Args:
-        target: target path
-        name: name of the file in BACKUP directory
     """
-    source = path.join(read_env("BACKUP"), name)
-    copy2(source, target)
-    subp.run(["restorecon", "-v", target])
-    base_logger.debug(f"File from {source} is restored to {target}")
+    copy2(source, destination)
+    subp.run(["restorecon", "-v", destination])
+    base_logger.debug(f"File from {source} is restored to {destination}")
 
 
-def backup_(file_path, name=""):
+def backup_(file_path):
     """
     Backup the file given in file_path to BACKUP directory.
 
     Args:
-        file_path: path to fle
-        name: file name in BACKUP directory
+        file_path: path to file to be saved
+    Returns:
+        Path to copied file/directory
     """
-    target = f"{read_env('BACKUP')}/{name}"
+    target = join(read_env('BACKUP'), basename(file_path) + ".bak")
+
     if isfile(file_path):
-        copy2(file_path, target)
+        target = copy2(file_path, target)
     elif isdir(file_path):
-        copytree(file_path, target)
+        target = copytree(file_path, target)
     base_logger.debug(f"Source from {file_path} is copied to {target}")
     return target
 
@@ -129,8 +126,10 @@ def edit_config_(conf: str, section: str, key: str, value: str = ""):
         cnf.read_file(file)
 
     if section not in cnf.sections():
-        base_logger.error(f"Section {section} is not present in config file {conf}")
-        raise UnknownOption(msg=f"Section {section} is not present in config file {conf}")
+        base_logger.error(
+            f"Section {section} is not present in config file {conf}")
+        raise UnknownOption(
+            msg=f"Section {section} is not present in config file {conf}")
 
     cnf.set(section, key, value)
 
@@ -153,12 +152,14 @@ def restart_service(service: str) -> int:
     """
     if service is not None:
         try:
-            result = subp.run(["systemctl", "restart", f"{service}"], check=True, encoding="utf8")
+            result = subp.run(
+                ["systemctl", "restart", f"{service}"], check=True, encoding="utf8")
             sleep(5)
             env_logger.debug(f"Service {service} is restarted")
             return result.returncode
         except subp.CalledProcessError as e:
-            env_logger.error(f"Command {' '.join(e.cmd)} is ended with non-zero return code ({e.returncode})")
+            env_logger.error(
+                f"Command {' '.join(e.cmd)} is ended with non-zero return code ({e.returncode})")
             env_logger.error(f"stdout:\n{e.stdout}")
             env_logger.error(f"stderr:\n{e.stderr}")
             return e.returncode
@@ -198,7 +199,8 @@ def generate_cert(username=None):
             decipher_only=False)
         subject = issuer = x509.Name([
             x509.NameAttribute(NameOID.ORGANIZATION_NAME, f"root-{serial}"),
-            x509.NameAttribute(NameOID.ORGANIZATIONAL_UNIT_NAME, f"root-{serial} Test"),
+            x509.NameAttribute(
+                NameOID.ORGANIZATIONAL_UNIT_NAME, f"root-{serial} Test"),
             x509.NameAttribute(NameOID.COMMON_NAME, f"root-{serial} Test Ca"),
         ])
     else:
@@ -214,17 +216,21 @@ def generate_cert(username=None):
                 root_crt = x509.load_pem_x509_certificate(f.read())
             issuer = root_crt.issuer
             subject = x509.Name([
-                x509.NameAttribute(NameOID.ORGANIZATION_NAME, f"{prefix}-{serial}"),
-                x509.NameAttribute(NameOID.ORGANIZATIONAL_UNIT_NAME, f"{prefix}-{serial} Test"),
-                x509.NameAttribute(NameOID.COMMON_NAME, f"{prefix}-{serial} Test Ca"),
+                x509.NameAttribute(NameOID.ORGANIZATION_NAME,
+                                   f"{prefix}-{serial}"),
+                x509.NameAttribute(
+                    NameOID.ORGANIZATIONAL_UNIT_NAME, f"{prefix}-{serial} Test"),
+                x509.NameAttribute(NameOID.COMMON_NAME,
+                                   f"{prefix}-{serial} Test Ca"),
             ])
         except UndefinedValueError:
             base_logger.error("You are trying to generate user certificate, but .env "
-                      "file do not have name for certificate issuer."
-                      "Did you generate self-signed CA certificate?")
+                              "file do not have name for certificate issuer."
+                              "Did you generate self-signed CA certificate?")
 
     subject_key = x509.SubjectKeyIdentifier.from_public_key(key.public_key())
-    authority_key = x509.AuthorityKeyIdentifier.from_issuer_subject_key_identifier(subject_key)
+    authority_key = x509.AuthorityKeyIdentifier.from_issuer_subject_key_identifier(
+        subject_key)
 
     env_logger.debug("Type of subject is " + str(type(subject)))
     builder = builder \
@@ -261,7 +267,7 @@ def run_cmd(cmd: str = None, pin: bool = True, passwd: str = None, shell=None,
                 in login output.
         passwd: smart card PIN or user password if login is needed
         shell: shell child where command need to be execute.
-        return_val: return sheel (shell) or stdout (stdout - default) or both (all)
+        return_val: return shell (shell) or stdout (stdout - default) or both (all)
     Returns:
         stdout of executed command (cmd; see above)
     """
@@ -277,8 +283,7 @@ def run_cmd(cmd: str = None, pin: bool = True, passwd: str = None, shell=None,
 
             if out != 1:
                 if out == 0:
-                    base_logger.error("Timed out on passsword / PIN waiting")
-                expect = pattern
+                    base_logger.error("Timed out on password / PIN waiting")
 
                 raise PatternNotFound(f"Pattern '{pattern}' is not "
                                       f"found in the output.")

@@ -1,5 +1,6 @@
+from traceback import format_exc
 import click
-from SCAutolib.src import env
+from SCAutolib.src import env, load_env
 from SCAutolib.src.env import *
 
 
@@ -32,6 +33,7 @@ def prepare(cards, conf, ipa, server_ip, ca, install_missing, server_hostname):
     CA, virtual smart card and installing IPA client with adding IPA users
     defined in configuration file.
     """
+    env_logger.info("Start setting up system for smart card testing")
     if not check_config(conf):
         env_logger.error("Configuration file miss required fields. Check logs for"
                          "more information.")
@@ -44,7 +46,9 @@ def prepare(cards, conf, ipa, server_ip, ca, install_missing, server_hostname):
     env_logger.debug("Start general setup")
     try:
         general_setup(install_missing)
-    except:
+    except Exception as e:
+        env_logger.error(format_exc())
+        env_logger.error(e)
         exit(1)
 
     create_sssd_config()
@@ -74,14 +78,19 @@ def prepare(cards, conf, ipa, server_ip, ca, install_missing, server_hostname):
     if cards:
         if ca:
             user = read_config("local_user")
-            env_logger.info(f"Start setup of virtual smart cards for local user {user}")
+            env_logger.info(
+                f"Start setup of virtual smart cards for local user {user}")
             create_sc(user)
-
+            env_logger.info(f"Setup of virtual smart card for user {user} "
+                            f"is completed")
         if ipa:
             user = read_config("ipa_user")
             add_ipa_user_(user, server_hostname)
-            env_logger.info(f"Start setup of virtual smart cards for IPA user {user}")
+            env_logger.info(
+                f"Start setup of virtual smart cards for IPA user {user}")
             create_sc(user)
+            env_logger.info(f"Setup of virtual smart card for user {user} "
+                            f"is completed")
     env_logger.info("Preparation of the environments is completed")
     exit(0)
 
@@ -119,7 +128,8 @@ def setup_virt_card(username, key, cert, card_dir, password, local):
     Setup virtual smart card. Has to be run after configuration of the local CA.
     """
     if read_env("READY", cast=int, default=0) != 1:
-        env_logger.error("Please, run prepare commnad with configuration file.")
+        env_logger.error(
+            "Please, run prepare commnad with configuration file.")
         exit(1)
 
     user = read_config(username)

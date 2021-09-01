@@ -55,12 +55,11 @@ def create_yaml_content(tmpdir, ipa_user, local_user) -> dict:
         "root_passwd": "redhat",
         "ca_dir": join(tmpdir, "ca_dir"),
         "ipa_server_root": "redhat",
-        "ipa_server_ip": "",
-        "ipa_server_hostname": "test-server.domain.com",
-        "ipa_client_hostname": "test-client.domain.com",
-        "ipa_domain": "domain.com",
-        "ipa_realm": "DOMAIN.COM",
+        "ipa_client_hostname": "ipa-client.sc.test.com",
+        "ipa_domain": "sc.test.com",
+        "ipa_realm": "SC.TEST.COM",
         "ipa_server_admin_passwd": "SECret.123",
+        "ipa_server_hostname": "ipa-server.sc.test.com",
         "local_user": {
             "name": local_user,
             "passwd": "654321",
@@ -122,7 +121,8 @@ def real_factory(tmp_path_factory):
         @staticmethod
         def create_dir(dir_path=""):
             if dir_path == "":
-                dir_path = tmp_path_factory.mktemp(f"dir-{len(Factory._created_dir)}")
+                dir_path = tmp_path_factory.mktemp(
+                    f"dir-{len(Factory._created_dir)}")
             dir_path.mkdir(exist_ok=True)
             Factory._created_dir.append(dir_path)
             return dir_path

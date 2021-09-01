@@ -34,19 +34,17 @@ CONF_DIR="$CA_DIR/conf"
 pushd "$CA_DIR" || exit 1
 log "CA directory $CA_DIR"
 
-mkdir -p {certs,crl,newcerts}
+mkdir -p {certs,crl}
 log "Directories for local CA are created"
 
 touch serial index.txt crlnumber index.txt.attr
 echo 01 >serial
 log "Files for local CA are created"
 
-openssl genrsa -out rootCA.key 2048
-log "Key for local CA is created"
-
 openssl req -batch -config "$CONF_DIR"/ca.cnf -x509 -new -nodes \
-  -key rootCA.key -sha256 -days 10000 -set_serial 0 \
+  -newkey rsa:4096 -keyout rootCA.key -sha256 -days 365 -set_serial 0 \
   -extensions v3_ca -out "$CA_DIR"/rootCA.pem
+log "Key for local CA is created"
 log "Certificate for local CA is created"
 
 openssl ca -config "$CONF_DIR"/ca.cnf -gencrl -out crl/root.crl
