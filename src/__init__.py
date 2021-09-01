@@ -5,22 +5,7 @@ from SCAutolib import env_logger
 from decouple import config
 
 DIR_PATH = dirname(abspath(__file__))
-SETUP_CA = f"{DIR_PATH}/env/setup_ca.sh"
-SETUP_VSC = f"{DIR_PATH}/env/setup_virt_card.sh"
-CLEANUP_CA = f"{DIR_PATH}/env/cleanup_ca.sh"
 SETUP_IPA_SERVER = f"{DIR_PATH}/env/ipa-install-server.sh"
-INSTALL_IPA_CLIENT = f"{DIR_PATH}/env/ipa-install-client.sh"
-ADD_IPA_CLIENT = f"{DIR_PATH}/env/ipa-client-add.sh"
-GENERAL_SETUP = f"{DIR_PATH}/env/general_setup.sh"
-DOTENV = f"{DIR_PATH}/.env"
-CA_DIR = None
-TMP = None
-KEYS = None
-CERTS = None
-BACKUP = None
-CONFIG_DATA = None  # for caching configuration data
-KRB_IP = None
-CONF = None
 
 
 def load_env(conf_file: str) -> str:
@@ -58,7 +43,7 @@ def load_env(conf_file: str) -> str:
 
 
 def read_env(item: str, *args, **kwargs):
-    """Just for unifing with read_conf function. Accepts all arguments that
+    """Just for unifying with read_conf function. Accepts all arguments that
     decouple.config() function takes.
     Args:
         item: variable to read from the .env file

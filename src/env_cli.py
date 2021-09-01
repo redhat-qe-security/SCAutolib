@@ -1,6 +1,5 @@
-from traceback import format_exc
 import click
-from SCAutolib.src import env, load_env
+from SCAutolib.src import load_env
 from SCAutolib.src.env import *
 
 
@@ -47,7 +46,6 @@ def prepare(cards, conf, ipa, server_ip, ca, install_missing, server_hostname):
     try:
         general_setup(install_missing)
     except Exception as e:
-        env_logger.error(format_exc())
         env_logger.error(e)
         exit(1)
 

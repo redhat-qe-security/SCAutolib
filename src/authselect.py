@@ -1,6 +1,7 @@
-from SCAutolib import base_logger
 from subprocess import check_output, PIPE
 from traceback import format_exc
+
+from SCAutolib import base_logger
 
 
 class Authselect:

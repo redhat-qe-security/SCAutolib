@@ -1,25 +1,36 @@
 import datetime
+import difflib
 import subprocess as subp
+import sys
 from configparser import RawConfigParser
-from os import environ, path
-from os.path import isdir, isfile, join, basename
+from os.path import isdir, isfile, join, basename, split
 from random import randint
 from shutil import copy2, copytree
+from time import sleep
 
 import pexpect
-import sys
 from SCAutolib import env_logger, base_logger
-from SCAutolib.src import DIR_PATH, read_env
+from SCAutolib.src import read_env
 from SCAutolib.src.exceptions import *
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 from decouple import UndefinedValueError
-from time import sleep
 
-DOTNENV = f"{DIR_PATH}/.env"
 SERVICES = {"sssd": "/etc/sssd/sssd.conf", "krb": "/etc/krb5.conf"}
+
+
+def show_file_diff(original, new):
+    differ = difflib.Differ()
+    with open(original, "r") as f:
+        data_original = f.readlines()
+    with open(new, "r") as f:
+        data_new = f.readlines()
+    with open("/var/log/scautolib/edited_files.log", "a") as f:
+        f.write("\n================\n")
+        f.writelines(differ.compare(data_original, data_new))
+        f.write("================\n")
 
 
 def edit_config(config_path: str, section: str, key: str, value: str = "",
@@ -39,13 +50,16 @@ def edit_config(config_path: str, section: str, key: str, value: str = "",
     """
 
     def wrapper(test):
-        @backup(*restart, file_path=config_path, restore=restore)
         def inner_wrapper(*args, **kwargs):
+            target = backup_(file_path=config_path)
             edit_config_(config_path, section, key, value)
+            show_file_diff(config_path, target)
             for service in restart:
                 restart_service(service)
             test(*args, **kwargs)
 
+            if restore:
+                restore_file_(target, config_path)
         return inner_wrapper
 
     return wrapper
@@ -66,7 +80,7 @@ def backup(*restart, file_path: str, name: str = None, restore=True,):
     """
     if name is None:
         # if no name is given, than original name of the file would be used
-        name = path.split(file_path)[1]
+        name = split(file_path)[1]
 
     def wrapper(test):
         def inner_wrapper(*args, **kwargs):
@@ -305,7 +319,7 @@ def run_cmd(cmd: str = None, pin: bool = True, passwd: str = None, shell=None,
 
 
 def check_output(output: str, expect: list = [], reject: list = [],
-                 zero_rc: bool = True, check_rc: bool = False):
+                 zero_rc: bool = False, check_rc: bool = False):
     """
     Check "output" for presence of expected and unexpected patterns.
 
@@ -324,10 +338,12 @@ def check_output(output: str, expect: list = [], reject: list = [],
                 function.
         expect: list of patterns to be matched in the output
         reject: list of patterns that cause failure if matched in the output
-        check_rc: indicates that presence of pattern "RC:0" would be checked
-                  and an exception would be raised if the pattern is missing
-        zero_rc: indicates that pattern "RC:[1-9]+" should be present
-                 instead of "RC:0" and exception would not be raised
+        check_rc: if True, return code of the command will be checked. If False,
+                  (default), return code is not checked.
+        zero_rc: applicable only with check_rc = True. If zero_rc = True, return
+                 code of the command has to ve 0, otherwise an exception
+                 NonZeroReturnCode would be raise. If False (default), warning
+                 would be added to logs instead of raising an exception.
     """
 
     # TODO: add switch and functionality

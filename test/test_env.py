@@ -18,6 +18,8 @@ def test_create_sssd_config(tmpdir, loaded_env, clean_conf):
     """Check correct creation og sssd.conf with basic sections and permission."""
     # Arrange
     sssd_conf = "/etc/sssd/sssd.conf"
+    if exists(sssd_conf):
+        remove(sssd_conf)
 
     # Act
     create_sssd_config()

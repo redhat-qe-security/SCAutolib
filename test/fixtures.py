@@ -108,6 +108,7 @@ def loaded_env(config_file_correct, real_factory, remove_env):
     for dir_path in ("CA_DIR", "TMP", "CERTS", "KEYS", "BACKUP"):
         real_factory.create_dir(Path(environ[dir_path]))
     real_factory.create_dir(Path(f"{ca_dir}/conf"))
+    real_factory.create_dir(Path("/var/log/scautolib"))
 
     return env_path, config_file_correct
 
@@ -143,6 +144,13 @@ def real_factory(tmp_path_factory):
 def prep_ca(loaded_env):
     """Prepare directories and files needed for local CA deployment"""
     env.create_cnf("ca")
+
+    return environ['CA_DIR']
+
+
+@pytest.fixture()
+def prep_ca_real(prep_ca):
+    """Prepare directories and files needed for local CA deployment"""
     env.setup_ca_()
     return environ['CA_DIR']
 
