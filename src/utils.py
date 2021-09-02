@@ -1,22 +1,23 @@
 import datetime
 import difflib
+import re
 import subprocess as subp
-import sys
 from configparser import RawConfigParser
 from os.path import isdir, isfile, join, basename, split
 from random import randint
 from shutil import copy2, copytree
-from time import sleep
 
 import pexpect
+import sys
 from SCAutolib import env_logger, base_logger
-from SCAutolib.src import read_env
+from SCAutolib.src import read_env, env
 from SCAutolib.src.exceptions import *
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 from decouple import UndefinedValueError
+from time import sleep
 
 SERVICES = {"sssd": "/etc/sssd/sssd.conf", "krb": "/etc/krb5.conf"}
 
@@ -36,14 +37,14 @@ def show_file_diff(original, new):
 def edit_config(config_path: str, section: str, key: str, value: str = "",
                 restore=False, *restart):
     """
-    Decorator for editing config file. Before editing, config file is backuped.
+    Decorator for editing config file. Before editing, config file is saved.
 
     Args:
         config_path: path to config file to be updated
         section: section in config file where a key is placed
         key: key to by updated
         value: value to be set for a given key
-        restore: if true, original file would be restored after funciton is finished
+        restore: if true, original file would be restored after function is finished
 
     Returns:
         decorated function
@@ -67,11 +68,11 @@ def edit_config(config_path: str, section: str, key: str, value: str = "",
 
 def backup(*restart, file_path: str, name: str = None, restore=True,):
     """
-    Decorator for backup the file into BACKUP directory. Can restor the file
+    Decorator for backup the file into BACKUP directory. Can restore the file
     after execution of function and restart given service.
 
     Args:
-        file_path: path to file to be backuped
+        file_path: path to file to be saved
         name: name for backup file (optional)
         restore: specifies if given file should be restored after function execution
 
@@ -100,7 +101,7 @@ def restore_file_(source, destination):
     Restoring file from BACKUP directory to target. Target has to be a file.
     """
     copy2(source, destination)
-    subp.run(["restorecon", "-v", destination])
+    env.run(["restorecon", "-v", destination])
     base_logger.debug(f"File from {source} is restored to {destination}")
 
 
@@ -119,6 +120,8 @@ def backup_(file_path):
         target = copy2(file_path, target)
     elif isdir(file_path):
         target = copytree(file_path, target)
+    env.run(f"restorecon -v {target}")
+
     base_logger.debug(f"Source from {file_path} is copied to {target}")
     return target
 
@@ -166,8 +169,8 @@ def restart_service(service: str) -> int:
     """
     if service is not None:
         try:
-            result = subp.run(
-                ["systemctl", "restart", f"{service}"], check=True, encoding="utf8")
+            result = env.run(
+                ["systemctl", "restart", f"{service}"])
             sleep(5)
             env_logger.debug(f"Service {service} is restarted")
             return result.returncode
@@ -277,9 +280,9 @@ def run_cmd(cmd: str = None, pin: bool = True, passwd: str = None, shell=None,
     Args:
         cmd: shell command to be executed
         pin: specify if passwd is a smart card PIN or a password for the
-                user. Base on this, corresponding pattern would be matched
+                user_fnc. Base on this, corresponding pattern would be matched
                 in login output.
-        passwd: smart card PIN or user password if login is needed
+        passwd: smart card PIN or user_fnc password if login is needed
         shell: shell child where command need to be execute.
         return_val: return shell (shell) or stdout (stdout - default) or both (all)
     Returns:
@@ -348,16 +351,15 @@ def check_output(output: str, expect: list = [], reject: list = [],
 
     # TODO: add switch and functionality
     #  to check patterns in specified order
-    import re
     for pattern in reject:
-        pattern = re.compile(pattern)
-        if pattern.search(output) is not None:
+        compiled = re.compile(pattern)
+        if compiled.search(output) is not None:
             raise DisallowedPatternFound(f"Disallowed pattern '{pattern}' "
                                          f"was found in the output")
 
     for pattern in expect:
-        pattern = re.compile(pattern)
-        if pattern.search(output) is None:
+        compiled = re.compile(pattern)
+        if compiled.search(output) is None:
             base_logger.error(f"Pattern: {pattern} not found in output")
             base_logger.error(f"Output:\n{output}\n")
             raise PatternNotFound(f"Pattern '{expect}' is not "

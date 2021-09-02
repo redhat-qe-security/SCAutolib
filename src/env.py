@@ -1,7 +1,7 @@
 import pwd
 import subprocess
 from configparser import ConfigParser
-from os import chmod, mkdir, remove, makedirs
+from os import chmod, mkdir, remove
 from os.path import exists
 from pathlib import Path
 from posixpath import join

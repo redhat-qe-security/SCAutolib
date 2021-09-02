@@ -27,7 +27,7 @@ def cli():
               help="Silently install missing packages, if it would be needed")
 def prepare(cards, conf, ipa, server_ip, ca, install_missing, server_hostname):
     """
-    Prepair the test environment including temporary directories, necessary
+    Prepare the test environment including temporary directories, necessary
     configuration files and services. Also can automatically run setup for local
     CA, virtual smart card and installing IPA client with adding IPA users
     defined in configuration file.
@@ -101,7 +101,7 @@ def setup_ca(conf):
     CLI command for setup the local CA.
     """
     # TODO: generate certs for Kerberos
-    env_path = load_env(conf)
+    load_env(conf)
     general_setup()
     prepare_dir(read_env("CA_DIR"))
     prep_tmp_dirs()
@@ -127,14 +127,14 @@ def setup_virt_card(username, key, cert, card_dir, password, local):
     """
     if read_env("READY", cast=int, default=0) != 1:
         env_logger.error(
-            "Please, run prepare commnad with configuration file.")
+            "Please, run prepare command with configuration file.")
         exit(1)
 
     user = read_config(username)
     general_setup()
     if user is None:
         if not all([key, cert, username, card_dir, password, local]):
-            env_logger.error("Not all required parameters are set for addign "
+            env_logger.error("Not all required parameters are set for adding "
                              f"virtual smart card to user {username}. "
                              f"Add all parameters via configuration file or via"
                              f"CLI parameters.")
@@ -164,7 +164,7 @@ def cleanup():
     try:
         cleanup_(restore_items)
     except:
-        env_logger.error("Cleup is failed. Check logs for more info")
+        env_logger.error("Cleanup is failed. Check logs for more info")
         exit(1)
 
     env_logger.debug("Cleanup is completed")
@@ -193,7 +193,7 @@ def install_ipa_client(ip):
 @click.command()
 @click.option("--username", "-u", required=True,
               help="Username to be added to IPA server. If username is present in the"
-                   "coniguration file, values from this object would be used")
+                   "configuration file, values from this object would be used")
 @click.option("--user-dir", "-d", default=None,
               help="User directory to create on the system for placing cert and"
                    "private key from IPA server.")

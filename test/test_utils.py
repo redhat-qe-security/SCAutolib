@@ -85,7 +85,7 @@ def test_check_output_zero_rc(zero_rc_output):
 
 def test_check_output_non_zero_rc_exception(non_zero_rc_output):
     with pytest.raises(NonZeroReturnCode):
-        utils.check_output(non_zero_rc_output, check_rc=True)
+        utils.check_output(non_zero_rc_output, check_rc=True, zero_rc=True)
 
 
 def test_check_output_non_zero_rc_warn(non_zero_rc_output, caplog):
