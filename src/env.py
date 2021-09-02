@@ -13,7 +13,7 @@ import paramiko
 import python_freeipa as pipa
 import yaml
 from SCAutolib.src import (utils, env_logger, read_config, read_env,
-                           SETUP_IPA_SERVER)
+                           SETUP_IPA_SERVER, DIR_PATH)
 from SCAutolib.src.exceptions import UnspecifiedParameter, SCAutolibException
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -240,9 +240,9 @@ def setup_ca_():
         env_logger.debug("Files for local CA are created")
 
         run(['openssl', 'req', '-batch', '-config', join(conf_dir, "ca.cnf"),
-             '-x509', '-new', '-nodes', '-newkey', 'rsa:4096', '-keyout',
-             join(ca_dir, "rootCA.key"), '-sha256', '-days', '365',
-             '-set_serial', '0', '-extensions', 'v3_ca', '-out',
+             '-x509', '-new', '-nodes', '-newkey', 'rsa:2048', '-keyout',
+             join(ca_dir, "rootCA.key"), '-sha256', '-set_serial', '0',
+             '-extensions', 'v3_ca', '-out',
              join(ca_dir, "rootCA.pem")])
         env_logger.debug(
             f"Key for local CA is created {join(ca_dir, 'rootCA.key')}")
@@ -670,6 +670,10 @@ def general_setup(install_missing: bool = True):
                     env_logger.debug(
                         f"Package {out.stdout.strip()} is present")
             run(['dnf', 'groupinstall', "Smart Card Support", '-y'])
+
+            with open(join(DIR_PATH, ".env"), "a") as f:
+                f.write("READY=1\n")
+
             env_logger.debug("Smart Card Support group in installed.")
         except:
             env_logger.error("General setup is failed")
