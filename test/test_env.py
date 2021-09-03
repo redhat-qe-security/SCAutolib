@@ -188,3 +188,29 @@ def test_setup_ca(prep_ca, caplog):
         ca_db = f.read()
 
     assert root_crt in ca_db
+
+
+def test_create_sc(prep_ca_real, caplog):
+    user = read_config("local_user")
+    card_dir = user["card_dir"]
+    cert, key = join(card_dir, f"{user['name']}.crt"), join(
+        card_dir, f"{user['name']}.key")
+
+    create_sc(user)
+
+    assert exists(f"/etc/systemd/system/virt_cacard_{user['name']}.service"), \
+        "service for the virtual smart card not exists"
+
+    matchrule = f"""[certmap/shadowutils/{user['name']}]
+matchrule = <SUBJECT>.*CN={user['name']}.*"""
+    with open("/etc/sssd/sssd.conf", "r") as f:
+        content = f.read()
+    assert matchrule in content, "matchrule is not present in the sssd.conf"
+
+    assert exists("/etc/systemd/system/pcscd.service"), "pcscd.service is not copied"
+    with open("/etc/systemd/system/pcscd.service", "r") as f:
+        data = f.read()
+    assert "--auto-exit" not in data
+
+    assert exists(key), "User private key isn't created"
+    assert exists(cert), "User certificate isn't created"

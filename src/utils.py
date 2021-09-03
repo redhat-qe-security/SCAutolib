@@ -28,10 +28,12 @@ def show_file_diff(original, new):
         data_original = f.readlines()
     with open(new, "r") as f:
         data_new = f.readlines()
+    diff = differ.compare(data_original, data_new)
     with open("/var/log/scautolib/edited_files.log", "a") as f:
         f.write("\n================\n")
-        f.writelines(differ.compare(data_original, data_new))
+        f.writelines(diff)
         f.write("================\n")
+    return diff
 
 
 def edit_config(config_path: str, section: str, key: str, value: str = "",
@@ -280,9 +282,9 @@ def run_cmd(cmd: str = None, pin: bool = True, passwd: str = None, shell=None,
     Args:
         cmd: shell command to be executed
         pin: specify if passwd is a smart card PIN or a password for the
-                user_fnc. Base on this, corresponding pattern would be matched
-                in login output.
-        passwd: smart card PIN or user_fnc password if login is needed
+             user. Base on this, corresponding pattern would be matched
+             in login output.
+        passwd: smart card PIN or user password if login is needed
         shell: shell child where command need to be execute.
         return_val: return shell (shell) or stdout (stdout - default) or both (all)
     Returns:
@@ -321,7 +323,7 @@ def run_cmd(cmd: str = None, pin: bool = True, passwd: str = None, shell=None,
         raise UnknownOption(option_val=return_val, option_name="return_val")
 
 
-def check_output(output: str, expect: list = [], reject: list = [],
+def check_output(output: str, expect = None, reject = None,
                  zero_rc: bool = False, check_rc: bool = False):
     """
     Check "output" for presence of expected and unexpected patterns.
@@ -339,8 +341,9 @@ def check_output(output: str, expect: list = [], reject: list = [],
                 RC:<rc> where <rc> is a return value of the command. NOTE:
                 substring with return value is automatically added by run_cmd
                 function.
-        expect: list of patterns to be matched in the output
-        reject: list of patterns that cause failure if matched in the output
+        expect: pattern or list of patterns to be matched in the output
+        reject: pattern or list of  patterns that cause failure if matched in
+                the output
         check_rc: if True, return code of the command will be checked. If False,
                   (default), return code is not checked.
         zero_rc: applicable only with check_rc = True. If zero_rc = True, return
@@ -351,6 +354,17 @@ def check_output(output: str, expect: list = [], reject: list = [],
 
     # TODO: add switch and functionality
     #  to check patterns in specified order
+
+    if reject is None:
+        reject = []
+    elif type(reject) == str:
+        reject = [reject]
+
+    if expect is None:
+        expect = []
+    elif type(expect) == str:
+        expect = [expect]
+
     for pattern in reject:
         compiled = re.compile(pattern)
         if compiled.search(output) is not None:

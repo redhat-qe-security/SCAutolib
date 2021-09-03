@@ -50,7 +50,6 @@ def prepare(cards, conf, ipa, server_ip, ca, install_missing, server_hostname):
         exit(1)
 
     create_sssd_config()
-    check_semodule()
 
     if ipa:
         env_logger.info("Start setup of IPA client")
