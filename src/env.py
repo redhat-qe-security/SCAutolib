@@ -225,7 +225,7 @@ def setup_ca_():
     certs = join(ca_dir, "certs")
     crl = join(ca_dir, "crl")
     env_logger.debug("Start setup of local CA")
-
+    ca_db = "/etc/sssd/pki/sssd_auth_ca_db.pem"
     try:
         for d in (ca_dir, certs, crl, conf_dir, newcerts):
             prepare_dir(d, conf=False)
@@ -255,13 +255,16 @@ def setup_ca_():
         with open(join(ca_dir, "rootCA.pem"), "r") as f_cert:
             root_cert = f_cert.read()
 
-        with open("/etc/sssd/pki/sssd_auth_ca_db.pem", "r") as f_db:
-            ca_db = f_db.read()
-
-        if root_cert not in ca_db:
-            with open("/etc/sssd/pki/sssd_auth_ca_db.pem", "a") as f_db:
-                f_db.write(root_cert)
-            run("restorecon -v /etc/sssd/pki/sssd_auth_ca_db.pem")
+        if exists(ca_db):
+            with open(ca_db, "r") as f:
+                data = f.read()
+            if root_cert not in data:
+                with open(ca_db, "a") as f:
+                    f.write(root_cert)
+        else:
+            with open(ca_db, "w") as f:
+                f.write(root_cert)
+        run(f"restorecon -v {ca_db}")
 
         env_logger.debug(
             "Root certificate is copied to /etc/sssd/pki/sssd_auth_ca_db.pem")
@@ -489,17 +492,14 @@ def install_ipa_client_(ip: str, passwd: str, server_hostname: str = None):
     domain = read_config("ipa_domain")
     realm = read_config("ipa_realm")
     admin_passwd = read_config("ipa_server_admin_passwd")
-    hosts_entry_present = False
     ipa_client_script = join(read_env("TMP"), "ipa-client-sc.sh")
     with open("/etc/hosts", "r") as f:
-        if entry in f.read():
-            hosts_entry_present = True
+        data = f.read()
 
-    if not hosts_entry_present:
+    if entry not in data:
         with open("/etc/hosts", "a") as f:
             f.write(f"{entry}\n")
-
-    env_logger.debug(f"New entry {entry} is added to /etc/hosts")
+        env_logger.debug(f"New entry {entry} is added to /etc/hosts")
 
     try:
         with open("/etc/resolv.conf", "r") as f:
