@@ -1,21 +1,26 @@
-import logging
-from sys import stdout
+import colorlog
 
-
-handler = logging.StreamHandler(stdout)
-handler.setLevel(logging.DEBUG)
-
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s', datefmt="%H:%M:%S")
+handler = colorlog.StreamHandler()
+formatter = colorlog.ColoredFormatter(
+    '%(log_color)s%(module)s.%(funcName)s.%(lineno)d [%(levelname)s] %(message)s',
+    log_colors={
+        'DEBUG': 'cyan',
+        'INFO': 'green',
+        'WARNING': 'yellow',
+        'ERROR': 'red',
+        'CRITICAL': 'red,bg_white'})
 handler.setFormatter(formatter)
 
 # Basic logger
-log = logging.getLogger("base")
-log.setLevel(logging.DEBUG)
-
-log.addHandler(handler)
+base_logger = colorlog.getLogger("base")
+base_logger.addHandler(handler)
+base_logger.setLevel(colorlog.DEBUG)
 
 # Logger for environment events
-env_logger = logging.getLogger("env")
-env_logger.setLevel(logging.DEBUG)
-
+env_logger = colorlog.getLogger("env")
 env_logger.addHandler(handler)
+env_logger.setLevel(colorlog.DEBUG)
+
+
+def hello():
+    print("Hello. Just check that SCAutolib is imported")

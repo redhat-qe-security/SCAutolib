@@ -1,9 +1,8 @@
 click
-avocado-framework
 pexpect
 pyyaml
-avocado-framework-plugin-varianter-yaml-to-mux
 python-decouple
+python-freeipa
+cryptography
+colorlog
 paramiko
-pysftp
-python-dotenv
