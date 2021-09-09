@@ -1,5 +1,7 @@
-from SCAutolib import log
-import subprocess as subp
+from subprocess import check_output, PIPE
+from traceback import format_exc
+
+from SCAutolib import base_logger
 
 
 class Authselect:
@@ -38,27 +40,21 @@ class Authselect:
             args.append("with-mkhomedir")
         args.append("--force")
 
-        rc = subp.run(args,  stdout=subp.DEVNULL, stderr=subp.STDOUT)
-        msg = f"Authselect command failed. Return code: {rc.returncode}"
-        assert rc.returncode == 0, msg
-        log.debug(f"SSSD is set to: {' '.join(args)}")
-        log.debug(f"Backupfile: {self.backup_name}")
+        check_output(args, stderr=PIPE, encoding="utf=8")
+        base_logger.debug(f"SSSD is set to: {' '.join(args)}")
+        base_logger.debug(f"Backupfile: {self.backup_name}")
 
     def _reset(self):
         """
         Restore the previous configuration of authselect.
         """
-        rc = subp.run(["authselect", "backup-restore", self.backup_name,
-                       "--debug"], stdout=subp.DEVNULL, stderr=subp.STDOUT)
-        msg = f"Authselect backup-restore failed. Output: {rc.returncode}"
-        assert rc.returncode == 0, msg
+        check_output(["authselect", "backup-restore", self.backup_name,
+                      "--debug"], stderr=PIPE, encoding="utf=8")
 
-        rc = subp.run(["authselect", "backup-remove", self.backup_name,
-                       "--debug"], stdout=subp.DEVNULL, stderr=subp.STDOUT)
-        msg = f"Authselect backup-remove failed. Output: {rc.returncode}"
-        assert rc.returncode == 0, msg
+        check_output(["authselect", "backup-remove", self.backup_name,
+                      "--debug"], stderr=PIPE, encoding="utf=8")
 
-        log.debug("Authselect backup file is restored")
+        base_logger.debug("Authselect backup file is restored")
 
     def __enter__(self):
         self._set()
@@ -66,8 +62,6 @@ class Authselect:
 
     def __exit__(self, ext_type, ext_value, ext_traceback):
         if ext_type is not None:
-            log.error("Exception in virtual smart card context")
-            log.error(f"Exception type: {ext_type}")
-            log.error(f"Exception value: {ext_value}")
-            log.error(f"Exception traceback: {ext_traceback}")
+            base_logger.error("Exception in authselect context")
+            base_logger.error(format_exc())
         self._reset()

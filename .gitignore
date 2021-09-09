@@ -269,4 +269,9 @@ src/env/keys*
 .idea/
 .vscode/
 src/env/krb-server-client-setup-rhel8.sh
-src/env/conf*
+*.yml
+*.yaml
+/src/.env
+/conf/*
+*original*
+*backup*
