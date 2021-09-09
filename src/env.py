@@ -510,9 +510,13 @@ def install_ipa_client_(ip: str, passwd: str, server_hostname: str = None):
             data = f"nameserver {ip}\n" + data
             with open("/etc/resolv.conf", "w") as f:
                 f.write(data)
-
+            with open("/etc/resolv.conf", "r") as f:
+                env_logger.debug(f.read())
         env_logger.debug(
             "IPA server is added to /etc/resolv.conf as first nameserver")
+
+        run("chattr -i /etc/resolv.conf")
+        env_logger.debug("File /etc/resolv.conf is blocked for editing")
 
         run(f"hostnamectl set-hostname {client_hostname} --static")
         env_logger.debug(f"Hostname is set to {client_hostname}")
@@ -796,11 +800,11 @@ def cleanup_(restore_items: list):
             env_logger.warning(f"Skip item with unknow type '{type_}'")
 
 
-def run(cmd, *args, **kwargs) -> subprocess.CompletedProcess:
+def run(cmd, stdout=PIPE, stderr=PIPE, *args, **kwargs) -> subprocess.CompletedProcess:
     if type(cmd) == str:
         cmd = cmd.split(" ")
-    out = subprocess.run(cmd, stdout=PIPE,
-                         encoding="utf-8", stderr=PIPE, *args, **kwargs)
+    out = subprocess.run(cmd, stdout=stdout, stderr=stderr, encoding="utf-8",
+                         *args, **kwargs)
     if out.stdout != "":
         env_logger.debug(out.stdout)
     if out.stderr != "":
