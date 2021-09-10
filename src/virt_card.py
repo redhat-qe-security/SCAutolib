@@ -1,8 +1,8 @@
 import time
-from subprocess import check_output, PIPE
 from traceback import format_exc
 
 from SCAutolib import base_logger
+from SCAutolib.src.env import run
 
 
 class VirtCard:
@@ -39,13 +39,13 @@ class VirtCard:
 
     def remove(self):
         """Simulate removing of the smart card by stopping the systemd service."""
-        check_output(["systemctl", "stop", self.service_name], stderr=PIPE, encoding='utf-8')
+        run(["systemctl", "stop", self.service_name])
         time.sleep(2)
         base_logger.debug("Smart card removed")
 
     def insert(self):
         """Simulate inserting of the smart card by starting the systemd service."""
-        check_output(["systemctl", "start", self.service_name], stderr=PIPE, encoding='utf-8')
+        run(["systemctl", "start", self.service_name])
         time.sleep(2)
         base_logger.debug("Smart card is inserted")
 

@@ -227,9 +227,17 @@ def setup_ca_():
     env_logger.debug("Start setup of local CA")
     ca_db = "/etc/sssd/pki/sssd_auth_ca_db.pem"
     try:
+        if exists(ca_dir):
+            # FIXME restore CA directory
+            env_logger.warning(f"CA directory {ca_dir} alredy exists.")
+            rmtree(ca_dir)
+            env_logger.warning(f"CA directory is deleted. A new one would "
+                               f"be created in {ca_dir}")
         for d in (ca_dir, certs, crl, conf_dir, newcerts):
             prepare_dir(d, conf=False)
+        prep_tmp_dirs()
         env_logger.debug("Directories for local CA are created")
+        create_cnf("ca", conf_dir)
 
         with open(join(ca_dir, "serial"), "w") as f:
             f.write("01")
@@ -557,7 +565,12 @@ def install_ipa_client_(ip: str, passwd: str, server_hostname: str = None):
                          f"copied to {ipa_client_script}")
         run(f'bash {ipa_client_script} /etc/ipa/ca.crt')
 
-        env_logger.debug("Setup of IPA client for smart card is `finished")
+        env_logger.debug("Setup of IPA client for smart card is finished")
+
+        out = run("ipa pwpolicy-show global_policy")
+        if "Min lifetime (hours): 0" not in out.stdout:
+            run("ipa pwpolicy-mod global_policy --minlife 0 --maxlife 365")
+            env_logger.debug("Password policy for IPA is changed.")
 
         env_logger.debug("IPA client is configured on the system. "
                          "Don't forget to add IPA user by add-ipa-user command")
@@ -580,7 +593,7 @@ def add_ipa_user_(user: dict, ipa_hostname: str = None):
         ipa_hostname: hostname of IPA server. If non, tries to read
                       ipa_server_hostname field from the configuration file
     """
-    username, user_dir = user["name"], user["card_dir"]
+    username, user_dir, passwd = user["name"], user["card_dir"], user["passwd"]
     cert_path = user["cert"] if "cert" in user.keys(
     ) else f"{user_dir}/cert.pem"
     key_path = user["key"] if "key" in user.keys(
@@ -596,10 +609,10 @@ def add_ipa_user_(user: dict, ipa_hostname: str = None):
     client = pipa.ClientMeta(ipa_hostname, verify_ssl=False)
     client.login("admin", ipa_admin_passwd)
     try:
-        client.user_add(username, username, username, username)
+        client.user_add(username, username, username, username, o_userpassword=passwd)
     except pipa.exceptions.DuplicateEntry:
         env_logger.warning(f"User {username} already exists in the IPA server "
-                           f"{ipa_hostname}")
+                           f"{ipa_hostname}. Password is not changed.")
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
 
     prepare_dir(user_dir)
