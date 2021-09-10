@@ -5,7 +5,7 @@ set -e
 
 rx='([1-9]?[0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])'
 
-SERVER_HOSTNAME='ipa-server.sc.test.com'
+SERVER_HOSTNAME='ipa-server-beaker.sc.test.com'
 DOMAIN_NAME='sc.test.com'
 REALM="SC.TEST.COM"
 ADMIN_PASSWD="SECret.123"
@@ -31,8 +31,18 @@ echo "$entry" >> /etc/hosts
 log "Entry $entry is added to /etc/hosts file"
 
 ipa-server-install -U -p "$ADMIN_PASSWD" -a "$ADMIN_PASSWD" --realm "$REALM" --hostname "$SERVER_HOSTNAME" --domain "$DOMAIN_NAME" --no-ntp
-ipa-dns-install --allow-zone-overlap --auto-forwarders --ip-address "$ip"  --no-dnssec-validation --no-reverse
 log "IPA server is installed"
+
+ipa-dns-install --allow-zone-overlap --auto-forwarders --ip-address "$ip"  --no-dnssec-validation --no-reverse
+log "DNS for IPA server is configured"
+
+echo "$ADMIN_PASSWD" | kinit admin
+
+ipa certmaprule-add ipa_default_rule \
+    --maprule='(|(userCertificate;binary={cert!bin})(ipacertmapdata=X509: <I>{issuer_dn!nss_x500}<S>{subject_dn!nss_x500}))' \
+    --matchrule="<ISSUER>CN=Certificate Authority,O=$REALM" \
+    --domain="$DOMAIN_NAME"
+log "Default certmap rule is added"
 
 echo "$ADMIN_PASSWD" | kinit admin
 log "Kerberos ticket for admin is obtained"
