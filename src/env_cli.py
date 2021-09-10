@@ -52,24 +52,29 @@ def prepare(cards, conf, ipa, server_ip, ca, install_missing, server_hostname):
     create_sssd_config()
 
     if ipa:
-        env_logger.info("Start setup of IPA client")
-        if not server_ip:
-            env_logger.debug("No IP address for IPA server is given.")
-            env_logger.debug("Try to get IP address of IPA server from "
-                             "configuration file.")
-            server_ip = read_config("ipa_server_ip")
-        if not server_ip:
-            env_logger.error("Can't find IP address of IPA server in "
-                             "configuration file")
+        try:
+            env_logger.info("Start setup of IPA client")
+            if not server_ip:
+                env_logger.debug("No IP address for IPA server is given.")
+                env_logger.debug("Try to get IP address of IPA server from "
+                                 "configuration file.")
+                server_ip = read_config("ipa_server_ip")
+            if not server_ip:
+                env_logger.error("Can't find IP address of IPA server in "
+                                 "configuration file")
+                exit(1)
+            server_root_passwd = read_config("ipa_server_root")
+            install_ipa_client_(server_ip, server_root_passwd, server_hostname)
+            env_logger.info("IPA client is installed on the system")
+        except:
+            env_logger.error(format_exc())
+            env_logger.error("IPA client installation is failed.")
+            run("ipa-client-install --uninstall -U")
             exit(1)
-        server_root_passwd = read_config("ipa_server_root")
-        install_ipa_client_(server_ip, server_root_passwd, server_hostname)
-        env_logger.info("IPA client is installed on the system")
 
     if ca:
         env_logger.info("Start setup of local CA")
         prepare_dir(read_env("CA_DIR"))
-        create_cnf('ca')
         setup_ca_()
 
     if cards:

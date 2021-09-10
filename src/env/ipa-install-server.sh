@@ -32,6 +32,11 @@ log "Entry $entry is added to /etc/hosts file"
 
 ipa-server-install -U -p "$ADMIN_PASSWD" -a "$ADMIN_PASSWD" --realm "$REALM" --hostname "$SERVER_HOSTNAME" --domain "$DOMAIN_NAME" --no-ntp
 ipa-dns-install --allow-zone-overlap --auto-forwarders --ip-address "$ip"  --no-dnssec-validation --no-reverse
+ipa certmaprule-add ipa_default_rule \
+    --maprule='(|(userCertificate;binary={cert!bin})(ipacertmapdata=X509: <I>{issuer_dn!nss_x500}<S>{subject_dn!nss_x500}))' \
+    --matchrule="<ISSUER>CN=Certificate Authority,O=$REALM" \
+    --domain="$DOMAIN_NAME"
+
 log "IPA server is installed"
 
 echo "$ADMIN_PASSWD" | kinit admin
