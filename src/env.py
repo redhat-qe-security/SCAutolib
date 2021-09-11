@@ -1,7 +1,7 @@
 import pwd
 import subprocess
 from configparser import ConfigParser
-from os import chmod, mkdir, remove
+from os import chmod, remove
 from os.path import exists
 from pathlib import Path
 from posixpath import join
@@ -106,14 +106,14 @@ subjectKeyIdentifier = hash
 keyUsage = critical, nonRepudiation, digitalSignature
 extendedKeyUsage = clientAuth, emailProtection, msSmartcardLogin
 subjectAltName = otherName:msUPN;UTF8:{user}@EXAMPLE.COM, email:{user}@example.com
-"""
+"""  # noqa: E501
     if conf_dir is None:
         raise UnspecifiedParameter(
             "conf_dir", "Directory with configurations is not provided")
     with open(f"{conf_dir}/req_{user}.cnf", "w") as f:
         f.write(user_cnf)
-        env_logger.debug(f"Configuration file for CSR for user {user} is created "
-                         f"{conf_dir}/req_{user}.cnf")
+        env_logger.debug(f"Configuration file for CSR for user {user} is "
+                         f"created  {conf_dir}/req_{user}.cnf")
     return f"{conf_dir}/req_{user}.cnf"
 
 
@@ -129,7 +129,7 @@ def create_sssd_config():
         "sssd": {"debug_level": "9",
                  "services": "nss, pam",
                  "domains": "shadowutils",
-                 "certificate_verification":"no_ocsp"},
+                 "certificate_verification": "no_ocsp"},
         "nss": {"debug_level": "9"},
         "pam": {"debug_level": "9",
                 "pam_cert_auth": "True"},
@@ -195,7 +195,8 @@ def create_virt_card_service(username: str, card_dir: str):
         "Service": {
             "Environment": f'SOFTHSM2_CONF="{conf_dir}/softhsm2.conf"',
             "WorkingDirectory": card_dir,
-            "ExecStart": "/usr/bin/virt_cacard >> /var/log/virt_cacard.debug 2>&1",
+            "ExecStart":
+                "/usr/bin/virt_cacard >> /var/log/virt_cacard.debug 2>&1",
             "KillMode": "process"
         },
         "Install": {"WantedBy": "multi-user.target"}
@@ -422,10 +423,10 @@ def setup_virt_card_(user: dict):
 
 def check_semodule():
     """Checks if specific SELinux module for virtual smart card is installed.
-    This is implemented be checking the hardcoded name for the module (virtcacard)
-    to be present in the list of SELinux modules. If this name is not present in
-    the list, than virtcacard.cil file would be created in conf / sub-directory
-    in the CA directory specified by the configuration file.
+    This is implemented be checking the hardcoded name for the module
+    (virtcacard) to be present in the list of SELinux modules. If this name is
+    not present in the list, than virtcacard.cil file would be created in conf
+    or sub-directory in the CA directory specified by the configuration file.
     """
     result = run("semodule -l")
     if "virtcacard" not in result.stdout:
@@ -474,9 +475,11 @@ def prepare_dir(dir_path: str, conf=True):
 
 def prep_tmp_dirs():
     """
-    Prepare directory structure for test environment. All paths are taken from     previously loaded env file.
+    Prepare directory structure for test environment. All paths are taken from
+    previously loaded env file.
     """
-    paths = [read_env(path, cast=str) for path in ("CA_DIR", "TMP", "BACKUP")] + \
+    paths = [read_env(path, cast=str)
+             for path in ("CA_DIR", "TMP", "BACKUP")] + \
             [join(read_env("CA_DIR"), "conf"), "/var/log/scautolib/"]
     for path in paths:
         prepare_dir(path, conf=False)
@@ -486,12 +489,13 @@ def install_ipa_client_(ip: str, passwd: str, server_hostname: str = None):
     """Install ipa-client package to the system and run ipa-advice script for
     configuring the client for smart card support.     Args:
         ip: IP address of IPA server
-        passwd: root password from IPA server(needed to obtain ipa-advice script).
+        passwd: root password from IPA server(needed to obtain ipa-advice
+                script).
                 NOTE: currently passwd would be used both for login to the system
                 with root and for obtaining admin kerberos ticket on the server.
         server_hostname: hostname of IPA server
     """
-    env_logger.debug(f"Start installation of IPA client")
+    env_logger.debug("Start installation of IPA client")
     if server_hostname is None:
         server_hostname = read_config("ipa_server_hostname")
 
@@ -556,7 +560,7 @@ def install_ipa_client_(ip: str, passwd: str, server_hostname: str = None):
 
         ssh_stdin, ssh_stdout, ssh_stderr = ssh.exec_command("kinit admin")
         ssh_stdin.write(admin_passwd)
-        _, out, _ = ssh.exec_command("ipa-advise config-client-for-smart-card-auth")
+        _, out, _ = ssh.exec_command("ipa-advise config-client-for-smart-card-auth")  # noqa: E501
         with open(ipa_client_script, "w") as f:
             f.writelines(out.readlines())
         ssh.close()
@@ -609,7 +613,8 @@ def add_ipa_user_(user: dict, ipa_hostname: str = None):
     client = pipa.ClientMeta(ipa_hostname, verify_ssl=False)
     client.login("admin", ipa_admin_passwd)
     try:
-        client.user_add(username, username, username, username, o_userpassword=passwd)
+        client.user_add(username, username, username, username,
+                        o_userpassword=passwd)
     except pipa.exceptions.DuplicateEntry:
         env_logger.warning(f"User {username} already exists in the IPA server "
                            f"{ipa_hostname}. Password is not changed.")
@@ -677,7 +682,7 @@ def general_setup(install_missing: bool = True):
                 if pkg not in out.stdout:
                     if install_missing:
                         env_logger.warning(
-                            f"Package {pkg} is not installed on the system. Installing...")
+                            f"Package {pkg} is not installed on the system. Installing...")  # noqa: E501
                         run(f"dnf install {pkg} -y")
                         pkg = run(["rpm", "-qa", pkg]).stdout
                         env_logger.debug(f"Package {pkg} is installed")
@@ -686,8 +691,8 @@ def general_setup(install_missing: bool = True):
                             f"Package {pkg} is required for testing, "
                             "but it is not installed on the system.")
                         raise SCAutolibException(
-                            f"Package {pkg} is required for testing, but it is not "
-                            f"installed on the system.")
+                            f"Package {pkg} is required for testing, but it is "
+                            f"not installed on the system.")
                 else:
                     env_logger.debug(
                         f"Package {out.stdout.strip()} is present")
@@ -706,10 +711,10 @@ def general_setup(install_missing: bool = True):
 def create_sc(sc_user: dict):
     """Function that joins steps for creating virtual smart card.
 
-    Args:         
+    Args:
         sc_user: dictionary with username('name' field), directory where
-                 virtual smart card to be created ('card_dir' field). This 
-                 directory would contain also a certificate & private key, all 
+                 virtual smart card to be created ('card_dir' field). This
+                 directory would contain also a certificate & private key, all
                  other sub-directories need be virtual smart card
                  (tokens, db, etc.)
     """
@@ -778,9 +783,9 @@ def cleanup_(restore_items: list):
 
     Args:
         restore_items: list of items to be restore. Item is a dict with specific
-                       fields. Item has to contain at list type (file/dir/user) 
-                       and src (or username if type is 'user'). Type field can 
-                       also be some custom type, but it wouldn't be restore by 
+                       fields. Item has to contain at list type (file/dir/user)
+                       and src (or username if type is 'user'). Type field can
+                       also be some custom type, but it wouldn't be restore by
                        this function.
     """
     for item in restore_items:
@@ -813,7 +818,7 @@ def cleanup_(restore_items: list):
             env_logger.warning(f"Skip item with unknown type '{type_}'")
 
 
-def run(cmd, stdout=PIPE, stderr=PIPE, *args, **kwargs) -> subprocess.CompletedProcess:
+def run(cmd, stdout=PIPE, stderr=PIPE, *args, **kwargs) -> subprocess.CompletedProcess:  # noqa: E501
     if type(cmd) == str:
         cmd = cmd.split(" ")
     out = subprocess.run(cmd, stdout=stdout, stderr=stderr, encoding="utf-8",

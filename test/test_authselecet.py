@@ -1,9 +1,9 @@
 # author: Pavel Yadlouski <pyadlous@redhat.com>
 # Unit tests for of SCAutolib.src.authselect module
 
-import pytest
-from SCAutolib.src.authselect import Authselect
 from subprocess import check_output
+
+from SCAutolib.src.authselect import Authselect
 
 
 def test_authselect_init():
@@ -20,4 +20,5 @@ def test_authselect_set():
     try:
         assert "with-smartcard" in out
     finally:
-        check_output(["authselect", "backup-restore", auth.backup_name], encoding="utf-8")
+        check_output(["authselect", "backup-restore", auth.backup_name],
+                     encoding="utf-8")
