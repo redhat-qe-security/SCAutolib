@@ -19,11 +19,14 @@ def cli():
                    "conf file or specify by --ip parameter)")
 @click.option("--server-ip", type=click.STRING,
               help="IP address of IPA server to setup with", required=False)
-@click.option("--server-hostname", type=click.STRING, required=False, default=None,
-              help="Hostname of IPA server. This name would be added to /etc/hosts")
+@click.option("--server-hostname", type=click.STRING, required=False,
+              default=None,
+              help="Hostname of IPA server. This name would be added to "
+                   "/etc/hosts")
 @click.option("--ca", is_flag=True, required=False,
               help="Flag for setting up the local CA")
-@click.option("--install-missing", "-m", is_flag=True, required=False, default=False,
+@click.option("--install-missing", "-m", is_flag=True, required=False,
+              default=False,
               help="Silently install missing packages, if it would be needed")
 def prepare(cards, conf, ipa, server_ip, ca, install_missing, server_hostname):
     """
@@ -34,8 +37,8 @@ def prepare(cards, conf, ipa, server_ip, ca, install_missing, server_hostname):
     """
     env_logger.info("Start setting up system for smart card testing")
     if not check_config(conf):
-        env_logger.error("Configuration file miss required fields. Check logs for"
-                         "more information.")
+        env_logger.error("Configuration file miss required fields. Check logs "
+                         "for more information.")
         exit(1)
 
     load_env(conf)
@@ -169,6 +172,7 @@ def cleanup():
         cleanup_(restore_items)
     except:
         env_logger.error("Cleanup is failed. Check logs for more info")
+        env_logger.error(format_exc())
         exit(1)
 
     env_logger.debug("Cleanup is completed")
@@ -196,8 +200,9 @@ def install_ipa_client(ip):
 
 @click.command()
 @click.option("--username", "-u", required=True,
-              help="Username to be added to IPA server. If username is present in the"
-                   "configuration file, values from this object would be used")
+              help="Username to be added to IPA server. If username is present "
+                   "in the configuration file, values from this object would "
+                   "be used")
 @click.option("--user-dir", "-d", default=None,
               help="User directory to create on the system for placing cert and"
                    "private key from IPA server.")

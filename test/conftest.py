@@ -1,6 +1,8 @@
 def pytest_addoption(parser):
-    parser.addoption("--ipa-ip", action="store", help="IP address of IPA server")
-    parser.addoption("--ipa-hostname", action="store", help="Hostname of IPA server")
+    parser.addoption(
+        "--ipa-ip", action="store", help="IP address of IPA server")
+    parser.addoption(
+        "--ipa-hostname", action="store", help="Hostname of IPA server")
 
 
 def pytest_generate_tests(metafunc):

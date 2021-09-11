@@ -6,7 +6,7 @@ from pathlib import Path
 from subprocess import check_output
 
 import pytest
-from SCAutolib.src import load_env, env, DIR_PATH
+from SCAutolib.src import load_env, env
 from dotenv import load_dotenv
 from yaml import dump, load, FullLoader
 
