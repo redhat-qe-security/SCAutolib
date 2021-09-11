@@ -1,17 +1,15 @@
 # author: Pavel Yadlouski <pyadlous@redhat.com>
 # Unit tests for of SCAutolib.src.env module
+import re
+from os import stat, mkdir
+from os.path import isfile
+
 from SCAutolib.src.env import *
 from SCAutolib.src.exceptions import *
-from configparser import ConfigParser
-from os import stat, mkdir, environ
-from os.path import isfile, exists
-from shutil import rmtree
-import re
-from pytest import raises
 from SCAutolib.test.fixtures import *
 from dotenv import load_dotenv
+from pytest import raises
 from yaml import load, FullLoader
-import pytest
 
 
 def test_create_sssd_config(tmpdir, loaded_env, clean_conf):
@@ -50,7 +48,7 @@ def test_create_cnf_ca(prep_ca):
     username = "ca"
     ca_dir = prep_ca
     conf_dir = f"{ca_dir}/conf"
-    ca_cnf = join(conf_dir, f"ca.cnf")
+    ca_cnf = join(conf_dir, "ca.cnf")
 
     create_cnf(username, conf_dir)
     assert isfile(ca_cnf)
@@ -78,7 +76,8 @@ def test_create_softhsm2_config():
         assert isfile(softhsm2_config)
         with open(softhsm2_config, "r") as f:
             content = f.read()
-        assert re.findall(f"directories.tokendir[ ]*=[ ]*{card_dir}/tokens/", content)
+        assert re.findall(f"directories.tokendir[ ]*=[ ]*{card_dir}/tokens/",
+                          content)
     finally:
         rmtree(card_dir)
 
@@ -97,7 +96,8 @@ def test_create_virt_card_service():
         cnf.read_file(f)
     try:
         assert isfile(service_path)
-        assert f"SOFTHSM2_CONF=\"{conf_dir}/softhsm2.conf\"" == cnf.get("Service", "Environment")
+        assert f"SOFTHSM2_CONF=\"{conf_dir}/softhsm2.conf\"" == cnf.get(
+            "Service", "Environment")
         assert f"{card_dir}" == cnf.get("Service", "WorkingDirectory")
         assert f"virtual card for {username}" == cnf.get("Unit", "Description")
     finally:
@@ -190,6 +190,7 @@ def test_setup_ca(prep_ca, caplog):
     assert root_crt in ca_db
 
 
+@pytest.mark.service_restart()
 def test_create_sc(prep_ca_real, caplog):
     user = read_config("local_user")
     card_dir = user["card_dir"]
@@ -207,7 +208,8 @@ matchrule = <SUBJECT>.*CN={user['name']}.*"""
         content = f.read()
     assert matchrule in content, "matchrule is not present in the sssd.conf"
 
-    assert exists("/etc/systemd/system/pcscd.service"), "pcscd.service is not copied"
+    assert exists("/etc/systemd/system/pcscd.service"), "pcscd.service is not " \
+                                                        "copied"
     with open("/etc/systemd/system/pcscd.service", "r") as f:
         data = f.read()
     assert "--auto-exit" not in data

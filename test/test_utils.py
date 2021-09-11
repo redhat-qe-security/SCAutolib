@@ -14,6 +14,7 @@ FILES = f"{CUR_PATH}/files"
 
 
 @pytest.mark.slow()
+@pytest.mark.service_restart()
 def test_service_restart():
     """Test for restarting the service"""
     rc = utils.restart_service("sssd")
@@ -23,6 +24,7 @@ def test_service_restart():
 
 
 @pytest.mark.slow()
+@pytest.mark.service_restart()
 def test_service_restart_fail():
     """Test for fault of service restart."""
     copy(f"{FILES}/test.service", "/etc/systemd/system/test.service")
@@ -102,7 +104,8 @@ def test_check_output_expect_and_zero_rc(zero_rc_output):
 
 
 def test_edit_config_no_restore(dummy_config, loaded_env):
-    @utils.edit_config(dummy_config, section="first", key="one", value="10", restore=False)
+    @utils.edit_config(dummy_config, section="first", key="one", value="10",
+                       restore=False)
     def inner_fnc():
         return
 
@@ -118,7 +121,8 @@ def test_edit_config_no_restore(dummy_config, loaded_env):
 
 
 def test_edit_config_restore(dummy_config, loaded_env):
-    @utils.edit_config(dummy_config, section="first", key="one", value="10", restore=True)
+    @utils.edit_config(dummy_config, section="first", key="one", value="10",
+                       restore=True)
     def inner_fnc():
         return
 
@@ -140,4 +144,5 @@ def test_edit_config_no_section(dummy_config, loaded_env, caplog):
 
     with pytest.raises(UnknownOption):
         inner_fnc()
-    assert f"Section no-section is not present in config file {dummy_config}" in caplog.messages
+    assert f"Section no-section is not present in config file {dummy_config}" \
+           in caplog.messages

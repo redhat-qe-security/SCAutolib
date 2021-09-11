@@ -46,7 +46,8 @@ def edit_config(config_path: str, section: str, key: str, value: str = "",
         section: section in config file where a key is placed
         key: key to by updated
         value: value to be set for a given key
-        restore: if true, original file would be restored after function is finished
+        restore: if true, original file would be restored after function is
+        finished
 
     Returns:
         decorated function
@@ -76,7 +77,8 @@ def backup(*restart, file_path: str, name: str = None, restore=True,):
     Args:
         file_path: path to file to be saved
         name: name for backup file (optional)
-        restore: specifies if given file should be restored after function execution
+        restore: specifies if given file should be restored after function
+                 execution
 
     Returns:
         decorated function
@@ -155,8 +157,8 @@ def edit_config_(conf: str, section: str, key: str, value: str = ""):
     with open(conf, "w") as file:
         cnf.write(file)
 
-    base_logger.debug(f"Value for key {key} in section {section} is set to {value} "
-                      f"in file {conf}")
+    base_logger.debug(f"Value for key {key} in section {section} is set to "
+                      f"{value} in file {conf}")
 
 
 def restart_service(service: str) -> int:
@@ -178,7 +180,8 @@ def restart_service(service: str) -> int:
             return result.returncode
         except subp.CalledProcessError as e:
             env_logger.error(
-                f"Command {' '.join(e.cmd)} is ended with non-zero return code ({e.returncode})")
+                f"Command {' '.join(e.cmd)} is ended with non-zero return "
+                "code ({e.returncode})")
             env_logger.error(f"stdout:\n{e.stdout}")
             env_logger.error(f"stderr:\n{e.stderr}")
             return e.returncode
@@ -243,13 +246,14 @@ def generate_cert(username=None):
                                    f"{prefix}-{serial} Test Ca"),
             ])
         except UndefinedValueError:
-            base_logger.error("You are trying to generate user certificate, but .env "
-                              "file do not have name for certificate issuer."
-                              "Did you generate self-signed CA certificate?")
+            base_logger.error("You are trying to generate user certificate, "
+                              "but .env file do not have name for certificate "
+                              "issuer.Did you generate self-signed CA "
+                              "certificate?")
 
     subject_key = x509.SubjectKeyIdentifier.from_public_key(key.public_key())
-    authority_key = x509.AuthorityKeyIdentifier.from_issuer_subject_key_identifier(
-        subject_key)
+    authority_key = x509.AuthorityKeyIdentifier \
+        .from_issuer_subject_key_identifier(subject_key)
 
     env_logger.debug("Type of subject is " + str(type(subject)))
     builder = builder \
@@ -263,7 +267,7 @@ def generate_cert(username=None):
         .add_extension(key_usage, critical=True) \
         .add_extension(subject_key, critical=True) \
         .add_extension(authority_key, critical=True) \
-        .sign(key, hashes.SHA256())
+        .sign(key, hashes.SHA256())  # noqa: E501
 
     with open(cert_path, "wb") as f:
         f.write(builder.public_bytes(serialization.Encoding.PEM))
@@ -286,7 +290,8 @@ def run_cmd(cmd: str = None, pin: bool = True, passwd: str = None, shell=None,
              in login output.
         passwd: smart card PIN or user password if login is needed
         shell: shell child where command need to be execute.
-        return_val: return shell (shell) or stdout (stdout - default) or both (all)
+        return_val: return shell (shell) or stdout (stdout - default) or
+                    both (all)
     Returns:
         stdout of executed command (cmd; see above)
     """
@@ -323,7 +328,7 @@ def run_cmd(cmd: str = None, pin: bool = True, passwd: str = None, shell=None,
         raise UnknownOption(option_val=return_val, option_name="return_val")
 
 
-def check_output(output: str, expect = None, reject = None,
+def check_output(output: str, expect=None, reject=None,
                  zero_rc: bool = False, check_rc: bool = False):
     """
     Check "output" for presence of expected and unexpected patterns.
@@ -381,7 +386,7 @@ def check_output(output: str, expect = None, reject = None,
 
     if check_rc:
         if "RC:0" not in output:
-            msg = f"Non zero return code indicated"
+            msg = "Non zero return code indicated"
             if zero_rc:
                 raise NonZeroReturnCode(msg)
             else:
