@@ -216,7 +216,7 @@ celerybeat.pid
 # .env
 .env/
 .venv/
-env/
+# env/
 venv/
 ENV/
 env.bak/
@@ -268,7 +268,6 @@ src/env/keys*
 *tmp*
 .idea/
 .vscode/
-src/env/krb-server-client-setup-rhel8.sh
 *.yml
 *.yaml
 /src/.env

@@ -8,10 +8,11 @@ from SCAutolib.src.env import run
 class VirtCard:
     """
     Class that represents virtual smart card in the tests.
-    The of the system level, smart card is represnted as a systemd service.
-    Starting and stoping this service simulattes insertion and removing the card.
+    The of the system level, smart card is represented as a systemd service.
+    Starting and stopping this service simulates insertion and removing the
+    card.
 
-    This class can be used in context manage (with statment).
+    This class can be used in context manage (with statement).
     """
 
     def __init__(self, username, insert=False):
@@ -38,13 +39,15 @@ class VirtCard:
         self.remove()
 
     def remove(self):
-        """Simulate removing of the smart card by stopping the systemd service."""
+        """Simulate removing of the smart card by stopping the systemd service.
+        """
         run(["systemctl", "stop", self.service_name])
         time.sleep(2)
         base_logger.debug("Smart card removed")
 
     def insert(self):
-        """Simulate inserting of the smart card by starting the systemd service."""
+        """Simulate inserting of the smart card by starting the systemd service.
+        """
         run(["systemctl", "start", self.service_name])
         time.sleep(2)
         base_logger.debug("Smart card is inserted")
