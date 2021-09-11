@@ -134,7 +134,8 @@ def test_prepare_ipa(config_file_correct, caplog, runner, ipa_ip, ipa_hostname,
 @pytest.mark.slow()
 @pytest.mark.service_restart()
 @pytest.mark.ipa()
-@pytest.mark.filterwarnings('ignore:Unverified HTTPS request is being made to host.*')
+@pytest.mark.filterwarnings(
+    'ignore:Unverified HTTPS request is being made to host.*')
 def test_prepare_ipa_cards(config_file_correct, caplog, runner, ipa_ip,
                            ipa_hostname, src_path):
     result = runner.invoke(env_cli.prepare,
@@ -198,6 +199,7 @@ def test_cleanup(real_factory, loaded_env, caplog, runner, clean_conf,
     with open(config_file, "r") as f:
         data = load(f, Loader=Loader)
 
+    data["restore"] = []
     data["restore"].append({"type": "dir", "src": str(
         src_dir_parh), "backup_dir": str(dest_dir_path)})
     data["restore"].append({"type": "file", "src": str(
@@ -212,7 +214,7 @@ def test_cleanup(real_factory, loaded_env, caplog, runner, clean_conf,
     # Run cleanup command
     result = runner.invoke(env_cli.cleanup, catch_exceptions=False, color=True)
 
-    # General sucess of the command
+    # General success of the command
     assert result.exit_code == 0
     assert "Start cleanup" in caplog.messages
     assert "Cleanup is completed" in caplog.messages
