@@ -57,8 +57,8 @@ def read_config(*items) -> list or object:
     content.
 
     Args:
-        items: list of items to extracrt from the configuration file.
-               If None, full contant would be returned
+        items: list of items to extract from the configuration file.
+               If None, full content would be returned
 
     Returns:
         list with required items
@@ -90,3 +90,50 @@ def read_config(*items) -> list or object:
                 return_list.append(value)
 
     return return_list if len(items) > 1 else return_list[0]
+
+
+def set_config(path, value, action="replace", type_=str):
+    """Sets field to given value in configuration file.
+
+    :param path: path in the configuration file in doted notation (a.b.c). If
+    any of path part doesn't exist, than it would be created.
+    :param value: value to be set for last key in path
+    :param action: action for value. By default is "replace". If "append", than
+    given value would be appended to the list of value for the last key in the
+    path.
+    :param type_: data type to which value would be converted and inserted to
+    configuration file. By default is "str".
+    """
+    conf_path = read_env("CONF")
+    with open(conf_path, "r") as file:
+        config_data = yaml.load(file, Loader=yaml.FullLoader)
+    obj = config_data
+    key_list = path.split(".")
+
+    for k in key_list[:-1]:
+        if k not in obj.keys():
+            env_logger.warning(f"Key {k} is not present in the configuration "
+                               f"file. This key would be added.")
+            obj[k] = dict()
+        obj = obj[k]
+
+    try:
+        if value is not None:
+            value = type_(value)
+    except ValueError:
+        env_logger.error(f"Cant convert value {value} of type "
+                         f"{str(type(value))} to type {str(type_)}")
+
+    if action == "replace":
+        obj[key_list[-1]] = value
+
+    elif action == "append":
+        if type(obj[key_list[-1]]) == list:
+            obj[key_list[-1]].append(value)
+        else:
+            obj[key_list[-1]] = [obj[key_list[-1]], value]
+
+    with open(conf_path, "w") as f:
+        yaml.dump(config_data, f)
+
+    env_logger.debug(f"Value for filed {path} is update to {value}")
