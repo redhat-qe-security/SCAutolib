@@ -62,10 +62,12 @@ def prepare(cards, conf, ipa, server_ip, ca, install_missing, server_hostname):
                 env_logger.debug("Try to get IP address of IPA server from "
                                  "configuration file.")
                 server_ip = read_config("ipa_server_ip")
-            if not server_ip:
-                env_logger.error("Can't find IP address of IPA server in "
-                                 "configuration file")
-                exit(1)
+                if not server_ip:
+                    env_logger.error("Can't find IP address of IPA server in "
+                                     "configuration file")
+                    exit(1)
+            else:
+                set_config("ipa_server_ip", server_ip)
             server_root_passwd = read_config("ipa_server_root")
             install_ipa_client_(server_ip, server_root_passwd, server_hostname)
             env_logger.info("IPA client is installed on the system")

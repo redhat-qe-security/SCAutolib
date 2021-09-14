@@ -10,6 +10,7 @@ import pytest
 from SCAutolib.src import load_env, env
 from dotenv import load_dotenv
 from yaml import dump, load, FullLoader
+from shutil import copy2
 
 
 @pytest.fixture()
@@ -115,16 +116,24 @@ def config_file_incorrect(tmpdir, create_yaml_content):
 
 
 @pytest.fixture()
-def loaded_env(config_file_correct, real_factory, remove_env):
+def loaded_env(config_file_correct, real_factory, remove_env, src_path):
+    dir_path = ""
+    if exists(join(src_path, '.env')):
+        dir_path = real_factory.create_dir()
+        copy2(join(src_path, '.env'), dir_path)
     env_path = load_env(config_file_correct)
+
     load_dotenv(env_path)
     ca_dir = environ['CA_DIR']
-    for dir_path in ("CA_DIR", "TMP", "CERTS", "KEYS", "BACKUP"):
-        real_factory.create_dir(Path(environ[dir_path]))
+    for path in ("CA_DIR", "TMP", "CERTS", "KEYS", "BACKUP"):
+        real_factory.create_dir(Path(environ[path]))
     real_factory.create_dir(Path(f"{ca_dir}/conf"))
     real_factory.create_dir(Path("/var/log/scautolib"))
 
-    return env_path, config_file_correct
+    yield env_path, config_file_correct
+
+    if dir_path != "":
+        copy2(join(dir_path, '.env'), join(src_path, '.env'))
 
 
 @pytest.fixture()
