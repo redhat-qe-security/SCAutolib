@@ -36,7 +36,8 @@ def test_prepare_simple_fail_on_packages(config_file_correct, runner, caplog):
 
     # Assert
     assert result.exit_code == 1
-    assert f"Package {package} is required for testing, but it is not installed on the system." in caplog.messages
+    assert f"Package {package} is required for testing, but it is not " \
+           f"installed on the system." in caplog.messages
     assert "General setup is failed" in caplog.messages
 
 
@@ -58,7 +59,8 @@ def test_prepare_ipa_no_ip(loaded_env_ready, caplog, runner):
     result = runner.invoke(env_cli.prepare, ["--conf", conf_file, "--ipa"])
     assert result.exit_code == 1
     assert "No IP address for IPA server is given." in caplog.messages
-    assert "Can't find IP address of IPA server in configuration file" in caplog.messages
+    assert "Can't find IP address of IPA server in configuration file" \
+           in caplog.messages
 
 
 def test_prepare_ca(loaded_env_ready, caplog, runner):
@@ -85,7 +87,8 @@ def test_prepare_ca_cards(config_file_correct, caplog, runner, src_path):
         conf_dir = join(card_dir, "conf")
 
     assert result.exit_code == 0
-    assert f"Start setup of virtual smart cards for local user {user}" in caplog.text
+    assert f"Start setup of virtual smart cards for local user {user}" \
+           in caplog.text
     assert exists(join(conf_dir, "softhsm2.conf"))
     service_path = f"/etc/systemd/system/virt_cacard_{username}.service"
     assert exists(service_path)
@@ -103,21 +106,29 @@ def test_prepare_ca_cards(config_file_correct, caplog, runner, src_path):
 @pytest.mark.slow()
 @pytest.mark.service_restart()
 @pytest.mark.ipa()
-def test_prepare_ipa(config_file_correct, caplog, runner, ipa_ip, ipa_hostname, remove_env):
+def test_prepare_ipa(config_file_correct, caplog, runner, ipa_ip, ipa_hostname,
+                     remove_env):
+    with open("/etc/hosts", "r") as f:
+        content = f.read()
+    entry = f"{ipa_ip} {ipa_hostname}"
+    if entry in content:
+        with open("/etc/hosts", "w") as f:
+            f.write(content.replace(entry, ""))
+
     result = runner.invoke(env_cli.prepare,
-                           ["--conf", config_file_correct, "--ipa", "--server-ip",
-                            ipa_ip, "--server-hostname", ipa_hostname])
+                           ["--conf", config_file_correct, "--ipa",
+                            "--server-ip", ipa_ip, "--server-hostname",
+                            ipa_hostname])
     try:
         assert result.exit_code == 0
         with open("/etc/hosts", "r") as f:
             assert f"{ipa_ip} {ipa_hostname}" in f.read()
         assert run(["ipa", "user-find"]).returncode == 0
         assert "Start setup of IPA client" in caplog.messages
-        assert f"New entry {ipa_ip} {ipa_hostname} is added to /etc/hosts" in caplog.messages
+        assert f"New entry {ipa_ip} {ipa_hostname} is added to /etc/hosts" \
+               in caplog.messages
     finally:
-        check_output(["ipa", "dnsrecord-del", "sc.test.com", "ipa-client",
-                      "--del-all"])
-        check_output(["ipa-client-install", "--uninstall"], input=b"no")
+        check_output(["ipa-client-install", "--uninstall", "-U"])
 
 
 @pytest.mark.slow()
@@ -127,8 +138,9 @@ def test_prepare_ipa(config_file_correct, caplog, runner, ipa_ip, ipa_hostname, 
 def test_prepare_ipa_cards(config_file_correct, caplog, runner, ipa_ip,
                            ipa_hostname, src_path):
     result = runner.invoke(env_cli.prepare,
-                           ["--conf", config_file_correct, "--ipa", "--server-ip",
-                            ipa_ip, "--server-hostname", ipa_hostname, "--cards"])
+                           ["--conf", config_file_correct, "--ipa",
+                            "--server-ip", ipa_ip, "--server-hostname",
+                            ipa_hostname, "--cards"])
     load_dotenv(f"{src_path}/.env")
 
     config_file_correct = environ["CONF"]
@@ -142,7 +154,8 @@ def test_prepare_ipa_cards(config_file_correct, caplog, runner, ipa_ip,
     conf_dir = join(card_dir, "conf")
     try:
         assert result.exit_code == 0
-        msg = f"User {username} is updated on IPA server. Cert and key stored into"
+        msg = f"User {username} is updated on IPA server. " \
+              f"Cert and key stored into"
         assert msg in caplog.text
         service_path = f"/etc/systemd/system/virt_cacard_{username}.service"
         assert exists(service_path)
@@ -153,14 +166,13 @@ def test_prepare_ipa_cards(config_file_correct, caplog, runner, ipa_ip,
         assert f'SOFTHSM2_CONF="{conf_dir}/softhsm2.conf"' in content
         assert f'WorkingDirectory = {card_dir}' in content
     finally:
-        check_output(["ipa", "dnsrecord-del", "sc.test.com", "ipa-client",
-                      "--del-all"])
-        check_output(["ipa-client-install", "--uninstall"], input=b"no")
+        check_output(["ipa-client-install", "--uninstall", "-U"])
 
 
 @pytest.mark.slow()
-def test_cleanup(real_factory, loaded_env, caplog, runner, clean_conf, test_user):
-    """Test that cleanup command cleans and resotres necessary
+def test_cleanup(real_factory, loaded_env, caplog, runner, clean_conf,
+                 test_user):
+    """Test that cleanup command cleans and restores necessary
     items."""
     env_path, _ = loaded_env
     load_dotenv(env_path)
@@ -215,7 +227,8 @@ def test_cleanup(real_factory, loaded_env, caplog, runner, clean_conf, test_user
     assert not exists(src_file_not_bakcup)
 
     # Directory is correctly restored
-    assert f"Directory {src_dir_parh} is restored form {dest_dir_path}" in caplog.messages
+    assert f"Directory {src_dir_parh} is restored form {dest_dir_path}" \
+           in caplog.messages
     backuped_file = f"{src_dir_parh}/{basename(dest_dir_file)}"
     assert exists(backuped_file)
     with open(backuped_file, "r") as f:
@@ -226,9 +239,10 @@ def test_cleanup(real_factory, loaded_env, caplog, runner, clean_conf, test_user
     assert not exists(src_file_not_bakcup)
 
     # User is correctly deleted
-    assert f"User test-user is delete with it home directory" in caplog.messages
+    assert f"User {test_user} is delete with it home directory" \
+           in caplog.messages
     with pytest.raises(KeyError):
         pwd.getpwnam('test-name')
 
-    # Item with uknown type is skipped
-    assert "Skip item with unknow type 'wrong-type'" in caplog.messages
+    # Item with unknown type is skipped
+    assert "Skip item with unknown type 'wrong-type'" in caplog.messages
