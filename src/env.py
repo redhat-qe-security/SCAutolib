@@ -810,7 +810,7 @@ def cleanup_(restore_items: list):
             env_logger.debug(
                 f"User {username} is delete with it home directory")
         else:
-            env_logger.warning(f"Skip item with unknow type '{type_}'")
+            env_logger.warning(f"Skip item with unknown type '{type_}'")
 
 
 def run(cmd, stdout=PIPE, stderr=PIPE, *args, **kwargs) -> subprocess.CompletedProcess:
