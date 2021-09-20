@@ -55,7 +55,7 @@ def create_yaml_content(tmpdir, ipa_user, local_user) -> dict:
         "root_passwd": "redhat",
         "ca_dir": join(tmpdir, "ca_dir"),
         "ipa_server_root": "redhat",
-        "ipa_client_hostname": "ipa-client.sc.test.com",
+        "ipa_client_hostname": "ipa-test-client.sc.test.com",
         "ipa_domain": "sc.test.com",
         "ipa_realm": "SC.TEST.COM",
         "ipa_server_admin_passwd": "SECret.123",
