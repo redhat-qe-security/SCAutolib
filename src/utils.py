@@ -3,7 +3,8 @@ import difflib
 import re
 import subprocess as subp
 from configparser import RawConfigParser
-from os.path import isdir, isfile, join, basename, split
+from os import listdir
+from os.path import isdir, isfile, join, basename, split, exists
 from random import randint
 from shutil import copy2, copytree
 
@@ -47,7 +48,7 @@ def edit_config(config_path: str, section: str, key: str, value: str = "",
         key: key to by updated
         value: value to be set for a given key
         restore: if true, original file would be restored after function is
-        finished
+                 finished
 
     Returns:
         decorated function
@@ -118,7 +119,11 @@ def backup_(file_path):
     Returns:
         Path to copied file/directory
     """
-    target = join(read_env('BACKUP'), basename(file_path) + ".bak")
+    backup_dir = read_env('BACKUP')
+    file_name = basename(file_path)
+    target = join(backup_dir, file_name + ".bak")
+    if exists(target):
+        return target
 
     if isfile(file_path):
         target = copy2(file_path, target)
@@ -130,35 +135,50 @@ def backup_(file_path):
     return target
 
 
-def edit_config_(conf: str, section: str, key: str, value: str = ""):
+def edit_config_(conf_file: str, section: str, key: str, value: str = "",
+                 backup_name: str = ""):
     """
     Function for actual editing the config file.
 
     Args:
-        conf: path to config file
+        conf_file: path to config file
         key: key to be updated
         value: value to be set for key
         section: section where a key is placed.
+        backup_name: name of file where original file should be copied. If not
+                     set, default name <original file name>.bak.<number of
+                     copies would be used
     """
     cnf = RawConfigParser()
     cnf.optionxform = str
 
-    with open(conf, "r") as file:
+    with open(conf_file, "r") as file:
         cnf.read_file(file)
 
     if section not in cnf.sections():
         base_logger.error(
-            f"Section {section} is not present in config file {conf}")
+            f"Section {section} is not present in config file {conf_file}")
         raise UnknownOption(
-            msg=f"Section {section} is not present in config file {conf}")
+            msg=f"Section {section} is not present in config file {conf_file}")
 
     cnf.set(section, key, value)
 
-    with open(conf, "w") as file:
+    with open(conf_file, "w") as file:
         cnf.write(file)
+    backup_dir = read_env("BACKUP")
+    file_name = basename(conf_file)
 
+    if backup_name == "":
+        count = len([i for i in listdir(backup_dir) if file_name in i])
+        backup_name = file_name + f".bak.{count}"
+
+    target = join(backup_dir, backup_name)
+    copy2(conf_file, target)
+
+    env_logger.debug(f"Current content of the file {conf_file} is copied "
+                     f"to {target}")
     base_logger.debug(f"Value for key {key} in section {section} is set to "
-                      f"{value} in file {conf}")
+                      f"{value} in file {conf_file}")
 
 
 def restart_service(service: str) -> int:
@@ -181,7 +201,7 @@ def restart_service(service: str) -> int:
         except subp.CalledProcessError as e:
             env_logger.error(
                 f"Command {' '.join(e.cmd)} is ended with non-zero return "
-                "code ({e.returncode})")
+                f"code ({e.returncode})")
             env_logger.error(f"stdout:\n{e.stdout}")
             env_logger.error(f"stderr:\n{e.stderr}")
             return e.returncode
