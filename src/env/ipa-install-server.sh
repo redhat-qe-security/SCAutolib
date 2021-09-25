@@ -1,14 +1,33 @@
 #!/usr/bin/bash
 set -e
 
-. "$(dirname $0)/logs.sh" || exit 1
-
 rx='([1-9]?[0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])'
 
 SERVER_HOSTNAME='ipa-server-beaker.sc.test.com'
 DOMAIN_NAME='sc.test.com'
 REALM="SC.TEST.COM"
 ADMIN_PASSWD="SECret.123"
+
+bold=$(tput bold)
+normal=$(tput sgr0)
+RED='\033[0;31m'
+NC='\033[0m' # No Color
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+
+log() {
+  echo -e "${GREEN}${bold}[LOG $(date +"%T")]${normal}${NC} $1"
+}
+
+err() {
+  echo -e "${RED}${bold}[ERROR $(date +"%T")]${normal}${NC} $1"
+  exit 1
+}
+
+warn() {
+  echo -e "${YELLOW}${bold}[WARNING $(date +"%T")]${normal}${NC} $1"
+}
+
 
 dnf install @idm:DL1 -y
 dnf install firewalld freeipa-server ipa-server-dns -y
@@ -37,6 +56,7 @@ ipa-dns-install --allow-zone-overlap --auto-forwarders --ip-address "$ip"  --no-
 log "DNS for IPA server is configured"
 
 echo "$ADMIN_PASSWD" | kinit admin
+log "Kerberos ticket for admin is obtained"
 
 ipa certmaprule-add ipa_default_rule \
     --maprule='(|(userCertificate;binary={cert!bin})(ipacertmapdata=X509: <I>{issuer_dn!nss_x500}<S>{subject_dn!nss_x500}))' \
@@ -44,8 +64,11 @@ ipa certmaprule-add ipa_default_rule \
     --domain="$DOMAIN_NAME"
 log "Default certmap rule is added"
 
-echo "$ADMIN_PASSWD" | kinit admin
-log "Kerberos ticket for admin is obtained"
+ipa sudocmd-add --desc "List given directory" /usr/bin/ls
+log "Sudo command is added"
+
+ipa sudorule-add "General" --desc "General sudo rule" --usercat all --hostcat all --cmdcat all
+log "General sudo rule is added"
 
 ipa-advise config-server-for-smart-card-auth > ipa-server-sc.sh
 log "Script for config-server-for-smart-card-auth is generated to ipa-server-sc.sh"
