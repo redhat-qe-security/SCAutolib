@@ -560,13 +560,23 @@ def install_ipa_client_(ip: str, passwd: str, server_hostname: str = None):
 
         ssh_stdin, ssh_stdout, ssh_stderr = ssh.exec_command("kinit admin")
         ssh_stdin.write(admin_passwd)
-        _, out, _ = ssh.exec_command("ipa-advise config-client-for-smart-card-auth")  # noqa: E501
+        ssh_stdin, ssh_stdout, ssh_stderr = ssh.exec_command(
+            "ipa-advise config-client-for-smart-card-auth")  # noqa: E501
         with open(ipa_client_script, "w") as f:
-            f.writelines(out.readlines())
+            f.writelines(ssh_stdout.readlines())
         ssh.close()
+
+        with open(ipa_client_script, "r") as f:
+            data = f.read()
+        if len(data) == 0:
+            msg = "Script for IPA client smart card setup is not correctly " \
+                  "copied to the host"
+            env_logger.error(ssh_stderr.read())
+            raise SCAutolibException(msg)
 
         env_logger.debug("File for setting up IPA client for smart cards is "
                          f"copied to {ipa_client_script}")
+
         run(f'bash {ipa_client_script} /etc/ipa/ca.crt')
 
         env_logger.debug("Setup of IPA client for smart card is finished")
