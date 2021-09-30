@@ -317,8 +317,10 @@ def run_cmd(cmd: str = None, pin: bool = True, passwd: str = None, shell=None,
     """
     try:
         if shell is None and cmd is not None:
+            env_logger.warning("No shell given")
             cmd = ["-c", f'{cmd} ; echo "RC:$?"']
             shell = pexpect.spawn("/bin/bash", cmd, encoding='utf-8')
+            env_logger.debug("Shell is spawned")
         shell.logfile = sys.stdout
 
         if passwd is not None:

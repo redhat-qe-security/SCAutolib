@@ -1,8 +1,9 @@
 import pwd
 from configparser import ConfigParser
 from os import remove, environ
-from os.path import dirname, join
+from os.path import dirname, join, exists
 from pathlib import Path
+from shutil import copy
 from subprocess import check_output
 
 import pytest
@@ -14,6 +15,19 @@ from yaml import dump, load, FullLoader
 @pytest.fixture()
 def src_path():
     return dirname(env.__file__)
+
+
+@pytest.fixture(autouse=True)
+def env_backup(tmpdir, src_path):
+    original_env = join(src_path, ".env")
+    copied_env = join(tmpdir, ".env-copied")
+    if exists(original_env):
+        copied_env = copy(original_env, copied_env)
+
+    yield
+
+    if exists(copied_env):
+        copy(copied_env, original_env)
 
 
 @pytest.fixture()
