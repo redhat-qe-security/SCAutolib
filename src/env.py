@@ -662,7 +662,8 @@ def general_setup(install_missing: bool = True):
     """
     if read_env("READY", cast=int, default=0) != 1:
         check_semodule()
-        packages = ["softhsm", "sssd-tools", "httpd", "sssd"]
+        packages = ["softhsm", "sssd-tools", "httpd", "sssd", "gdm",
+                    "pcsc-lite-ccid", "pcsc-lite"]
         try:
             with open('/etc/redhat-release', "r") as f:
                 if "Red Hat Enterprise Linux release 9" not in f.read():
@@ -672,10 +673,20 @@ def general_setup(install_missing: bool = True):
 
                     run("dnf -y copr enable jjelen/vsmartcard")
                     env_logger.debug("Copr repo for virt_cacard is enabled")
+                    run("dnf install virt_cacard -y")
+                    env_logger.debug("virt_cacard is installed")
 
-            run("dnf install virt_cacard vpcd -y")
-            env_logger.debug("virt_cacard is installed")
+                else:
+                    # Currently there is no COPR repository for
+                    # smartcards for RHEL 9
+                    env_logger.warning("Installing of virtual smartcard has to"
+                                       "be done manually in RHEL 9 for now.")
+
+                    run("dnf install ipa-client -y")
+
+            run("dnf install vpcd -y")
             env_logger.debug("VPCD is installed")
+
             for pkg in packages:
                 out = run(["rpm", "-qa", pkg])
 
@@ -698,10 +709,16 @@ def general_setup(install_missing: bool = True):
                         f"Package {out.stdout.strip()} is present")
             run(['dnf', 'groupinstall', "Smart Card Support", '-y'])
 
+            env_logger.debug("Smart Card Support group in installed.")
+
+            run(["useradd", "base-user", "--create-home"])
+            add_restore("user", "base_user")
+            env_logger.debug("Base user with username 'base-user' is created "
+                             "with no password")
+
             with open(join(DIR_PATH, ".env"), "a") as f:
                 f.write("READY=1\n")
 
-            env_logger.debug("Smart Card Support group in installed.")
         except:
             env_logger.error("General setup is failed")
             raise
@@ -790,7 +807,7 @@ def cleanup_(restore_items: list):
     """
     for item in restore_items:
         type_ = item['type']
-        src = item['src'] if type_ != "user" else item["username"]
+        src = item['src']
         backup_dir = item["backup_dir"] if "backup_dir" in item.keys(
         ) else None
 
@@ -810,15 +827,18 @@ def cleanup_(restore_items: list):
                     f"Directory {src} is restored form {backup_dir}")
 
         elif type_ == "user":
-            username = item["username"]
-            run(["userdel", username, "-r"])
+            run(["pkill", "-u", src], check=False)
             env_logger.debug(
-                f"User {username} is delete with it home directory")
+                f"All processes owned by user {src} are killed.")
+
+            run(["userdel", src, "-r"])
+            env_logger.debug(
+                f"User {src} is removed.")
         else:
             env_logger.warning(f"Skip item with unknown type '{type_}'")
 
 
-def run(cmd, stdout=PIPE, stderr=PIPE, *args, **kwargs) -> subprocess.CompletedProcess:  # noqa: E501
+def run(cmd, stdout=PIPE, stderr=PIPE, check=False, *args, **kwargs) -> subprocess.CompletedProcess:  # noqa: E501
     if type(cmd) == str:
         cmd = cmd.split(" ")
     out = subprocess.run(cmd, stdout=stdout, stderr=stderr, encoding="utf-8",
@@ -828,6 +848,6 @@ def run(cmd, stdout=PIPE, stderr=PIPE, *args, **kwargs) -> subprocess.CompletedP
     if out.stderr != "":
         env_logger.warning(out.stderr)
 
-    if out.returncode != 0:
+    if check and out.returncode != 0:
         raise subprocess.CalledProcessError(out.returncode, cmd)
     return out

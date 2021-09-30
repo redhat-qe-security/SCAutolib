@@ -51,6 +51,8 @@ def test_prepare_simple_install_missing(config_file_correct, runner, caplog):
     # Assert
     assert result.exit_code == 0
     assert "General setup is done" in caplog.messages
+    msg = "Base user with username 'base-user' is created with no password"
+    assert msg in caplog.messages
     assert "Preparation of the environments is completed" in caplog.messages
 
 
@@ -123,6 +125,9 @@ def test_prepare_ipa(config_file_correct, caplog, runner, ipa_ip, ipa_hostname,
         assert result.exit_code == 0
         with open("/etc/hosts", "r") as f:
             assert f"{ipa_ip} {ipa_hostname}" in f.read()
+        with open("/etc/sssd/pki/sssd_auth_ca_db.pem", "r") as f:
+            with open("/etc/ipa/ca.crt") as f_cert:
+                assert f_cert.read() in f.read()
         assert run(["ipa", "user-find"]).returncode == 0
         assert "Start setup of IPA client" in caplog.messages
         assert f"New entry {ipa_ip} {ipa_hostname} is added to /etc/hosts" \
@@ -179,6 +184,7 @@ def test_cleanup(real_factory, loaded_env, caplog, runner, clean_conf,
     load_dotenv(env_path)
     config_file = environ["CONF"]
 
+    # Start process with specific user
     src_dir_not_backup = real_factory.create_dir()
 
     src_dir_parh = real_factory.create_dir()
@@ -206,7 +212,7 @@ def test_cleanup(real_factory, loaded_env, caplog, runner, clean_conf,
         src_file), "backup_dir": str(dest_file)})
     data["restore"].append({"type": "dir", "src": str(src_dir_not_backup)})
     data["restore"].append({"type": "file", "src": str(src_file_not_bakcup)})
-    data["restore"].append({"type": "user", "username": test_user})
+    data["restore"].append({"type": "user", "src": test_user})
     data["restore"].append({"type": "wrong-type", "src": "no_src"})
 
     with open(config_file, "w") as f:
@@ -241,8 +247,7 @@ def test_cleanup(real_factory, loaded_env, caplog, runner, clean_conf,
     assert not exists(src_file_not_bakcup)
 
     # User is correctly deleted
-    assert f"User {test_user} is delete with it home directory" \
-           in caplog.messages
+    assert f"User {test_user} is removed." in caplog.messages
     with pytest.raises(KeyError):
         pwd.getpwnam('test-name')
 
