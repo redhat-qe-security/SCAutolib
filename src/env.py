@@ -1,3 +1,4 @@
+import os
 import pwd
 import subprocess
 from configparser import ConfigParser
@@ -559,19 +560,21 @@ def install_ipa_client_(ip: str, passwd: str, server_hostname: str = None):
         ssh.connect(ip, username="root", password=passwd, look_for_keys=False)
 
         ssh_stdin, ssh_stdout, ssh_stderr = ssh.exec_command("kinit admin")
-        ssh_stdin.write(admin_passwd)
+        ssh_stdin.write(f"{admin_passwd}\n")
+        ssh_stdin.flush()
         ssh_stdin, ssh_stdout, ssh_stderr = ssh.exec_command(
             "ipa-advise config-client-for-smart-card-auth")  # noqa: E501
+
         with open(ipa_client_script, "w") as f:
             f.writelines(ssh_stdout.readlines())
         ssh.close()
 
-        with open(ipa_client_script, "r") as f:
-            data = f.read()
-        if len(data) == 0:
+        if os.stat(ipa_client_script).st_size == 0:
             msg = "Script for IPA client smart card setup is not correctly " \
                   "copied to the host"
             env_logger.error(ssh_stderr.read())
+            env_logger.error(ssh_stdout.read())
+
             raise SCAutolibException(msg)
 
         env_logger.debug("File for setting up IPA client for smart cards is "
