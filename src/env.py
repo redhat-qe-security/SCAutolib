@@ -9,7 +9,7 @@ from posixpath import join
 from shutil import rmtree, copytree, copyfile
 from subprocess import PIPE, Popen, CalledProcessError
 from traceback import format_exc
-
+from random import randint
 import paramiko
 import python_freeipa as pipa
 import yaml
@@ -630,7 +630,15 @@ def add_ipa_user_(user: dict, ipa_hostname: str = None):
                         o_userpassword=passwd)
     except pipa.exceptions.DuplicateEntry:
         env_logger.warning(f"User {username} already exists in the IPA server "
-                           f"{ipa_hostname}. Password is not changed.")
+                           f"{ipa_hostname}.")
+
+        username = f'{username}-{randint(1,1000)}'
+        env_logger.warning(f"User {username} would be added instead to "
+                           f"{ipa_hostname}.")
+        client.user_add(username, username, username, username,
+                        o_userpassword=passwd)
+        # TODO: need to update name in the config file. Check that this name is applied for smart card configuration
+    add_restore("user", username, local=False)
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
 
     prepare_dir(user_dir)
@@ -783,7 +791,7 @@ def check_config(conf: str) -> bool:
     return result
 
 
-def add_restore(type_: str, src: str, backup: str = None):
+def add_restore(type_: str, src: str, backup: str = None, local: bool = True):
     """Add new item to be restored in the cleanup phase.
 
     Args:
@@ -794,6 +802,9 @@ def add_restore(type_: str, src: str, backup: str = None):
              should be username
         backup: applicable only for file and dir type. Path where original
                 source was placed.
+        local: used with type user. If true, indicates that given user is local
+               user. If false, than user is a kerberos user and would be deleted
+               from IPA server.
     """
     with open(read_env("CONF"), "r") as f:
         data = yaml.load(f, Loader=yaml.FullLoader)
@@ -802,6 +813,10 @@ def add_restore(type_: str, src: str, backup: str = None):
     if type_ not in ("user", "file", "dir"):
         env_logger.warning(f"Type {type_} is not know, so this item can't be "
                            f"correctly restored")
+    element = {"type": type_, "src": src, "backup_dir": backup}
+    if type_ == "user":
+
+        element['local'] = local
     data["restore"].append({"type": type_, "src": src, "backup_dir": backup})
 
     with open(read_env("CONF"), "w") as f:
@@ -840,11 +855,14 @@ def cleanup_(restore_items: list):
                     f"Directory {src} is restored form {backup_dir}")
 
         elif type_ == "user":
+
             run(["pkill", "-u", src], check=False)
             env_logger.debug(
                 f"All processes owned by user {src} are killed.")
-
-            run(["userdel", src, "-r"])
+            if item["local"]:
+                run(["userdel", src, "-r"])
+            else:
+                run(["ipa", "user-del", src, "--no-preserve"])
             env_logger.debug(
                 f"User {src} is removed.")
         else:
