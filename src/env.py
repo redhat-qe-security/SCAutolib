@@ -14,7 +14,7 @@ import paramiko
 import python_freeipa as pipa
 import yaml
 from SCAutolib.src import (utils, env_logger, read_config, read_env,
-                           SETUP_IPA_SERVER, DIR_PATH)
+                           SETUP_IPA_SERVER, DIR_PATH, set_config)
 from SCAutolib.src.exceptions import UnspecifiedParameter, SCAutolibException
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -633,8 +633,12 @@ def add_ipa_user_(user: dict, ipa_hostname: str = None):
                            f"{ipa_hostname}.")
 
         username = f'{username}-{randint(1,1000)}'
-        env_logger.warning(f"User {username} would be added instead to "
-                           f"{ipa_hostname}.")
+        env_logger.warning(f"User with name {username} would be added instead "
+                           f"to {ipa_hostname}.")
+        set_config("ipa_user.name", username)
+        env_logger.warning("Key for ipa_user.name in configuration file is "
+                           f"updated to {username}")
+        # TODO: update all entries of username in YAML object.
         client.user_add(username, username, username, username,
                         o_userpassword=passwd)
         # TODO: need to update name in the config file. Check that this name is applied for smart card configuration
