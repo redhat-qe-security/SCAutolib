@@ -256,7 +256,7 @@ def setup_ca_():
         env_logger.debug(
             f"Key for local CA is created {join(ca_dir, 'rootCA.key')}")
         env_logger.debug(
-            f"Certificate for local CA is created {join(ca_dir,'rootCA.pem')}")
+            f"Certificate for local CA is created {join(ca_dir, 'rootCA.pem')}")
 
         run(['openssl', 'ca', '-config', join(conf_dir, 'ca.cnf'), '-gencrl',
              '-out', join(ca_dir, "crl", "root.crl")])
@@ -370,14 +370,14 @@ def setup_virt_card_(user: dict):
         out = run(f"modutil -list -dbdir sql:{nssdb}")
         if "library name: p11-kit-proxy.so" not in out.stdout:
             run(["modutil", "-force", "-add", 'SoftHSM PKCS#11', "-dbdir",
-                f"sql:{nssdb}", "-libfile", p11lib])
+                 f"sql:{nssdb}", "-libfile", p11lib])
             env_logger.debug("SoftHSM support is added to NSS database")
 
         if new_cert:
             run(f"openssl genrsa -out {key} 2048")
             env_logger.debug("User key is created")
             run(["openssl", "req", "-new", "-nodes", "-key", key,
-                "-reqexts", "req_exts", "-config", cnf_file, "-out", csr])
+                 "-reqexts", "req_exts", "-config", cnf_file, "-out", csr])
 
             env_logger.debug(f"User CSR is created {csr} using {cnf_file}")
 
@@ -584,11 +584,6 @@ def install_ipa_client_(ip: str, passwd: str, server_hostname: str = None):
 
         env_logger.debug("Setup of IPA client for smart card is finished")
 
-        out = run("ipa pwpolicy-show global_policy")
-        if "Min lifetime (hours): 0" not in out.stdout:
-            run("ipa pwpolicy-mod global_policy --minlife 0 --maxlife 365")
-            env_logger.debug("Password policy for IPA is changed.")
-
         env_logger.debug("IPA client is configured on the system. "
                          "Don't forget to add IPA user by add-ipa-user command")
     except:
@@ -600,24 +595,27 @@ def add_ipa_user_(user: dict, ipa_hostname: str = None):
     """Add IPA user to IPA server and prepare local directories for virtual
     smart card for this user. Also, function generate CSR for this user and
     requests the certificate from the CA located on IPA server.
-    Args:
-        user:dictionary with username('name' field), directory where
-              virtual smart card to be created ('card_dir' field). This directory
-              would contain also certificate & private key, all other
-              sub-directories need be virtual smart card(tokens, db, etc.).
-              Also, dictionary can contain custom paths to key, certificate and
-              CSR where to save corresponding items.
-        ipa_hostname: hostname of IPA server. If non, tries to read
-                      ipa_server_hostname field from the configuration file
+
+    :param user:dictionary with username('name' field), directory where
+      virtual smart card to be created ('card_dir' field). This directory
+      would contain also certificate & private key, all other
+      sub-directories need be virtual smart card(tokens, db, etc.).
+      Also, dictionary can contain custom paths to key, certificate and
+      CSR where to save corresponding items.
+    :param ipa_hostname:hostname of IPA server. If non, tries to read
+    ipa_server_hostname field from the configuration file
     """
-    username, user_dir, passwd = user["name"], user["card_dir"], user["passwd"]
-    cert_path = user["cert"] if "cert" in user.keys(
-    ) else f"{user_dir}/cert.pem"
-    key_path = user["key"] if "key" in user.keys(
-    ) else f"{user_dir}/private.key"
-    csr_path = user["csr"] if "csr" in user.keys() else f"{user_dir}/cert.csr"
+    username, passwd, user_dir = user["name"], user["passwd"], user["card_dir"]
+    cert_path = user["cert"] \
+        if "cert" in user.keys() else f"{user_dir}/cert.pem"
+    key_path = user["key"] \
+        if "key" in user.keys() else f"{user_dir}/private.key"
+    csr_path = user["csr"] \
+        if "csr" in user.keys() else f"{user_dir}/cert.csr"
+
     env_logger.debug(f"Adding user {username} to IPA server")
     ipa_admin_passwd = read_config("ipa_server_admin_passwd")
+
     if ipa_hostname is None:
         ipa_hostname = read_config("ipa_server_hostname")
         if ipa_hostname is None:
@@ -631,17 +629,40 @@ def add_ipa_user_(user: dict, ipa_hostname: str = None):
     except pipa.exceptions.DuplicateEntry:
         env_logger.warning(f"User {username} already exists in the IPA server "
                            f"{ipa_hostname}.")
-
-        username = f'{username}-{randint(1,1000)}'
+        username = f'{username}-{randint(1, 1000)}'
         env_logger.warning(f"User with name {username} would be added instead "
                            f"to {ipa_hostname}.")
-        set_config("ipa_user.name", username)
-        env_logger.warning("Key for ipa_user.name in configuration file is "
-                           f"updated to {username}")
-        # TODO: update all entries of username in YAML object.
+        user_dir = user["card_dir"] = user["card_dir"].replace(user["name"],
+                                                               username)
+
+        if "cert" in user.keys():
+            cert_path = user["cert"] = user["cert"].replace(user["name"],
+                                                            username)
+        else:
+            cert_path = user["cert"] = f'{user["card_dir"]}/{username}-cert.pem'
+
+        if "key" in user.keys():
+            key_path = user["key"] = user["cert"].replace(user["name"],
+                                                          username)
+        else:
+            key_path = user[
+                "key"] = f'{user["card_dir"]}/{username}-private.key'
+
+        if "csr" in user.keys():
+            csr_path = user["csr"] = user["csr"].replace(user["name"], username)
+        else:
+            csr_path = user["csr"] = f'{user["card_dir"]}/{username}.csr'
+
+        user["name"] = username
+        keys = ("ipa_user.name", "ipa_user.card_dir", "ipa_user.cert",
+                "ipa_user.key", "ipa_user.csr")
+        values = (username, user_dir, cert_path, key_path, csr_path)
+        for k, v in zip(keys, values):
+            set_config(k, v)
+        env_logger.debug(read_config())
         client.user_add(username, username, username, username,
                         o_userpassword=passwd)
-        # TODO: need to update name in the config file. Check that this name is applied for smart card configuration
+
     add_restore("user", username, local=False)
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
 
@@ -666,6 +687,15 @@ def add_ipa_user_(user: dict, ipa_hostname: str = None):
         env_logger.error(f"Error while requesting the certificate for user "
                          f"{username} from IPA server")
         raise
+    env_logger.info("Certificate was successfully requested from IPA CA.")
+
+    try:
+        run(["ipa", "user-mod", username, "--password-expiration="])
+    except CalledProcessError:
+        env_logger.error(f"Error while resetting password expiration for the "
+                         f"user {username} ")
+        raise
+    env_logger.info(f"Password expiration is removed for user {username}")
 
     env_logger.debug(f"User {username} is updated on IPA server. "
                      f"Cert and key stored into {user_dir}")
@@ -743,7 +773,6 @@ def general_setup(install_missing: bool = True):
 
             with open(join(DIR_PATH, ".env"), "a") as f:
                 f.write("READY=1\n")
-
         except:
             env_logger.error("General setup is failed")
             raise
@@ -819,7 +848,6 @@ def add_restore(type_: str, src: str, backup: str = None, local: bool = True):
                            f"correctly restored")
     element = {"type": type_, "src": src, "backup_dir": backup}
     if type_ == "user":
-
         element['local'] = local
     data["restore"].append({"type": type_, "src": src, "backup_dir": backup})
 
@@ -873,7 +901,8 @@ def cleanup_(restore_items: list):
             env_logger.warning(f"Skip item with unknown type '{type_}'")
 
 
-def run(cmd, stdout=PIPE, stderr=PIPE, check=False, *args, **kwargs) -> subprocess.CompletedProcess:  # noqa: E501
+def run(cmd, stdout=PIPE, stderr=PIPE, check=False, *args,
+        **kwargs) -> subprocess.CompletedProcess:  # noqa: E501
     if type(cmd) == str:
         cmd = cmd.split(" ")
     out = subprocess.run(cmd, stdout=stdout, stderr=stderr, encoding="utf-8",

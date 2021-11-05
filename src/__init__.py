@@ -72,7 +72,7 @@ def read_config(*items) -> list or object:
                          "with --conf </path/to/conf.yaml> parameter")
         raise e
 
-    if items is None:
+    if len(items) == 0:
         return config_data
 
     return_list = []
@@ -105,6 +105,7 @@ def set_config(path, value, action="replace", type_=str):
     configuration file. By default is "str".
     """
     conf_path = read_env("CONF")
+    env_logger.debug(f"Reading configuration from {conf_path}")
     with open(conf_path, "r") as file:
         config_data = yaml.load(file, Loader=yaml.FullLoader)
     obj = config_data

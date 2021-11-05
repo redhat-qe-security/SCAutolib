@@ -216,3 +216,43 @@ matchrule = <SUBJECT>.*CN={user['name']}.*"""
 
     assert exists(key), "User private key isn't created"
     assert exists(cert), "User certificate isn't created"
+
+
+@pytest.mark.ipa()
+@pytest.mark.filterwarnings(
+    'ignore:Unverified HTTPS request is being made to host.*')
+def test_add_ipa_user_duplicated_user(caplog, ready_ipa, ipa_hostname, src_path):
+    config_file = ready_ipa
+    username = "new-user"
+    card_dir = f"/tmp/{username}"
+    user = {"name": username, "card_dir": card_dir, "passwd": "qwerty"}
+
+    subprocess.run(["ipa", "user-add", username, "--first", username,
+                    "--last", username])
+    env_logger.debug(config_file)
+
+    load_dotenv(f"{src_path}/.env")
+    env_logger.debug(environ.get("CONF"))
+
+    add_ipa_user_(user, ipa_hostname=ipa_hostname)
+
+    with open(config_file) as f:
+        data = yaml.load(f, Loader=yaml.FullLoader)
+    env_logger.debug(data)
+
+    ipa_user = data["ipa_user"]
+    try:
+        assert ipa_user["name"] != username
+        assert ipa_user["name"].startswith(username)
+
+        msg = f"User new-user already exists in the IPA server {ipa_hostname}."
+        assert msg in caplog.messages
+        msg = f"User with name {ipa_user['name']} would be added instead to " \
+              f"{ipa_hostname}."
+        assert msg in caplog.messages
+
+        msg = f"Password expiration is removed for user {ipa_user['name']}"
+        assert msg in caplog.messages
+    finally:
+        subprocess.run(["ipa", "user-del", username, "--no-preserve"])
+        subprocess.run(["ipa", "user-del", ipa_user["name"], "--no-preserve"])

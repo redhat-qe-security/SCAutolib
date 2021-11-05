@@ -1,16 +1,18 @@
 import pwd
+import subprocess
 from configparser import ConfigParser
 from os import remove, environ
 from os.path import dirname, join, exists
 from pathlib import Path
 from shutil import copy
+from shutil import copy2
 from subprocess import check_output
 
 import pytest
+import yaml
 from SCAutolib.src import load_env, env
 from dotenv import load_dotenv
 from yaml import dump, load, FullLoader
-from shutil import copy2
 
 
 @pytest.fixture()
@@ -74,7 +76,7 @@ def create_yaml_content(tmpdir, ipa_user, local_user) -> dict:
         "ipa_domain": "sc.test.com",
         "ipa_realm": "SC.TEST.COM",
         "ipa_server_admin_passwd": "SECret.123",
-        "ipa_server_hostname": "ipa-server.sc.test.com",
+        "ipa_server_hostname": "",
         "local_user": {
             "name": local_user,
             "passwd": "654321",
@@ -106,7 +108,8 @@ def config_file_correct(tmpdir, create_yaml_content):
 
 @pytest.fixture()
 def config_file_incorrect(tmpdir, create_yaml_content):
-    """Create configuration file in YAML format with missing root_passwd field"""
+    """Create configuration file in YAML format with missing root_passwd
+    field."""
     ymal_path = join(tmpdir, "test_configuration.yaml")
     content = create_yaml_content
     content.pop("root_passwd")
@@ -231,3 +234,59 @@ def dummy_config(tmpdir):
         cnf.write(f)
 
     return conf
+
+
+from SCAutolib.src import env_logger
+
+
+@pytest.fixture(scope="function")
+def ready_ipa(loaded_env, ipa_ip, ipa_hostname, src_path):
+    _, config_file = loaded_env
+    # load_dotenv(f"{src_path}/.env")
+    #
+    # env_logger.warning(environ.get("CONF"))
+    # env_logger.warning(config_file)
+
+    with open(config_file, "r") as f:
+        config = yaml.load(f, Loader=yaml.FullLoader)
+    config["ipa_server_ip"] = ipa_ip
+    config["ipa_server_hostname"] = ipa_hostname
+
+    with open(config_file, "w") as f:
+        yaml.dump(config, f)
+
+    client_hostname = config["ipa_client_hostname"]
+    entry = f"{ipa_ip} {ipa_hostname}"
+    domain = config["ipa_domain"]
+    realm = config["ipa_realm"]
+    admin_passwd = config["ipa_server_admin_passwd"]
+    with open("/etc/hosts", "r") as f:
+        data = f.read()
+
+    if entry not in data:
+        with open("/etc/hosts", "a") as f:
+            f.write(f"{entry}\n")
+
+    with open("/etc/resolv.conf", "r") as f:
+        data = f.read()
+    if f"nameserver {ipa_ip}" not in data:
+        data = f"nameserver {ipa_ip}\n" + data
+        with open("/etc/resolv.conf", "w") as f:
+            f.write(data)
+
+    subprocess.run(["chattr", "-i", "/etc/resolv.conf"])
+
+    subprocess.run(["hostnamectl", "set-hostname", client_hostname,
+                    "--static"])
+
+    subprocess.run(["ipa-client-install", "-p", "admin", "--password",
+                    admin_passwd, "--server", ipa_hostname, "--domain",
+                    domain, "--realm", realm, "--hostname", client_hostname,
+                    "--all-ip-addresses", "--force", "--force-join",
+                    "--no-ntp", "-U"], input=b"yes")
+
+    subprocess.run(["kinit", "admin"], input=admin_passwd.encode("utf-8"))
+    yield config_file
+
+    subprocess.run(["ipa", "host-del", client_hostname, "--updatedns"])
+    subprocess.run(["ipa-client-install", "--uninstall", "-U"])
