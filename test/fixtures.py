@@ -145,6 +145,7 @@ def loaded_env(config_file_correct, src_path, tmpdir):
     if exists(env_file):
         dir_path = tmpdir
         copy2(join(src_path, '.env'), dir_path)
+        Path(env_file).unlink()
 
     with open(config_file_correct, "r") as f:
         env_logger.debug(f"Reading configurations from {config_file_correct}")
@@ -157,7 +158,6 @@ def loaded_env(config_file_correct, src_path, tmpdir):
         yaml.dump(data, f)
         env_logger.debug("Restore section is added to te configuration file")
 
-    Path(env_file).unlink()
     with open(env_file, "w") as f:
         f.write(f"TMP={join(ca_dir, 'tmp')}\n")
         f.write(f"KEYS={join(ca_dir, 'tmp', 'keys')}\n")
