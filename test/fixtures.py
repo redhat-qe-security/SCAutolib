@@ -176,7 +176,6 @@ def loaded_env(config_file_correct, src_path, tmpdir):
     Path(f"{ca_dir}/conf").mkdir(parents=True, exist_ok=True)
     Path("/var/log/scautolib").mkdir(parents=True, exist_ok=True)
 
-
     yield env_file, config_file_correct
 
     if dir_path != "":

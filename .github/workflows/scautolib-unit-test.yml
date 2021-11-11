@@ -22,7 +22,7 @@ jobs:
         run: dnf install sudo -y
       
       - name: Install library decencies
-        run: python3 -m pip install --upgrade -I -r src/env/requirements.txt
+        run: python3 -m pip install --upgrade -I -r requirements.txt
       
       - name: Install test decencies
         run: python3 -m pip install --upgrade -I -r test/requirements.txt

@@ -506,7 +506,6 @@ def install_ipa_client_(ip: str, passwd: str, server_hostname: str = None):
     domain = read_config("ipa_domain")
     realm = read_config("ipa_realm")
     admin_passwd = read_config("ipa_server_admin_passwd")
-    ipa_client_script = join(read_env("TMP"), "ipa-client-sc.sh")
     with open("/etc/hosts", "r") as f:
         data = f.read()
 
