@@ -4,6 +4,7 @@ import re
 from os import stat, mkdir
 from os.path import isfile
 
+from SCAutolib.src import load_env
 from SCAutolib.src.env import *
 from SCAutolib.src.exceptions import *
 from SCAutolib.test.fixtures import *
@@ -13,7 +14,8 @@ from yaml import load, FullLoader
 
 
 def test_create_sssd_config(tmpdir, loaded_env, clean_conf):
-    """Check correct creation og sssd.conf with basic sections and permission."""
+    """Check correct creation og sssd.conf with basic sections and
+    permission. """
     # Arrange
     sssd_conf = "/etc/sssd/sssd.conf"
     if exists(sssd_conf):
@@ -171,7 +173,7 @@ def test_add_restore_wrong_type(caplog, loaded_env, clean_conf):
 
 
 def test_setup_ca(prep_ca, caplog):
-    """Test for secess setup of local CA."""
+    """Test for success setup of local CA."""
     ca_dir = prep_ca
     create_cnf("ca")
     setup_ca_()
@@ -222,23 +224,20 @@ matchrule = <SUBJECT>.*CN={user['name']}.*"""
 @pytest.mark.filterwarnings(
     'ignore:Unverified HTTPS request is being made to host.*')
 def test_add_ipa_user_duplicated_user(caplog, ready_ipa, ipa_hostname, src_path):
-    config_file = ready_ipa
     username = "new-user"
     card_dir = f"/tmp/{username}"
     user = {"name": username, "card_dir": card_dir, "passwd": "qwerty"}
 
     subprocess.run(["ipa", "user-add", username, "--first", username,
                     "--last", username])
-    env_logger.debug(config_file)
 
     load_dotenv(f"{src_path}/.env")
-    env_logger.debug(environ.get("CONF"))
+    config_file = environ["CONF"]
 
     add_ipa_user_(user, ipa_hostname=ipa_hostname)
 
     with open(config_file) as f:
         data = yaml.load(f, Loader=yaml.FullLoader)
-    env_logger.debug(data)
 
     ipa_user = data["ipa_user"]
     try:

@@ -1,16 +1,15 @@
-import os
 import pwd
 import subprocess
 from configparser import ConfigParser
 from os import chmod, remove
-from os.path import exists
+from os.path import exists, dirname
 from pathlib import Path
 from posixpath import join
+from random import randint
 from shutil import rmtree, copytree, copyfile
 from subprocess import PIPE, Popen, CalledProcessError
 from traceback import format_exc
-from random import randint
-import paramiko
+
 import python_freeipa as pipa
 import yaml
 from SCAutolib.src import (utils, env_logger, read_config, read_env,
@@ -18,6 +17,8 @@ from SCAutolib.src import (utils, env_logger, read_config, read_env,
 from SCAutolib.src.exceptions import UnspecifiedParameter, SCAutolibException
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
+
+IPA_CLIENT_SC_SCRIPT = join(dirname(__file__), "ipa-client-sc-script.sh")
 
 
 def create_cnf(user: str, conf_dir=None):
@@ -429,7 +430,7 @@ def check_semodule():
     not present in the list, than virtcacard.cil file would be created in conf
     or sub-directory in the CA directory specified by the configuration file.
     """
-    result = run("semodule -l")
+    result = run("semodule -l", print_stdout=False)
     if "virtcacard" not in result.stdout:
         env_logger.debug(
             "SELinux module for virtual smart cards is not present in the "
@@ -554,33 +555,34 @@ def install_ipa_client_(ip: str, passwd: str, server_hostname: str = None):
         run("kinit admin", input=admin_passwd)
         env_logger.debug("Kerberos ticket for admin user is obtained")
 
-        ssh = paramiko.SSHClient()
-        ssh.load_system_host_keys()
-        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh.connect(ip, username="root", password=passwd, look_for_keys=False)
+        # ssh = paramiko.SSHClient()
+        # ssh.load_system_host_keys()
+        # ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        # ssh.connect(ip, username="root", password=passwd, look_for_keys=False)
+        #
+        # ssh_stdin, ssh_stdout, ssh_stderr = ssh.exec_command("kinit admin")
+        # ssh_stdin.write(f"{admin_passwd}\n")
+        # ssh_stdin.flush()
+        # ssh_stdin, ssh_stdout, ssh_stderr = ssh.exec_command(
+        #     "ipa-advise config-client-for-smart-card-auth")  # noqa: E501
 
-        ssh_stdin, ssh_stdout, ssh_stderr = ssh.exec_command("kinit admin")
-        ssh_stdin.write(f"{admin_passwd}\n")
-        ssh_stdin.flush()
-        ssh_stdin, ssh_stdout, ssh_stderr = ssh.exec_command(
-            "ipa-advise config-client-for-smart-card-auth")  # noqa: E501
+        # with open(ipa_client_script, "w") as f:
+        #     f.writelines(ssh_stdout.readlines())
+        # ssh.close()
 
-        with open(ipa_client_script, "w") as f:
-            f.writelines(ssh_stdout.readlines())
-        ssh.close()
+        # if os.stat(ipa_client_script).st_size == 0:
+        #     msg = "Script for IPA client smart card setup is not correctly " \
+        #           "copied to the host"
+        #     env_logger.error(ssh_stderr.read())
+        #     env_logger.error(ssh_stdout.read())
+        #
+        #     raise SCAutolibException(msg)
 
-        if os.stat(ipa_client_script).st_size == 0:
-            msg = "Script for IPA client smart card setup is not correctly " \
-                  "copied to the host"
-            env_logger.error(ssh_stderr.read())
-            env_logger.error(ssh_stdout.read())
+        # env_logger.debug("File for setting up IPA client for smart cards is "
+        #                  f"copied to {ipa_client_script}")
 
-            raise SCAutolibException(msg)
-
-        env_logger.debug("File for setting up IPA client for smart cards is "
-                         f"copied to {ipa_client_script}")
-
-        run(f'bash {ipa_client_script} /etc/ipa/ca.crt')
+        run(f'bash {IPA_CLIENT_SC_SCRIPT} /etc/ipa/ca.crt')
+        env_logger.debug("Script for smart card IPA client setup is executed")
 
         env_logger.debug("Setup of IPA client for smart card is finished")
 
@@ -901,13 +903,13 @@ def cleanup_(restore_items: list):
             env_logger.warning(f"Skip item with unknown type '{type_}'")
 
 
-def run(cmd, stdout=PIPE, stderr=PIPE, check=False, *args,
+def run(cmd, stdout=PIPE, stderr=PIPE, check=False, print_stdout=True, *args,
         **kwargs) -> subprocess.CompletedProcess:  # noqa: E501
     if type(cmd) == str:
         cmd = cmd.split(" ")
     out = subprocess.run(cmd, stdout=stdout, stderr=stderr, encoding="utf-8",
                          *args, **kwargs)
-    if out.stdout != "":
+    if out.stdout != "" and print_stdout:
         env_logger.debug(out.stdout)
     if out.stderr != "":
         env_logger.warning(out.stderr)

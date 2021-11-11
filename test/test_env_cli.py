@@ -172,7 +172,7 @@ def test_prepare_ipa_cards(config_file_correct, caplog, runner, ipa_ip,
         assert f'SOFTHSM2_CONF="{conf_dir}/softhsm2.conf"' in content
         assert f'WorkingDirectory = {card_dir}' in content
     finally:
-        check_output(["ipa-client-install", "--uninstall", "-U"])
+        subprocess.run(["ipa-client-install", "--uninstall", "-U"])
 
 
 @pytest.mark.slow()
@@ -212,7 +212,7 @@ def test_cleanup(real_factory, loaded_env, caplog, runner, clean_conf,
         src_file), "backup_dir": str(dest_file)})
     data["restore"].append({"type": "dir", "src": str(src_dir_not_backup)})
     data["restore"].append({"type": "file", "src": str(src_file_not_bakcup)})
-    data["restore"].append({"type": "user", "src": test_user})
+    data["restore"].append({"type": "user", "src": test_user, "local": True})
     data["restore"].append({"type": "wrong-type", "src": "no_src"})
 
     with open(config_file, "w") as f:
