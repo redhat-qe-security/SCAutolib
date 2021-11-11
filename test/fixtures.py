@@ -279,6 +279,7 @@ def dummy_config(tmpdir):
     return conf
 
 
+@pytest.mark.ipa()
 @pytest.fixture(scope="function")
 def ready_ipa(loaded_env, ipa_ip, ipa_hostname, src_path):
     env_path, config_file = loaded_env
