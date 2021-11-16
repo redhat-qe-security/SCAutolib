@@ -554,32 +554,6 @@ def install_ipa_client_(ip: str, passwd: str, server_hostname: str = None):
         run("kinit admin", input=admin_passwd)
         env_logger.debug("Kerberos ticket for admin user is obtained")
 
-        # ssh = paramiko.SSHClient()
-        # ssh.load_system_host_keys()
-        # ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        # ssh.connect(ip, username="root", password=passwd, look_for_keys=False)
-        #
-        # ssh_stdin, ssh_stdout, ssh_stderr = ssh.exec_command("kinit admin")
-        # ssh_stdin.write(f"{admin_passwd}\n")
-        # ssh_stdin.flush()
-        # ssh_stdin, ssh_stdout, ssh_stderr = ssh.exec_command(
-        #     "ipa-advise config-client-for-smart-card-auth")  # noqa: E501
-
-        # with open(ipa_client_script, "w") as f:
-        #     f.writelines(ssh_stdout.readlines())
-        # ssh.close()
-
-        # if os.stat(ipa_client_script).st_size == 0:
-        #     msg = "Script for IPA client smart card setup is not correctly " \
-        #           "copied to the host"
-        #     env_logger.error(ssh_stderr.read())
-        #     env_logger.error(ssh_stdout.read())
-        #
-        #     raise SCAutolibException(msg)
-
-        # env_logger.debug("File for setting up IPA client for smart cards is "
-        #                  f"copied to {ipa_client_script}")
-
         run(f'bash {IPA_CLIENT_SC_SCRIPT} /etc/ipa/ca.crt')
         env_logger.debug("Script for smart card IPA client setup is executed")
 
