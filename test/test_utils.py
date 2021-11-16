@@ -14,7 +14,7 @@ FILES = f"{CUR_PATH}/files"
 
 
 @pytest.mark.slow()
-@pytest.mark.service_restart()
+@pytest.mark.not_in_ci
 def test_service_restart():
     """Test for restarting the service"""
     rc = utils.restart_service("sssd")
@@ -24,7 +24,7 @@ def test_service_restart():
 
 
 @pytest.mark.slow()
-@pytest.mark.service_restart()
+@pytest.mark.not_in_ci
 def test_service_restart_fail():
     """Test for fault of service restart."""
     copy(f"{FILES}/test.service", "/etc/systemd/system/test.service")

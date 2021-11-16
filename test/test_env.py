@@ -192,7 +192,7 @@ def test_setup_ca(prep_ca, caplog):
     assert root_crt in ca_db
 
 
-@pytest.mark.service_restart()
+@pytest.mark.not_in_ci
 def test_create_sc(prep_ca_real, caplog):
     user = read_config("local_user")
     card_dir = user["card_dir"]
@@ -220,7 +220,7 @@ matchrule = <SUBJECT>.*CN={user['name']}.*"""
     assert exists(cert), "User certificate isn't created"
 
 
-@pytest.mark.ipa()
+@pytest.mark.not_in_ci
 @pytest.mark.filterwarnings(
     'ignore:Unverified HTTPS request is being made to host.*')
 def test_add_ipa_user_duplicated_user(caplog, ready_ipa, ipa_hostname, src_path):

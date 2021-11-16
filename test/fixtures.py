@@ -281,9 +281,6 @@ def dummy_config(tmpdir):
 
 @pytest.fixture(scope="function")
 def ready_ipa(loaded_env, ipa_ip, ipa_hostname, src_path):
-    if ipa_ip == ipa_hostname == "":
-        return
-
     env_path, config_file = loaded_env
 
     with open(config_file, "r") as f:

@@ -20,7 +20,10 @@ jobs:
 
       - name: Install missing sudo package
         run: dnf install sudo -y
-      
+
+      - name: Install e2fsprogs for chattr command
+        run: dnf install e2fsprogs -y
+
       - name: Install library decencies
         run: python3 -m pip install --upgrade -I -r requirements.txt
       
@@ -28,4 +31,4 @@ jobs:
         run: python3 -m pip install --upgrade -I -r test/requirements.txt
 
       - name: Run unit tests
-        run: pytest test/ -sv -m "not ipa" -m "not service_restart"
+        run: pytest test/ --not-in-ci

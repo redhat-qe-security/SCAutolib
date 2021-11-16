@@ -27,7 +27,7 @@ def test_prepare_fail_config(config_file_incorrect, caplog, runner):
 
 
 @pytest.mark.slow()
-@pytest.mark.service_restart()
+@pytest.mark.not_in_ci
 def test_prepare_simple_fail_on_packages(config_file_correct, runner, caplog):
     package = "softhsm"
     subprocess.check_output(["dnf", "remove", package, "-y"], encoding="utf-8")
@@ -42,7 +42,7 @@ def test_prepare_simple_fail_on_packages(config_file_correct, runner, caplog):
 
 
 @pytest.mark.slow()
-@pytest.mark.service_restart()
+@pytest.mark.not_in_ci
 def test_prepare_simple_install_missing(config_file_correct, runner, caplog):
     # Act
     result = runner.invoke(
@@ -74,7 +74,7 @@ def test_prepare_ca(loaded_env_ready, caplog, runner):
 
 
 @pytest.mark.slow()
-@pytest.mark.service_restart()
+@pytest.mark.not_in_ci
 def test_prepare_ca_cards(config_file_correct, caplog, runner, src_path):
     result = runner.invoke(
         env_cli.prepare, ["--conf", config_file_correct, "--ca", "--cards"])
@@ -106,8 +106,8 @@ def test_prepare_ca_cards(config_file_correct, caplog, runner, src_path):
 
 
 @pytest.mark.slow()
-@pytest.mark.service_restart()
-@pytest.mark.ipa()
+@pytest.mark.not_in_ci
+@pytest.mark.not_in_ci()
 def test_prepare_ipa(config_file_correct, caplog, runner, ipa_ip, ipa_hostname,
                      remove_env):
     with open("/etc/hosts", "r") as f:
@@ -137,8 +137,8 @@ def test_prepare_ipa(config_file_correct, caplog, runner, ipa_ip, ipa_hostname,
 
 
 @pytest.mark.slow()
-@pytest.mark.service_restart()
-@pytest.mark.ipa()
+@pytest.mark.not_in_ci
+@pytest.mark.not_in_ci()
 @pytest.mark.filterwarnings(
     'ignore:Unverified HTTPS request is being made to host.*')
 def test_prepare_ipa_cards(config_file_correct, caplog, runner, ipa_ip,
