@@ -279,12 +279,12 @@ def dummy_config(tmpdir):
     return conf
 
 
-@pytest.mark.ipa()
 @pytest.fixture(scope="function")
 def ready_ipa(loaded_env, ipa_ip, ipa_hostname, src_path):
-    env_path, config_file = loaded_env
+    if ipa_ip == ipa_hostname == "":
+        return
 
-    env_logger.warning(f"Path to config file in ready_ipa {environ['CONF']}")
+    env_path, config_file = loaded_env
 
     with open(config_file, "r") as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
