@@ -5,15 +5,14 @@ from os import chmod, remove
 from os.path import exists, dirname
 from pathlib import Path
 from posixpath import join
-from random import randint
 from shutil import rmtree, copytree, copyfile
 from subprocess import PIPE, Popen, CalledProcessError
 from traceback import format_exc
 
 import python_freeipa as pipa
 import yaml
-from SCAutolib.src import (utils, env_logger, read_config, read_env,
-                           SETUP_IPA_SERVER, DIR_PATH, set_config)
+from SCAutolib.src import (utils, env_logger, read_config, SETUP_IPA_SERVER,
+                           set_config, LIB_CONF, LIB_DIR)
 from SCAutolib.src.exceptions import UnspecifiedParameter, SCAutolibException
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -32,7 +31,7 @@ def create_cnf(user: str, conf_dir=None):
         conf_dir: directory where CNF file would be placed.
     """
     if user == "ca":
-        ca_dir = read_config("ca_dir")
+        ca_dir = read_config("ca_dir", which="lib")
         conf_dir = join(ca_dir, "conf")
 
         ca_cnf = f"""[ ca ]
@@ -222,7 +221,7 @@ def setup_ca_():
     directories will be created in path specified by ca_dir field in
     the configuration file.
     """
-    ca_dir = read_env("CA_DIR")
+    ca_dir = read_config("ca_dir", which="lib")
     conf_dir = join(ca_dir, "conf")
     newcerts = join(ca_dir, "newcerts")
     certs = join(ca_dir, "certs")
@@ -237,8 +236,8 @@ def setup_ca_():
             env_logger.warning(f"CA directory is deleted. A new one would "
                                f"be created in {ca_dir}")
         for d in (ca_dir, certs, crl, conf_dir, newcerts):
-            prepare_dir(d, conf=False)
-        prep_tmp_dirs()
+            create_dir(d, conf=False)
+        prepare_dirs()
         env_logger.debug("Directories for local CA are created")
         create_cnf("ca", conf_dir)
 
@@ -307,7 +306,7 @@ def setup_virt_card_(user: dict):
     softhsm_conf = join(user_conf_dir, "softhsm2.conf")
 
     p11lib = '/usr/lib64/pkcs11/libsofthsm2.so'
-    ca_dir = read_env("CA_DIR")
+    ca_dir = read_config("ca_dir", which="lib")
     pin = '123456'
     sopin = '12345678'
 
@@ -435,7 +434,7 @@ def check_semodule():
         env_logger.debug(
             "SELinux module for virtual smart cards is not present in the "
             "system. Installing...")
-    conf_dir = join(read_env("CA_DIR"), 'conf')
+    conf_dir = join(read_config("ca_dir", which="lib"), 'conf')
     module = """
 (allow pcscd_t node_t(tcp_socket(node_bind)))
 ; allow p11_child to read softhsm cache - not present in RHEL by default
@@ -459,7 +458,7 @@ def check_semodule():
         raise
 
 
-def prepare_dir(dir_path: str, conf=True):
+def create_dir(dir_path: str, conf=True):
     """Create directory on given path and optionally create the conf/
     sub-directory inside.
 
@@ -475,16 +474,17 @@ def prepare_dir(dir_path: str, conf=True):
         env_logger.debug(f"Directory {join(dir_path, 'conf')} is created")
 
 
-def prep_tmp_dirs():
+def prepare_dirs(config_file=None):
     """
     Prepare directory structure for test environment. All paths are taken from
     previously loaded env file.
     """
-    paths = [read_env(path, cast=str)
-             for path in ("CA_DIR", "TMP", "BACKUP")] + \
-            [join(read_env("CA_DIR"), "conf"), "/var/log/scautolib/"]
+
+    ca_dir = read_config("ca_dir", config_file=config_file)
+    paths = [join(LIB_DIR, dir_name) for dir_name in ("backup", "tmp/keys",
+                                                      "tmp/certs")]
     for path in paths:
-        prepare_dir(path, conf=False)
+        create_dir(path, conf=False)
 
 
 def install_ipa_client_(ip: str, passwd: str, server_hostname: str = None):
@@ -594,54 +594,22 @@ def add_ipa_user_(user: dict, ipa_hostname: str = None):
     if ipa_hostname is None:
         ipa_hostname = read_config("ipa_server_hostname")
         if ipa_hostname is None:
-            raise UnspecifiedParameter("ipa_hostname")
+            raise UnspecifiedParameter("ipa_server_hostname")
 
     client = pipa.ClientMeta(ipa_hostname, verify_ssl=False)
     client.login("admin", ipa_admin_passwd)
     try:
         client.user_add(username, username, username, username,
                         o_userpassword=passwd)
+        add_restore("user", username, local=False)
     except pipa.exceptions.DuplicateEntry:
-        env_logger.warning(f"User {username} already exists in the IPA server "
-                           f"{ipa_hostname}.")
-        username = f'{username}-{randint(1, 1000)}'
-        env_logger.warning(f"User with name {username} would be added instead "
-                           f"to {ipa_hostname}.")
-        user_dir = user["card_dir"] = user["card_dir"].replace(user["name"],
-                                                               username)
+        env_logger.error(f"User {username} already exists in the IPA server "
+                         f"{ipa_hostname}.")
+        raise
 
-        if "cert" in user.keys():
-            cert_path = user["cert"] = user["cert"].replace(user["name"],
-                                                            username)
-        else:
-            cert_path = user["cert"] = f'{user["card_dir"]}/{username}-cert.pem'
-
-        if "key" in user.keys():
-            key_path = user["key"] = user["cert"].replace(user["name"],
-                                                          username)
-        else:
-            key_path = user[
-                "key"] = f'{user["card_dir"]}/{username}-private.key'
-
-        if "csr" in user.keys():
-            csr_path = user["csr"] = user["csr"].replace(user["name"], username)
-        else:
-            csr_path = user["csr"] = f'{user["card_dir"]}/{username}.csr'
-
-        user["name"] = username
-        keys = ("ipa_user.name", "ipa_user.card_dir", "ipa_user.cert",
-                "ipa_user.key", "ipa_user.csr")
-        values = (username, user_dir, cert_path, key_path, csr_path)
-        for k, v in zip(keys, values):
-            set_config(k, v)
-        env_logger.debug(read_config())
-        client.user_add(username, username, username, username,
-                        o_userpassword=passwd)
-
-    add_restore("user", username, local=False)
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
 
-    prepare_dir(user_dir)
+    create_dir(user_dir)
 
     with open(key_path, "wb") as f:
         f.write(key.private_bytes(
@@ -690,7 +658,7 @@ def general_setup(install_missing: bool = True):
         install_missing: specifies if missing packages need to be automatically
                          installed.
     """
-    if read_env("READY", cast=int, default=0) != 1:
+    if not read_config("ready", which="lib"):
         check_semodule()
         packages = ["softhsm", "sssd-tools", "httpd", "sssd", "gdm",
                     "pcsc-lite-ccid", "pcsc-lite"]
@@ -746,8 +714,7 @@ def general_setup(install_missing: bool = True):
             env_logger.debug("Base user with username 'base-user' is created "
                              "with no password")
 
-            with open(join(DIR_PATH, ".env"), "a") as f:
-                f.write("READY=1\n")
+            set_config("ready", True, type_=bool)
         except:
             env_logger.error("General setup is failed")
             raise
@@ -765,9 +732,9 @@ def create_sc(sc_user: dict):
                  (tokens, db, etc.)
     """
     name, card_dir = sc_user["name"], sc_user["card_dir"]
-    prepare_dir(card_dir)
+    create_dir(card_dir)
     for d in (join(card_dir, "db"), join(card_dir, "tokens")):
-        prepare_dir(d, False)
+        create_dir(d, False)
     create_softhsm2_config(card_dir)
     create_virt_card_service(name, card_dir)
     setup_virt_card_(sc_user)
@@ -814,7 +781,7 @@ def add_restore(type_: str, src: str, backup: str = None, local: bool = True):
                user. If false, than user is a kerberos user and would be deleted
                from IPA server.
     """
-    with open(read_env("CONF"), "r") as f:
+    with open(LIB_CONF, "r") as f:
         data = yaml.load(f, Loader=yaml.FullLoader)
         assert data
 
@@ -826,7 +793,7 @@ def add_restore(type_: str, src: str, backup: str = None, local: bool = True):
         element['local'] = local
     data["restore"].append({"type": type_, "src": src, "backup_dir": backup})
 
-    with open(read_env("CONF"), "w") as f:
+    with open(LIB_CONF, "w") as f:
         yaml.dump(data, f)
 
 

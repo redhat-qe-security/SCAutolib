@@ -2,17 +2,16 @@ import logging
 import pwd
 import subprocess
 from configparser import ConfigParser
-from os import remove, environ
+from os import remove, environ, symlink, unlink
 from os.path import dirname, join, exists, abspath
 from pathlib import Path
 from shutil import copy
-from shutil import copy2
 from subprocess import check_output
 
 import pytest
 import yaml
-from SCAutolib.src import env
-from SCAutolib.src import env_logger
+from SCAutolib.src import env, env_logger, CONF, init_config, LIB_DIR, LIB_CONF
+from SCAutolib.src.env import prepare_dirs
 from dotenv import load_dotenv
 from yaml import dump, load, FullLoader
 
@@ -138,48 +137,14 @@ def config_file_incorrect(tmpdir, create_yaml_content):
 
 @pytest.fixture(scope="function")
 def loaded_env(config_file_correct, src_path, tmpdir):
-    dir_path = ""
-    env_logger.debug(f"Directory used in loaded_env {tmpdir}")
-    env_file = f"{src_path}/.env"
 
-    if exists(env_file):
-        dir_path = tmpdir
-        copy2(join(src_path, '.env'), dir_path)
-        Path(env_file).unlink()
+    prepare_dirs(config_file_correct)
+    init_config(config_file_correct)
 
-    with open(config_file_correct, "r") as f:
-        env_logger.debug(f"Reading configurations from {config_file_correct}")
-        data = yaml.load(f, Loader=yaml.FullLoader)
-        ca_dir = data["ca_dir"]
-    data["restore"] = []
+    yield config_file_correct
 
-    env_logger.warning(f"Dumping to file {config_file_correct}")
-    with open(config_file_correct, "w") as f:
-        yaml.dump(data, f)
-        env_logger.debug("Restore section is added to te configuration file")
-
-    with open(env_file, "w") as f:
-        f.write(f"TMP={join(ca_dir, 'tmp')}\n")
-        f.write(f"KEYS={join(ca_dir, 'tmp', 'keys')}\n")
-        f.write(f"CERTS={join(ca_dir, 'tmp', 'certs')}\n")
-        f.write(f"BACKUP={join(ca_dir, 'tmp', 'backup')}\n")
-        f.write(f"CONF={abspath(config_file_correct)}\n")
-        f.write(f"CA_DIR={ca_dir}\n")
-    env_logger.debug(f"File {env_file} is created")
-
-    load_dotenv(env_file)
-    env_logger.warning(f"Dir in loaded_env {environ['CONF']}")
-
-    ca_dir = environ['CA_DIR']
-    for path in ("CA_DIR", "TMP", "CERTS", "KEYS", "BACKUP"):
-        Path(environ[path]).mkdir(parents=True, exist_ok=True)
-    Path(f"{ca_dir}/conf").mkdir(parents=True, exist_ok=True)
-    Path("/var/log/scautolib").mkdir(parents=True, exist_ok=True)
-
-    yield env_file, config_file_correct
-
-    if dir_path != "":
-        copy2(join(dir_path, '.env'), join(src_path, '.env'))
+    unlink(CONF)
+    unlink(LIB_CONF)
 
 
 @pytest.fixture()
@@ -210,31 +175,16 @@ def real_factory(tmp_path_factory):
 
 
 @pytest.fixture()
-def prep_ca(loaded_env):
+def ca_dirs(loaded_env):
     """Prepare directories and files needed for local CA deployment"""
-    env.create_cnf("ca")
-
-    return environ['CA_DIR']
+    Path(join(LIB_DIR, "ca", "conf")).mkdir(parents=True, exist_ok=True)
 
 
 @pytest.fixture()
-def prep_ca_real(prep_ca):
+def prep_ca_real(ca_dirs):
     """Prepare directories and files needed for local CA deployment"""
+    env.create_cnf("ca", conf_dir=join(LIB_DIR, "ca", "conf"))
     env.setup_ca_()
-    return environ['CA_DIR']
-
-
-@pytest.fixture()
-def clean_conf(loaded_env):
-    try:
-        yield
-    finally:
-        load_dotenv(loaded_env[0])
-        with open(environ["CONF"], "r") as f:
-            data = load(f, Loader=FullLoader)
-        data["restore"] = []
-        with open(environ["CONF"], "w") as f:
-            dump(data, f)
 
 
 @pytest.fixture()
@@ -245,15 +195,6 @@ def test_user():
     except KeyError:
         check_output(["useradd", username, "-m"])
     return username
-
-
-@pytest.fixture()
-def loaded_env_ready(loaded_env):
-    env_path = loaded_env[0]
-    with open(env_path, "a") as f:
-        f.write("READY=1")
-    load_dotenv(env_path)
-    return env_path, environ["CONF"]
 
 
 @pytest.fixture()
@@ -281,7 +222,7 @@ def dummy_config(tmpdir):
 
 @pytest.fixture(scope="function")
 def ready_ipa(loaded_env, ipa_ip, ipa_hostname, src_path):
-    env_path, config_file = loaded_env
+    config_file = loaded_env
 
     with open(config_file, "r") as f:
         config = yaml.load(f, Loader=yaml.FullLoader)

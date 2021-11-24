@@ -11,7 +11,7 @@ from shutil import copy2, copytree
 import pexpect
 import sys
 from SCAutolib import env_logger, base_logger
-from SCAutolib.src import read_env, env
+from SCAutolib.src import env, read_config
 from SCAutolib.src.exceptions import *
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
@@ -37,70 +37,6 @@ def show_file_diff(original, new):
     return diff
 
 
-def edit_config(config_path: str, section: str, key: str, value: str = "",
-                restore=False, *restart):
-    """
-    Decorator for editing config file. Before editing, config file is saved.
-
-    Args:
-        config_path: path to config file to be updated
-        section: section in config file where a key is placed
-        key: key to by updated
-        value: value to be set for a given key
-        restore: if true, original file would be restored after function is
-                 finished
-
-    Returns:
-        decorated function
-    """
-
-    def wrapper(test):
-        def inner_wrapper(*args, **kwargs):
-            target = backup_(file_path=config_path)
-            edit_config_(config_path, section, key, value)
-            show_file_diff(config_path, target)
-            for service in restart:
-                restart_service(service)
-            test(*args, **kwargs)
-
-            if restore:
-                restore_file_(target, config_path)
-        return inner_wrapper
-
-    return wrapper
-
-
-def backup(*restart, file_path: str, name: str = None, restore=True,):
-    """
-    Decorator for backup the file into BACKUP directory. Can restore the file
-    after execution of function and restart given service.
-
-    Args:
-        file_path: path to file to be saved
-        name: name for backup file (optional)
-        restore: specifies if given file should be restored after function
-                 execution
-
-    Returns:
-        decorated function
-    """
-    if name is None:
-        # if no name is given, than original name of the file would be used
-        name = split(file_path)[1]
-
-    def wrapper(test):
-        def inner_wrapper(*args, **kwargs):
-            destination = backup_(file_path)
-            test(*args, **kwargs)
-            if restore:
-                restore_file_(file_path, destination)
-                for service in restart:
-                    restart_service(service)
-        return inner_wrapper
-
-    return wrapper
-
-
 def restore_file_(source, destination):
     """
     Restoring file from BACKUP directory to target. Target has to be a file.
@@ -119,7 +55,7 @@ def backup_(file_path):
     Returns:
         Path to copied file/directory
     """
-    backup_dir = read_env('BACKUP')
+    backup_dir = read_config('backup', which='lib')
     file_name = basename(file_path)
     target = join(backup_dir, file_name + ".bak")
     if exists(target):
@@ -165,7 +101,7 @@ def edit_config_(conf_file: str, section: str, key: str, value: str = "",
 
     with open(conf_file, "w") as file:
         cnf.write(file)
-    backup_dir = read_env("BACKUP")
+    backup_dir = read_config("backup", which="lib")
     file_name = basename(conf_file)
 
     if backup_name == "":
@@ -215,7 +151,7 @@ def generate_cert(username=None):
     Returns:
         tuple with path to the certificate and to the key files.
     """
-    tmp = read_env("TMP")
+    tmp = read_config("tmp", which="lib")
 
     prefix = username if username == "root" else "User"
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
@@ -253,7 +189,7 @@ def generate_cert(username=None):
             crl_sign=False, encipher_only=False,
             decipher_only=False)
         try:
-            root_cert_path = join(read_env("CA_DIR"), "rootCA.pem")
+            root_cert_path = join(read_config("ca_dir", which="lib"), "rootCA.pem")
             with open(root_cert_path, "rb") as f:
                 root_crt = x509.load_pem_x509_certificate(f.read())
             issuer = root_crt.issuer

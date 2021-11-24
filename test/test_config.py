@@ -1,12 +1,10 @@
 import yaml
-from SCAutolib.src import set_config
-from SCAutolib.test.fixtures import *  # noqa: F401
+from SCAutolib.src import set_config, LIB_CONF
 
 
-def test_set_config(loaded_env):
-    _, conf = loaded_env
+def test_set_config():
     set_config("new_field", "10", type_=int)
-    with open(conf, "r") as f:
+    with open(LIB_CONF, "r") as f:
         data = yaml.load(f, Loader=yaml.FullLoader)
     assert "new_field" in data.keys()
     assert data['new_field'] == 10

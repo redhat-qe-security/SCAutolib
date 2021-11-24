@@ -4,7 +4,7 @@ import re
 from os import stat, mkdir
 from os.path import isfile
 
-from SCAutolib.src import load_env
+import pytest
 from SCAutolib.src.env import *
 from SCAutolib.src.exceptions import *
 from SCAutolib.test.fixtures import *
@@ -13,7 +13,7 @@ from pytest import raises
 from yaml import load, FullLoader
 
 
-def test_create_sssd_config(tmpdir, loaded_env, clean_conf):
+def test_create_sssd_config(tmpdir, loaded_env):
     """Check correct creation og sssd.conf with basic sections and
     permission. """
     # Arrange
@@ -46,9 +46,9 @@ def test_create_cnf(tmpdir):
     assert isfile(join(conf_dir, f"req_{username}.cnf"))
 
 
-def test_create_cnf_ca(prep_ca):
+def test_create_cnf_ca(loaded_env, ca_dirs):
     username = "ca"
-    ca_dir = prep_ca
+    ca_dir = read_config("ca_dir", which="lib")
     conf_dir = f"{ca_dir}/conf"
     ca_cnf = join(conf_dir, "ca.cnf")
 
@@ -120,27 +120,13 @@ def test_check_config_false(config_file_incorrect, caplog):
     assert "Field root_passwd is not present in the config." in caplog.messages
 
 
-def test_load_env(config_file_correct):
-    env_path = load_env(config_file_correct)
-    assert exists(env_path)
-    load_dotenv(env_path)
-    for field in ("TMP", "KEYS", "CERTS", "BACKUP", "CONF", "CA_DIR"):
-        assert field in environ
-    with open(config_file_correct, "r") as f:
-        data = load(f, Loader=FullLoader)
-    assert "restore" in data.keys()
-    assert len(data["restore"]) == 0
-
-
-def test_add_restore(loaded_env, clean_conf):
-    env_path, _ = loaded_env
+def test_add_restore(loaded_env):
     src = '/src/some.file'
     dest = '/dest/some.file'
 
     add_restore("file", src, dest)
-    load_dotenv(env_path)
 
-    with open(environ["CONF"], "r") as f:
+    with open(LIB_CONF, "r") as f:
         data = load(f, Loader=FullLoader)
 
     assert len(data["restore"]) == 1
@@ -152,29 +138,27 @@ def test_add_restore(loaded_env, clean_conf):
     assert restore["src"] == src
 
 
-def test_add_restore_wrong_type(caplog, loaded_env, clean_conf):
-    env_path, _ = loaded_env
-
+def test_add_restore_wrong_type(caplog, loaded_env):
     add_restore("file", "src", "dest")
     add_restore("wrong_type", "src", "dest")
 
-    load_dotenv(env_path)
-    with open(environ["CONF"], "r") as f:
+    with open(LIB_CONF, "r") as f:
         data = load(f, Loader=FullLoader)
 
     assert len(data["restore"]) == 2
 
     restore = data["restore"][0]
-    msg = "Type wrong_type is not know, so this item can't be correctly restored"
+    msg = "Type wrong_type is not know, so this item can't be correctly " \
+          "restored"
     assert restore["type"] == "file"
     assert restore["backup_dir"] == "dest"
     assert restore["src"] == "src"
     assert msg in caplog.messages
 
 
-def test_setup_ca(prep_ca, caplog):
+def test_setup_ca(ca_dirs, caplog):
     """Test for success setup of local CA."""
-    ca_dir = prep_ca
+    ca_dir = read_config("ca_dir", which="lib")
     create_cnf("ca")
     setup_ca_()
 
@@ -231,27 +215,10 @@ def test_add_ipa_user_duplicated_user(caplog, ready_ipa, ipa_hostname, src_path)
     subprocess.run(["ipa", "user-add", username, "--first", username,
                     "--last", username])
 
-    load_dotenv(f"{src_path}/.env")
-    config_file = environ["CONF"]
-
-    add_ipa_user_(user, ipa_hostname=ipa_hostname)
-
-    with open(config_file) as f:
-        data = yaml.load(f, Loader=yaml.FullLoader)
-
-    ipa_user = data["ipa_user"]
     try:
-        assert ipa_user["name"] != username
-        assert ipa_user["name"].startswith(username)
-
-        msg = f"User new-user already exists in the IPA server {ipa_hostname}."
-        assert msg in caplog.messages
-        msg = f"User with name {ipa_user['name']} would be added instead to " \
-              f"{ipa_hostname}."
-        assert msg in caplog.messages
-
-        msg = f"Password expiration is removed for user {ipa_user['name']}"
-        assert msg in caplog.messages
+        with pytest.raises(pipa.exceptions.DuplicateEntry):
+            add_ipa_user_(user, ipa_hostname=ipa_hostname)
+        assert f"User {username} already exists in the IPA server " \
+               f"ipa-server-beaker.sc.test.com." in caplog.messages
     finally:
         subprocess.run(["ipa", "user-del", username, "--no-preserve"])
-        subprocess.run(["ipa", "user-del", ipa_user["name"], "--no-preserve"])

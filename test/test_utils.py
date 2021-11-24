@@ -2,11 +2,12 @@
 # Unit tests for of SCAutolib.src.utils module
 from configparser import ConfigParser
 from os import path, system
-from os.path import exists
+from os.path import exists, basename
 from shutil import copy
 
 from SCAutolib.src import utils
 from SCAutolib.src.exceptions import *
+from SCAutolib.src.utils import edit_config_, restore_file_
 from SCAutolib.test.fixtures import *
 
 CUR_PATH = path.dirname(path.abspath(__file__))
@@ -103,46 +104,27 @@ def test_check_output_expect_and_zero_rc(zero_rc_output):
     assert result
 
 
-def test_edit_config_no_restore(dummy_config, loaded_env):
-    @utils.edit_config(dummy_config, section="first", key="one", value="10",
-                       restore=False)
-    def inner_fnc():
-        return
-
-    inner_fnc()
+def test_edit_config(dummy_config, loaded_env):
+    edit_config_(dummy_config, "first", "new-key", "new-value")
     cnf = ConfigParser()
 
     with open(dummy_config, "r") as f:
         cnf.read_file(f)
 
-    assert exists("/var/log/scautolib/edited_files.log")
-    assert "first" in cnf.sections(), "Section 'first' is not in the sections"
-    assert "10" == cnf.get("first", "one")
-
-
-def test_edit_config_restore(dummy_config, loaded_env):
-    @utils.edit_config(dummy_config, section="first", key="one", value="10",
-                       restore=True)
-    def inner_fnc():
-        return
-
-    inner_fnc()
-    cnf = ConfigParser()
-
-    with open(dummy_config, "r") as f:
-        cnf.read_file(f)
-
-    assert exists("/var/log/scautolib/edited_files.log")
-    assert "first" in cnf.sections(), "Section 'first' is not in the sections"
-    assert "1" == cnf.get("first", "one")
+    assert "new-value" == cnf.get("first", "new-key")
 
 
 def test_edit_config_no_section(dummy_config, loaded_env, caplog):
-    @utils.edit_config(dummy_config, section="no-section", key="one", value="10")
-    def inner_fnc():
-        return
+    section = "new-section"
 
     with pytest.raises(UnknownOption):
-        inner_fnc()
-    assert f"Section no-section is not present in config file {dummy_config}" \
+        edit_config_(dummy_config, section, "new-key", "new-value")
+    assert f"Section {section} is not present in config file {dummy_config}" \
            in caplog.messages
+
+
+def test_restore_file(dummy_config, tmpdir_factory):
+    tmpdir = tmpdir_factory.mktemp("tmp-base-name")
+    restore_file_(dummy_config, tmpdir)
+    file_name = basename(dummy_config)
+    assert exists(join(tmpdir, file_name))

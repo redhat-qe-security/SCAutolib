@@ -1,5 +1,5 @@
 import click
-from SCAutolib.src import load_env
+from SCAutolib.src import init_config
 from SCAutolib.src.env import *
 
 
@@ -41,9 +41,9 @@ def prepare(cards, conf, ipa, server_ip, ca, install_missing, server_hostname):
                          "for more information.")
         exit(1)
 
-    load_env(conf)
+    prepare_dirs(conf)
+    init_config(conf)
 
-    prep_tmp_dirs()
     env_logger.info("Temporary directories are created")
     env_logger.debug("Start general setup")
     try:
@@ -79,7 +79,7 @@ def prepare(cards, conf, ipa, server_ip, ca, install_missing, server_hostname):
 
     if ca:
         env_logger.info("Start setup of local CA")
-        prepare_dir(read_env("CA_DIR"))
+        create_dir(read_config("ca_dir", which="lib"))
         setup_ca_()
 
     if cards:
@@ -110,10 +110,10 @@ def setup_ca(conf):
     CLI command for setup the local CA.
     """
     # TODO: generate certs for Kerberos
-    load_env(conf)
+
     general_setup()
-    prepare_dir(read_env("CA_DIR"))
-    prep_tmp_dirs()
+    create_dir(read_config("ca_dir", which="lib"))
+    prepare_dirs()
     create_cnf('ca')
     setup_ca_()
 
@@ -134,7 +134,7 @@ def setup_virt_card(username, key, cert, card_dir, password, local):
     """
     Setup virtual smart card. Has to be run after configuration of the local CA.
     """
-    if read_env("READY", cast=int, default=0) != 1:
+    if not read_config("ready", which="lib"):
         env_logger.error(
             "Please, run prepare command with configuration file.")
         exit(1)
