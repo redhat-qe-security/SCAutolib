@@ -2,8 +2,8 @@ import logging
 import pwd
 import subprocess
 from configparser import ConfigParser
-from os import remove, environ, symlink, unlink
-from os.path import dirname, join, exists, abspath
+from os import remove, unlink
+from os.path import dirname, join, exists
 from pathlib import Path
 from shutil import copy
 from subprocess import check_output
@@ -12,8 +12,7 @@ import pytest
 import yaml
 from SCAutolib.src import env, env_logger, CONF, init_config, LIB_DIR, LIB_CONF
 from SCAutolib.src.env import prepare_dirs
-from dotenv import load_dotenv
-from yaml import dump, load, FullLoader
+from yaml import dump
 
 # create logger with 'spam_application'
 logger = logging.getLogger('test')
@@ -140,11 +139,7 @@ def loaded_env(config_file_correct, src_path, tmpdir):
 
     prepare_dirs(config_file_correct)
     init_config(config_file_correct)
-
-    yield config_file_correct
-
-    unlink(CONF)
-    unlink(LIB_CONF)
+    return config_file_correct
 
 
 @pytest.fixture()
@@ -268,3 +263,12 @@ def ready_ipa(loaded_env, ipa_ip, ipa_hostname, src_path):
 
     subprocess.run(["ipa", "host-del", client_hostname, "--updatedns"])
     subprocess.run(["ipa-client-install", "--uninstall", "-U"])
+
+
+@pytest.fixture(autouse=True)
+def clean_etc():
+    yield
+    if exists(CONF):
+        unlink(CONF)
+    if exists(LIB_CONF):
+        unlink(LIB_CONF)

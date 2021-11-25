@@ -12,7 +12,8 @@ from traceback import format_exc
 import python_freeipa as pipa
 import yaml
 from SCAutolib.src import (utils, env_logger, read_config, SETUP_IPA_SERVER,
-                           set_config, LIB_CONF, LIB_DIR)
+                           set_config, LIB_CONF, LIB_CA, LIB_BACKUP,
+                           LIB_KEYS, LIB_CERTS)
 from SCAutolib.src.exceptions import UnspecifiedParameter, SCAutolibException
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -31,14 +32,13 @@ def create_cnf(user: str, conf_dir=None):
         conf_dir: directory where CNF file would be placed.
     """
     if user == "ca":
-        ca_dir = read_config("ca_dir", which="lib")
-        conf_dir = join(ca_dir, "conf")
+        conf_dir = join(LIB_CA, "conf")
 
         ca_cnf = f"""[ ca ]
 default_ca = CA_default
 
 [ CA_default ]
-dir              = {ca_dir}
+dir              = {LIB_CA}
 database         = $dir/index.txt
 new_certs_dir    = $dir/newcerts
 
@@ -138,10 +138,10 @@ def create_sssd_config():
                                "id_provider": "files"},
     }
 
-    # cnf.read_dict(default)
-
     sssd_conf = "/etc/sssd/sssd.conf"
     if exists(sssd_conf):
+        env_logger.debug(f"Configuration file {sssd_conf} exists. Updating "
+                         f"values.")
         bakcup_dir = utils.backup_(sssd_conf)
         add_restore("file", sssd_conf, bakcup_dir)
         with open(sssd_conf, "r") as f:
@@ -221,48 +221,46 @@ def setup_ca_():
     directories will be created in path specified by ca_dir field in
     the configuration file.
     """
-    ca_dir = read_config("ca_dir", which="lib")
-    conf_dir = join(ca_dir, "conf")
-    newcerts = join(ca_dir, "newcerts")
-    certs = join(ca_dir, "certs")
-    crl = join(ca_dir, "crl")
+    conf_dir = join(LIB_CA, "conf")
+    newcerts = join(LIB_CA, "newcerts")
+    crl = join(LIB_CA, "crl")
     env_logger.debug("Start setup of local CA")
     ca_db = "/etc/sssd/pki/sssd_auth_ca_db.pem"
     try:
-        if exists(ca_dir):
+        if exists(LIB_CA):
             # FIXME restore CA directory
-            env_logger.warning(f"CA directory {ca_dir} alredy exists.")
-            rmtree(ca_dir)
+            env_logger.warning(f"CA directory {LIB_CA} alredy exists.")
+            rmtree(LIB_CA)
             env_logger.warning(f"CA directory is deleted. A new one would "
-                               f"be created in {ca_dir}")
-        for d in (ca_dir, certs, crl, conf_dir, newcerts):
+                               f"be created in {LIB_CA}")
+        for d in (LIB_CA, LIB_CERTS, crl, conf_dir, newcerts):
             create_dir(d, conf=False)
         prepare_dirs()
         env_logger.debug("Directories for local CA are created")
         create_cnf("ca", conf_dir)
 
-        with open(join(ca_dir, "serial"), "w") as f:
+        with open(join(LIB_CA, "serial"), "w") as f:
             f.write("01")
-        for f in (join(ca_dir, "index.txt"), join(ca_dir, "crlnumber"),
-                  join(ca_dir, "index.txt.attr")):
+        for f in (join(LIB_CA, "index.txt"), join(LIB_CA, "crlnumber"),
+                  join(LIB_CA, "index.txt.attr")):
             Path(f).touch()
         env_logger.debug("Files for local CA are created")
 
         run(['openssl', 'req', '-batch', '-config', join(conf_dir, "ca.cnf"),
              '-x509', '-new', '-nodes', '-newkey', 'rsa:2048', '-keyout',
-             join(ca_dir, "rootCA.key"), '-sha256', '-set_serial', '0',
+             join(LIB_CA, "rootCA.key"), '-sha256', '-set_serial', '0',
              '-extensions', 'v3_ca', '-out',
-             join(ca_dir, "rootCA.pem")])
+             join(LIB_CA, "rootCA.pem")])
         env_logger.debug(
-            f"Key for local CA is created {join(ca_dir, 'rootCA.key')}")
+            f"Key for local CA is created {join(LIB_CA, 'rootCA.key')}")
         env_logger.debug(
-            f"Certificate for local CA is created {join(ca_dir, 'rootCA.pem')}")
+            f"Certificate for local CA is created {join(LIB_CA, 'rootCA.pem')}")
 
         run(['openssl', 'ca', '-config', join(conf_dir, 'ca.cnf'), '-gencrl',
-             '-out', join(ca_dir, "crl", "root.crl")])
+             '-out', join(LIB_CA, "crl", "root.crl")])
         env_logger.debug(f"CRL is created {crl}")
 
-        with open(join(ca_dir, "rootCA.pem"), "r") as f_cert:
+        with open(join(LIB_CA, "rootCA.pem"), "r") as f_cert:
             root_cert = f_cert.read()
 
         if exists(ca_db):
@@ -306,7 +304,6 @@ def setup_virt_card_(user: dict):
     softhsm_conf = join(user_conf_dir, "softhsm2.conf")
 
     p11lib = '/usr/lib64/pkcs11/libsofthsm2.so'
-    ca_dir = read_config("ca_dir", which="lib")
     pin = '123456'
     sopin = '12345678'
 
@@ -381,8 +378,8 @@ def setup_virt_card_(user: dict):
 
             env_logger.debug(f"User CSR is created {csr} using {cnf_file}")
 
-            run(["openssl", "ca", "-config", join(ca_dir, "conf", "ca.cnf"),
-                 "-batch", "-keyfile", join(ca_dir, "rootCA.key"), "-in", csr,
+            run(["openssl", "ca", "-config", join(LIB_CA, "conf", "ca.cnf"),
+                 "-batch", "-keyfile", join(LIB_CA, "rootCA.key"), "-in", csr,
                  "-notext", "-days", "365", "-extensions", "usr_cert",
                  "-out", cert])
             env_logger.debug(f"User certificates is created {cert}.")
@@ -434,7 +431,7 @@ def check_semodule():
         env_logger.debug(
             "SELinux module for virtual smart cards is not present in the "
             "system. Installing...")
-    conf_dir = join(read_config("ca_dir", which="lib"), 'conf')
+    conf_dir = join(LIB_CA, 'conf')
     module = """
 (allow pcscd_t node_t(tcp_socket(node_bind)))
 ; allow p11_child to read softhsm cache - not present in RHEL by default
@@ -480,9 +477,7 @@ def prepare_dirs(config_file=None):
     previously loaded env file.
     """
 
-    ca_dir = read_config("ca_dir", config_file=config_file)
-    paths = [join(LIB_DIR, dir_name) for dir_name in ("backup", "tmp/keys",
-                                                      "tmp/certs")]
+    paths = (LIB_CA, LIB_BACKUP, LIB_KEYS, LIB_CERTS, join(LIB_CA, "conf"))
     for path in paths:
         create_dir(path, conf=False)
 
@@ -718,7 +713,6 @@ def general_setup(install_missing: bool = True):
         except:
             env_logger.error("General setup is failed")
             raise
-    env_logger.info("General setup is done")
 
 
 def create_sc(sc_user: dict):

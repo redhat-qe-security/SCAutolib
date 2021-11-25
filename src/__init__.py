@@ -11,6 +11,10 @@ LIB_DIR = "/etc/SCAutolib"
 Path(LIB_DIR).mkdir(parents=True, exist_ok=True)
 CONF = join(LIB_DIR, "user-conf.yaml")
 LIB_CONF = join(LIB_DIR, "lib-conf.yaml")
+LIB_CA = join(LIB_DIR, "ca")
+LIB_BACKUP = join(LIB_DIR, "backup")
+LIB_KEYS = join(LIB_DIR, "keys")
+LIB_CERTS = join(LIB_DIR, "certs")
 
 
 def init_config(user_config=None, config_content: dict = None):
@@ -22,12 +26,12 @@ def init_config(user_config=None, config_content: dict = None):
     :param config_content - content to be inserted into library internal
     config file. If not provided, default content would be generated.
     """
+    env_logger.debug("Initilising configuration file")
     if not exists(LIB_CONF):
+        env_logger.debug("Library configuration file does not exists. "
+                         "Creating...")
         if config_content is None:
-            config_content = {"restore": [],
-                              "ca_dir": join(LIB_DIR, "ca"),
-                              "backup": join(LIB_DIR, "backup"),
-                              "tmp": join(LIB_DIR, "tmp")}
+            config_content = {"restore": []}
             env_logger.debug(f"Default configuration is used: {config_content}")
 
         with open(LIB_CONF, "w") as f:
@@ -36,12 +40,12 @@ def init_config(user_config=None, config_content: dict = None):
                          f"{LIB_CONF}")
     if not exists(CONF) and user_config is not None:
         symlink(user_config, CONF)
-        env_logger.debug("Symlink to user configuration is updated "
-                         f"{CONF} -> {user_config}")
+        env_logger.warning("Symlink to user configuration is updated "
+                           f"{CONF} -> {user_config}")
 
 
-def read_config(*items, cast=None, which="user", config_file=None) -> list or \
-                                                                      object:
+def read_config(*items, cast=None, which="user", config_file=None) \
+        -> list or object:
     """
     Read data from the configuration file and return require items or full
     content.

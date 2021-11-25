@@ -1,6 +1,5 @@
 # author: Pavel Yadlouski <pyadlous@redhat.com>
 # Unit tests for of SCAutolib.src.env_cli module
-import subprocess
 import pytest
 from click.testing import CliRunner
 from SCAutolib.src import env_cli, LIB_CONF
@@ -9,6 +8,7 @@ from os.path import basename, exists
 from yaml import load, dump, Loader
 from subprocess import check_output, run, PIPE
 import pwd
+from yaml import FullLoader
 
 
 @pytest.fixture(scope="module")
@@ -94,7 +94,7 @@ def test_prepare_ca_cards(config_file_correct, caplog, runner, src_path):
         conf_dir = join(card_dir, "conf")
 
     assert result.exit_code == 0
-    assert f"Preparation of the environments is completed" in caplog.messages
+    assert "Preparation of the environments is completed" in caplog.messages
     assert exists(join(conf_dir, "softhsm2.conf"))
     service_path = f"/etc/systemd/system/virt_cacard_{username}.service"
     assert exists(service_path)
@@ -142,7 +142,6 @@ def test_prepare_ipa(config_file_correct, caplog, runner, ipa_ip, ipa_hostname,
 
 @pytest.mark.slow()
 @pytest.mark.not_in_ci
-@pytest.mark.not_in_ci()
 @pytest.mark.filterwarnings(
     'ignore:Unverified HTTPS request is being made to host.*')
 def test_prepare_ipa_cards(config_file_correct, caplog, runner, ipa_ip,
@@ -151,9 +150,6 @@ def test_prepare_ipa_cards(config_file_correct, caplog, runner, ipa_ip,
                            ["--conf", config_file_correct, "--ipa",
                             "--server-ip", ipa_ip, "--server-hostname",
                             ipa_hostname, "--cards"])
-    load_dotenv(f"{src_path}/.env")
-
-    config_file_correct = environ["CONF"]
 
     with open(config_file_correct, "r") as f:
         data = load(f, Loader=FullLoader)
@@ -164,9 +160,6 @@ def test_prepare_ipa_cards(config_file_correct, caplog, runner, ipa_ip,
     conf_dir = join(card_dir, "conf")
     try:
         assert result.exit_code == 0
-        msg = f"User {username} is updated on IPA server. " \
-              f"Cert and key stored into"
-        assert msg in caplog.text
         service_path = f"/etc/systemd/system/virt_cacard_{username}.service"
         assert exists(service_path)
         with open(service_path, "r") as f:
@@ -176,6 +169,7 @@ def test_prepare_ipa_cards(config_file_correct, caplog, runner, ipa_ip,
         assert f'SOFTHSM2_CONF="{conf_dir}/softhsm2.conf"' in content
         assert f'WorkingDirectory = {card_dir}' in content
     finally:
+        subprocess.run(["ipa", "user-del", username, "--no-preserve"])
         subprocess.run(["ipa-client-install", "--uninstall", "-U"])
 
 
@@ -184,8 +178,6 @@ def test_cleanup(real_factory, loaded_env, caplog, runner,
                  test_user):
     """Test that cleanup command cleans and restores necessary
     items."""
-    config_file = LIB_CONF
-
     # Start process with specific user
     src_dir_not_backup = real_factory.create_dir()
 
@@ -204,7 +196,7 @@ def test_cleanup(real_factory, loaded_env, caplog, runner,
     with open(dest_file, "w") as f:
         f.write("Some content")
 
-    with open(config_file, "r") as f:
+    with open(LIB_CONF, "r") as f:
         data = load(f, Loader=Loader)
 
     data["restore"] = []
@@ -217,7 +209,7 @@ def test_cleanup(real_factory, loaded_env, caplog, runner,
     data["restore"].append({"type": "user", "src": test_user, "local": True})
     data["restore"].append({"type": "wrong-type", "src": "no_src"})
 
-    with open(config_file, "w") as f:
+    with open(LIB_CONF, "w") as f:
         dump(data, f)
     # Run cleanup command
     result = runner.invoke(env_cli.cleanup, catch_exceptions=False, color=True)

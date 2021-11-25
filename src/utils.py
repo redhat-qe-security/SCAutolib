@@ -2,23 +2,24 @@ import datetime
 import difflib
 import re
 import subprocess as subp
+import sys
 from configparser import RawConfigParser
 from os import listdir
-from os.path import isdir, isfile, join, basename, split, exists
+from os.path import isdir, isfile, join, basename, exists
 from random import randint
 from shutil import copy2, copytree
+from time import sleep
 
 import pexpect
-import sys
 from SCAutolib import env_logger, base_logger
-from SCAutolib.src import env, read_config
+from SCAutolib.src import env, LIB_CA, LIB_BACKUP, LIB_CERTS, \
+    LIB_KEYS
 from SCAutolib.src.exceptions import *
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 from decouple import UndefinedValueError
-from time import sleep
 
 SERVICES = {"sssd": "/etc/sssd/sssd.conf", "krb": "/etc/krb5.conf"}
 
@@ -55,9 +56,8 @@ def backup_(file_path):
     Returns:
         Path to copied file/directory
     """
-    backup_dir = read_config('backup', which='lib')
     file_name = basename(file_path)
-    target = join(backup_dir, file_name + ".bak")
+    target = join(LIB_BACKUP, file_name + ".bak")
     if exists(target):
         return target
 
@@ -101,14 +101,13 @@ def edit_config_(conf_file: str, section: str, key: str, value: str = "",
 
     with open(conf_file, "w") as file:
         cnf.write(file)
-    backup_dir = read_config("backup", which="lib")
     file_name = basename(conf_file)
 
     if backup_name == "":
-        count = len([i for i in listdir(backup_dir) if file_name in i])
+        count = len([i for i in listdir(LIB_BACKUP) if file_name in i])
         backup_name = file_name + f".bak.{count}"
 
-    target = join(backup_dir, backup_name)
+    target = join(LIB_BACKUP, backup_name)
     copy2(conf_file, target)
 
     env_logger.debug(f"Current content of the file {conf_file} is copied "
@@ -151,13 +150,11 @@ def generate_cert(username=None):
     Returns:
         tuple with path to the certificate and to the key files.
     """
-    tmp = read_config("tmp", which="lib")
-
     prefix = username if username == "root" else "User"
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     serial = randint(1, 1000)
-    cert_path = f"{tmp}/rootCA{serial}.pem"
-    key_path = f"{tmp}/private-key-{serial}.pem"
+    cert_path = f"{LIB_CERTS}/rootCA{serial}.pem"
+    key_path = f"{LIB_KEYS}/private-key-{serial}.pem"
     subject = issuer = ""
     basic_constraints = x509.BasicConstraints(ca=True, path_length=None)
     builder = x509.CertificateBuilder()
@@ -189,7 +186,7 @@ def generate_cert(username=None):
             crl_sign=False, encipher_only=False,
             decipher_only=False)
         try:
-            root_cert_path = join(read_config("ca_dir", which="lib"), "rootCA.pem")
+            root_cert_path = join(LIB_CA, "rootCA.pem")
             with open(root_cert_path, "rb") as f:
                 root_crt = x509.load_pem_x509_certificate(f.read())
             issuer = root_crt.issuer

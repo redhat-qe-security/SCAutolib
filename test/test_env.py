@@ -8,7 +8,6 @@ import pytest
 from SCAutolib.src.env import *
 from SCAutolib.src.exceptions import *
 from SCAutolib.test.fixtures import *
-from dotenv import load_dotenv
 from pytest import raises
 from yaml import load, FullLoader
 
@@ -48,8 +47,7 @@ def test_create_cnf(tmpdir):
 
 def test_create_cnf_ca(loaded_env, ca_dirs):
     username = "ca"
-    ca_dir = read_config("ca_dir", which="lib")
-    conf_dir = f"{ca_dir}/conf"
+    conf_dir = join(LIB_CA, "conf")
     ca_cnf = join(conf_dir, "ca.cnf")
 
     create_cnf(username, conf_dir)
@@ -57,7 +55,7 @@ def test_create_cnf_ca(loaded_env, ca_dirs):
 
     with open(ca_cnf, "r") as f:
         content = f.read()
-    assert re.findall(f"dir[ ]*=[ ]*{ca_dir}", content)
+    assert re.findall(f"dir[ ]*=[ ]*{LIB_CA}", content)
 
 
 def test_create_cnf_exception():
@@ -158,16 +156,15 @@ def test_add_restore_wrong_type(caplog, loaded_env):
 
 def test_setup_ca(ca_dirs, caplog):
     """Test for success setup of local CA."""
-    ca_dir = read_config("ca_dir", which="lib")
     create_cnf("ca")
     setup_ca_()
 
     # Assert
     assert "Setup of local CA is completed" in caplog.messages
-    assert exists(f"{ca_dir}/rootCA.pem")
-    assert exists(f"{ca_dir}/rootCA.key")
+    assert exists(f"{LIB_CA}/rootCA.pem")
+    assert exists(f"{LIB_CA}/rootCA.key")
 
-    with open(f"{ca_dir}/rootCA.pem", "r") as f:
+    with open(f"{LIB_CA}/rootCA.pem", "r") as f:
         root_crt = f.read()
 
     with open("/etc/sssd/pki/sssd_auth_ca_db.pem", "r") as f:

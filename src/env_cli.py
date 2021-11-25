@@ -42,15 +42,17 @@ def prepare(cards, conf, ipa, server_ip, ca, install_missing, server_hostname):
         exit(1)
 
     prepare_dirs(conf)
+    env_logger.info("Directories are created")
     init_config(conf)
-
-    env_logger.info("Temporary directories are created")
-    env_logger.debug("Start general setup")
+    env_logger.info("Initialisation of library configuration files is "
+                    "completed.")
+    env_logger.info("Start general setup")
     try:
         general_setup(install_missing)
     except Exception as e:
         env_logger.error(e)
         exit(1)
+    env_logger.info("General setup is done")
 
     create_sssd_config()
 
@@ -79,7 +81,6 @@ def prepare(cards, conf, ipa, server_ip, ca, install_missing, server_hostname):
 
     if ca:
         env_logger.info("Start setup of local CA")
-        create_dir(read_config("ca_dir", which="lib"))
         setup_ca_()
 
     if cards:
@@ -112,7 +113,7 @@ def setup_ca(conf):
     # TODO: generate certs for Kerberos
 
     general_setup()
-    create_dir(read_config("ca_dir", which="lib"))
+    create_dir(LIB_CA)
     prepare_dirs()
     create_cnf('ca')
     setup_ca_()
@@ -169,7 +170,7 @@ def cleanup():
     """
     env_logger.debug("Start cleanup")
 
-    restore_items: list = read_config("restore")
+    restore_items: list = read_config("restore", which="lib")
     try:
         cleanup_(restore_items)
     except:
@@ -230,7 +231,6 @@ cli.add_command(prepare)
 cli.add_command(setup_ipa_server)
 cli.add_command(install_ipa_client)
 cli.add_command(add_ipa_user)
-
 
 if __name__ == "__main__":
     cli()
