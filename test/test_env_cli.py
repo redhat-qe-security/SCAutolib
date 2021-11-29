@@ -63,6 +63,7 @@ def test_prepare_simple_install_missing(config_file_correct, runner, caplog):
     assert "Preparation of the environments is completed" in caplog.messages
 
 
+@pytest.mark.not_in_ci
 def test_prepare_ipa_no_ip(loaded_env, caplog, runner):
     conf_file = loaded_env
     result = runner.invoke(env_cli.prepare, ["--conf", conf_file, "--ipa"])
@@ -72,6 +73,7 @@ def test_prepare_ipa_no_ip(loaded_env, caplog, runner):
            in caplog.messages
 
 
+@pytest.mark.not_in_ci
 def test_prepare_ca(loaded_env, caplog, runner):
     conf_file = loaded_env
     result = runner.invoke(env_cli.prepare, ["--conf", conf_file, "--ca"])

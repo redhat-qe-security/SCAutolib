@@ -18,11 +18,20 @@ jobs:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v2
 
+      - name: Update container
+        run: dnf update -y
+
+      - name: Install epel-release
+        run: dnf install epel-release -y
+
       - name: Install missing sudo package
         run: dnf install sudo -y
 
       - name: Install e2fsprogs for chattr command
         run: dnf install e2fsprogs -y
+
+      - name: Install SoftHSM2
+        run: dnf install softhsm -y
 
       - name: Install library decencies
         run: python3 -m pip install --upgrade -I -r requirements.txt

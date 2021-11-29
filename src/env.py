@@ -439,7 +439,7 @@ def check_semodule():
     with open(f"{conf_dir}/virtcacard.cil", "w") as f:
         f.write(module)
     try:
-        run(["semodule", "-i", f"{conf_dir}/virtcacard.cil"])
+        run(["semodule", "-i", f"{conf_dir}/virtcacard.cil"], check=True)
         env_logger.debug(
             "SELinux module for virtual smart cards is installed")
     except CalledProcessError:
