@@ -1,4 +1,5 @@
 import pwd
+import subprocess
 from configparser import ConfigParser
 from os import remove, environ
 from os.path import dirname, join, exists
@@ -7,6 +8,7 @@ from shutil import copy
 from subprocess import check_output
 
 import pytest
+import yaml
 from SCAutolib.src import load_env, env
 from dotenv import load_dotenv
 from yaml import dump, load, FullLoader
@@ -198,7 +200,8 @@ def test_user():
         pwd.getpwnam(username)
     except KeyError:
         check_output(["useradd", username, "-m"])
-    return username
+    user = {"name": username, "local": True}
+    return user
 
 
 @pytest.fixture()
@@ -231,3 +234,53 @@ def dummy_config(tmpdir):
         cnf.write(f)
 
     return conf
+
+
+@pytest.fixture(scope="function")
+def ready_ipa(loaded_env, ipa_ip, ipa_hostname, src_path):
+    _, config_file = loaded_env
+
+    with open(config_file, "r") as f:
+        config = yaml.load(f, Loader=yaml.FullLoader)
+
+    config["ipa_server_ip"] = ipa_ip
+    config["ipa_server_hostname"] = ipa_hostname
+
+    with open(config_file, "w") as f:
+        yaml.dump(config, f)
+
+    client_hostname = config["ipa_client_hostname"]
+    entry = f"{ipa_ip} {ipa_hostname}"
+    domain = config["ipa_domain"]
+    realm = config["ipa_realm"]
+    admin_passwd = config["ipa_server_admin_passwd"]
+    with open("/etc/hosts", "r") as f:
+        data = f.read()
+
+    if entry not in data:
+        with open("/etc/hosts", "a") as f:
+            f.write(f"{entry}\n")
+
+    with open("/etc/resolv.conf", "r") as f:
+        data = f.read()
+    if f"nameserver {ipa_ip}" not in data:
+        data = f"nameserver {ipa_ip}\n" + data
+        with open("/etc/resolv.conf", "w") as f:
+            f.write(data)
+
+    subprocess.run(["chattr", "-i", "/etc/resolv.conf"])
+
+    subprocess.run(["hostnamectl", "set-hostname", client_hostname,
+                    "--static"])
+
+    subprocess.run(["ipa-client-install", "-p", "admin", "--password",
+                    admin_passwd, "--server", ipa_hostname, "--domain",
+                    domain, "--realm", realm, "--hostname", client_hostname,
+                    "--all-ip-addresses", "--force", "--force-join",
+                    "--no-ntp", "-U"], input=b"yes")
+
+    subprocess.run(["kinit", "admin"], input=admin_passwd.encode("utf-8"))
+    yield config_file
+
+    subprocess.run(["ipa", "host-del", client_hostname, "--updatedns"])
+    subprocess.run(["ipa-client-install", "--uninstall", "-U"])

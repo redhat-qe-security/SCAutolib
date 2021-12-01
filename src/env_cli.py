@@ -1,5 +1,5 @@
 import click
-from SCAutolib.src import load_env
+from SCAutolib.src import load_env, set_config
 from SCAutolib.src.env import *
 
 
