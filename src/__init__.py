@@ -96,13 +96,13 @@ def set_config(path, value, action="replace", type_=str):
     """Sets field to given value in configuration file.
 
     :param path: path in the configuration file in doted notation (a.b.c). If
-    any of path part doesn't exist, than it would be created.
+    any of path part doesn't exist, then it would be created.
     :param value: value to be set for last key in path
-    :param action: action for value. By default is "replace". If "append", than
+    :param action: action for value. By default, is "replace". If "append", then
     given value would be appended to the list of value for the last key in the
     path.
     :param type_: data type to which value would be converted and inserted to
-    configuration file. By default is "str".
+    configuration file. By default, is "str".
     """
     conf_path = read_env("CONF")
     with open(conf_path, "r") as file:
