@@ -28,4 +28,4 @@ jobs:
         run: python3 -m pip install --upgrade -I -r test/requirements.txt
 
       - name: Run unit tests
-        run: pytest test/ -sv -m "not ipa" -m "not service_restart"
+        run: pytest test/ -sv -m "not ipa and not service_restart"

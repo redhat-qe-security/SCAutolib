@@ -53,7 +53,7 @@ def test_run_cmd_simple_cmd():
 
 
 def test_run_cmd_login_root_with_passwd(test_user):
-    output = utils.run_cmd(f"su {test_user}  -c 'su - -c whoami'",
+    output = utils.run_cmd(f"su {test_user['name']}  -c 'su - -c whoami'",
                            pin=False, passwd="redhat")
     assert "root" in output
     assert "RC:0" in output
@@ -61,7 +61,7 @@ def test_run_cmd_login_root_with_passwd(test_user):
 
 def test_run_cmd_pattern_not_found_password(test_user):
     with pytest.raises(PatternNotFound):
-        utils.run_cmd(f"su {test_user}  -c 'su - -c whoami'",
+        utils.run_cmd(f"su {test_user['name']}  -c 'su - -c whoami'",
                       pin=True, passwd="redhat")
 
 

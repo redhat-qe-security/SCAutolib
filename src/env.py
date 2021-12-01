@@ -321,6 +321,7 @@ def setup_virt_card_(user: dict):
             with Popen(['passwd', username, '--stdin'], stdin=PIPE,
                        stderr=PIPE, encoding="utf-8") as proc:
                 proc.communicate(passwd)
+            add_restore("user", user)
             env_logger.debug(
                 f"Password for user {username} is updated to {passwd}")
         cnf_file = create_cnf(username, conf_dir=user_conf_dir)
@@ -629,8 +630,10 @@ def add_ipa_user_(user: dict, ipa_hostname: str = None):
         client.user_add(username, username, username, username,
                         o_userpassword=passwd)
     except pipa.exceptions.DuplicateEntry:
-        env_logger.warning(f"User {username} already exists in the IPA server "
-                           f"{ipa_hostname}. Password is not changed.")
+        env_logger.error(f"User {username} already exists on the IPA server "
+                         f"{ipa_hostname}.")
+        raise
+
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
 
     prepare_dir(user_dir)
@@ -654,7 +657,7 @@ def add_ipa_user_(user: dict, ipa_hostname: str = None):
         env_logger.error(f"Error while requesting the certificate for user "
                          f"{username} from IPA server")
         raise
-
+    add_restore("user", user)
     env_logger.debug(f"User {username} is updated on IPA server. "
                      f"Cert and key stored into {user_dir}")
 
@@ -725,7 +728,7 @@ def general_setup(install_missing: bool = True):
             env_logger.debug("Smart Card Support group in installed.")
 
             run(["useradd", "base-user", "--create-home"])
-            add_restore("user", "base_user")
+            add_restore("user", {"name": "base_user", "local": True})
             env_logger.debug("Base user with username 'base-user' is created "
                              "with no password")
 
@@ -838,15 +841,22 @@ def cleanup_(restore_items: list):
                 copytree(backup_dir, src)
                 env_logger.debug(
                     f"Directory {src} is restored form {backup_dir}")
-
         elif type_ == "user":
-            run(["pkill", "-u", src], check=False)
+            username = src["name"]
+            run(["pkill", "-u", username], check=False)
             env_logger.debug(
                 f"All processes owned by user {src} are killed.")
-
-            run(["userdel", src, "-r"])
-            env_logger.debug(
-                f"User {src} is removed.")
+            if src["local"]:
+                run(["userdel", username, "-r"])
+                env_logger.debug(f"Local user {username} is removed.")
+            else:
+                ipa_admin_passwd, ipa_hostname = read_config(
+                    "ipa_server_admin_passwd", "ipa_server_hostname")
+                client = pipa.ClientMeta(ipa_hostname, verify_ssl=False)
+                client.login("admin", ipa_admin_passwd)
+                client.user_del(username, o_preserve=True)
+                env_logger.debug(
+                    f"IPA user {username} is remove from the IPA server.")
         else:
             env_logger.warning(f"Skip item with unknown type '{type_}'")
 
