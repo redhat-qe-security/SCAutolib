@@ -13,7 +13,8 @@ from yaml import load, FullLoader
 
 
 def test_create_sssd_config(tmpdir, loaded_env, clean_conf):
-    """Check correct creation og sssd.conf with basic sections and permission."""
+    """Check correct creation og sssd.conf with basic sections and
+    permission."""
     # Arrange
     sssd_conf = "/etc/sssd/sssd.conf"
     if exists(sssd_conf):
@@ -216,3 +217,26 @@ matchrule = <SUBJECT>.*CN={user['name']}.*"""
 
     assert exists(key), "User private key isn't created"
     assert exists(cert), "User certificate isn't created"
+
+
+@pytest.mark.ipa
+@pytest.mark.filterwarnings(
+    'ignore:Unverified HTTPS request is being made to host.*')
+def test_add_ipa_user_duplicated_user(caplog, ready_ipa, ipa_hostname, src_path,
+                                      ipa_user):
+    """Test that add_ipa_user_ do not add IPA user if same user already exists
+    on the IPA server and raise corresponding exception."""
+
+    card_dir = f"/tmp/{ipa_user}"
+    user = {"name": ipa_user, "card_dir": card_dir, "passwd": "qwerty"}
+
+    subprocess.run(["ipa", "user-add", ipa_user, "--first", ipa_user,
+                    "--last", ipa_user])
+
+    try:
+        with pytest.raises(pipa.exceptions.DuplicateEntry):
+            add_ipa_user_(user, ipa_hostname=ipa_hostname)
+        assert f"User {ipa_user} already exists on the IPA server " \
+               f"ipa-server-beaker.sc.test.com." in caplog.messages
+    finally:
+        subprocess.run(["ipa", "user-del", ipa_user, "--no-preserve"])
