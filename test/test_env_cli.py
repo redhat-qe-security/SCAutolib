@@ -142,7 +142,7 @@ def test_prepare_ipa(config_file_correct, caplog, runner, ipa_ip, ipa_hostname,
 @pytest.mark.filterwarnings(
     'ignore:Unverified HTTPS request is being made to host.*')
 def test_prepare_ipa_cards(config_file_correct, caplog, runner, ipa_ip,
-                           ipa_hostname, src_path):
+                           ipa_hostname, src_path, ipa_user):
     result = runner.invoke(env_cli.prepare,
                            ["--conf", config_file_correct, "--ipa",
                             "--server-ip", ipa_ip, "--server-hostname",
@@ -172,6 +172,7 @@ def test_prepare_ipa_cards(config_file_correct, caplog, runner, ipa_ip,
         assert f'SOFTHSM2_CONF="{conf_dir}/softhsm2.conf"' in content
         assert f'WorkingDirectory = {card_dir}' in content
     finally:
+        check_output(["ipa", "user-del", ipa_user, "--no-preserve"])
         check_output(["ipa-client-install", "--uninstall", "-U"])
 
 
@@ -247,7 +248,7 @@ def test_cleanup(real_factory, loaded_env, caplog, runner, clean_conf,
     assert not exists(src_file_not_bakcup)
 
     # User is correctly deleted
-    assert f"User {test_user} is removed." in caplog.messages
+    assert f"Local user {test_user['name']} is removed." in caplog.messages
     with pytest.raises(KeyError):
         pwd.getpwnam('test-name')
 
