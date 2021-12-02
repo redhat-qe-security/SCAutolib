@@ -1,5 +1,4 @@
 import datetime
-import difflib
 import re
 import subprocess as subp
 import sys

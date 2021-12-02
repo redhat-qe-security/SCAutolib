@@ -441,7 +441,7 @@ def check_semodule():
     with open(f"{conf_dir}/virtcacard.cil", "w") as f:
         f.write(module)
     try:
-        run(["semodule", "-i", f"{conf_dir}/virtcacard.cil"])
+        run(["semodule", "-i", f"{conf_dir}/virtcacard.cil"], check=True)
         env_logger.debug(
             "SELinux module for virtual smart cards is installed")
     except CalledProcessError:
@@ -798,7 +798,7 @@ def add_restore(type_: str, src: str, backup: str = None):
         assert data
 
     if type_ not in ("user", "file", "dir"):
-        env_logger.warning(f"Type {type_} is not know, so this item can't be "
+        env_logger.warning(f"Type {type_} is not known, so this item can't be "
                            f"correctly restored")
     data["restore"].append({"type": type_, "src": src, "backup_dir": backup})
 

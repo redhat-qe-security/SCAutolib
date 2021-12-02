@@ -1,8 +1,6 @@
 # author: Pavel Yadlouski <pyadlous@redhat.com>
 # Unit tests for of SCAutolib.src.utils module
-from configparser import ConfigParser
-from os import path, system
-from os.path import exists
+from os import path, system, remove
 from shutil import copy
 
 from SCAutolib.src import utils
@@ -111,7 +109,6 @@ def test_edit_config(dummy_config, loaded_env):
     with open(dummy_config, "r") as f:
         cnf.read_file(f)
 
-    assert exists("/var/log/scautolib/edited_files.log")
     assert "first" in cnf.sections(), "Section 'first' is not in the sections"
     assert "10" == cnf.get("first", "one")
 
