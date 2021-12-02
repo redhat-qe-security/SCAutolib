@@ -12,7 +12,7 @@ from yaml import load, FullLoader
 
 
 def test_create_sssd_config(tmpdir, loaded_env):
-    """Check correct creation og sssd.conf with basic sections and
+    """Check correct creation of sssd.conf with basic sections and
     permission. """
     # Arrange
     sssd_conf = "/etc/sssd/sssd.conf"
@@ -146,7 +146,7 @@ def test_add_restore_wrong_type(caplog, loaded_env):
     assert len(data["restore"]) == 2
 
     restore = data["restore"][0]
-    msg = "Type wrong_type is not know, so this item can't be correctly " \
+    msg = "Type wrong_type is not known, so this item can't be correctly " \
           "restored"
     assert restore["type"] == "file"
     assert restore["backup_dir"] == "dest"
