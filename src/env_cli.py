@@ -1,5 +1,5 @@
 import click
-from SCAutolib.src import load_env, set_config
+from SCAutolib.src import init_config
 from SCAutolib.src.env import *
 
 
@@ -41,11 +41,13 @@ def prepare(cards, conf, ipa, server_ip, ca, install_missing, server_hostname):
                          "for more information.")
         exit(1)
 
-    load_env(conf)
-
-    prep_tmp_dirs()
-    env_logger.info("Temporary directories are created")
-    env_logger.debug("Start general setup")
+    env_logger.info("Preparing necessary directories")
+    prepare_dirs()
+    env_logger.info("Directories are created")
+    init_config(conf)
+    env_logger.info("Initialisation of library configuration files is "
+                    "completed.")
+    env_logger.info("Start general setup")
     try:
         general_setup(install_missing)
     except Exception as e:
@@ -79,7 +81,7 @@ def prepare(cards, conf, ipa, server_ip, ca, install_missing, server_hostname):
 
     if ca:
         env_logger.info("Start setup of local CA")
-        prepare_dir(read_env("CA_DIR"))
+        create_dir(LIB_CA)
         setup_ca_()
 
     if cards:
@@ -110,10 +112,9 @@ def setup_ca(conf):
     CLI command for setup the local CA.
     """
     # TODO: generate certs for Kerberos
-    load_env(conf)
+    init_config(conf)
     general_setup()
-    prepare_dir(read_env("CA_DIR"))
-    prep_tmp_dirs()
+    prepare_dirs()
     create_cnf('ca')
     setup_ca_()
 
@@ -134,7 +135,7 @@ def setup_virt_card(username, key, cert, card_dir, password, local):
     """
     Setup virtual smart card. Has to be run after configuration of the local CA.
     """
-    if read_env("READY", cast=int, default=0) != 1:
+    if not read_config("ready"):
         env_logger.error(
             "Please, run prepare command with configuration file.")
         exit(1)
@@ -169,9 +170,8 @@ def cleanup():
     """
     env_logger.debug("Start cleanup")
 
-    restore_items: list = read_config("restore")
     try:
-        cleanup_(restore_items)
+        cleanup_()
     except:
         env_logger.error("Cleanup is failed. Check logs for more info")
         env_logger.error(format_exc())

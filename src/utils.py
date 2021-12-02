@@ -2,103 +2,26 @@ import datetime
 import difflib
 import re
 import subprocess as subp
+import sys
 from configparser import RawConfigParser
 from os import listdir
-from os.path import isdir, isfile, join, basename, split, exists
+from os.path import isdir, isfile, join, basename, exists
 from random import randint
 from shutil import copy2, copytree
+from time import sleep
 
 import pexpect
-import sys
 from SCAutolib import env_logger, base_logger
-from SCAutolib.src import read_env, env
+from SCAutolib.src import env, LIB_CA, LIB_BACKUP, LIB_CERTS, \
+    LIB_KEYS
 from SCAutolib.src.exceptions import *
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 from decouple import UndefinedValueError
-from time import sleep
 
 SERVICES = {"sssd": "/etc/sssd/sssd.conf", "krb": "/etc/krb5.conf"}
-
-
-def show_file_diff(original, new):
-    differ = difflib.Differ()
-    with open(original, "r") as f:
-        data_original = f.readlines()
-    with open(new, "r") as f:
-        data_new = f.readlines()
-    diff = differ.compare(data_original, data_new)
-    with open("/var/log/scautolib/edited_files.log", "a") as f:
-        f.write("\n================\n")
-        f.writelines(diff)
-        f.write("================\n")
-    return diff
-
-
-def edit_config(config_path: str, section: str, key: str, value: str = "",
-                restore=False, *restart):
-    """
-    Decorator for editing config file. Before editing, config file is saved.
-
-    Args:
-        config_path: path to config file to be updated
-        section: section in config file where a key is placed
-        key: key to by updated
-        value: value to be set for a given key
-        restore: if true, original file would be restored after function is
-                 finished
-
-    Returns:
-        decorated function
-    """
-
-    def wrapper(test):
-        def inner_wrapper(*args, **kwargs):
-            target = backup_(file_path=config_path)
-            edit_config_(config_path, section, key, value)
-            show_file_diff(config_path, target)
-            for service in restart:
-                restart_service(service)
-            test(*args, **kwargs)
-
-            if restore:
-                restore_file_(target, config_path)
-        return inner_wrapper
-
-    return wrapper
-
-
-def backup(*restart, file_path: str, name: str = None, restore=True,):
-    """
-    Decorator for backup the file into BACKUP directory. Can restore the file
-    after execution of function and restart given service.
-
-    Args:
-        file_path: path to file to be saved
-        name: name for backup file (optional)
-        restore: specifies if given file should be restored after function
-                 execution
-
-    Returns:
-        decorated function
-    """
-    if name is None:
-        # if no name is given, than original name of the file would be used
-        name = split(file_path)[1]
-
-    def wrapper(test):
-        def inner_wrapper(*args, **kwargs):
-            destination = backup_(file_path)
-            test(*args, **kwargs)
-            if restore:
-                restore_file_(file_path, destination)
-                for service in restart:
-                    restart_service(service)
-        return inner_wrapper
-
-    return wrapper
 
 
 def restore_file_(source, destination):
@@ -119,9 +42,8 @@ def backup_(file_path):
     Returns:
         Path to copied file/directory
     """
-    backup_dir = read_env('BACKUP')
     file_name = basename(file_path)
-    target = join(backup_dir, file_name + ".bak")
+    target = join(LIB_BACKUP, file_name + ".bak")
     if exists(target):
         return target
 
@@ -165,14 +87,13 @@ def edit_config_(conf_file: str, section: str, key: str, value: str = "",
 
     with open(conf_file, "w") as file:
         cnf.write(file)
-    backup_dir = read_env("BACKUP")
     file_name = basename(conf_file)
 
     if backup_name == "":
-        count = len([i for i in listdir(backup_dir) if file_name in i])
+        count = len([i for i in listdir(LIB_BACKUP) if file_name in i])
         backup_name = file_name + f".bak.{count}"
 
-    target = join(backup_dir, backup_name)
+    target = join(LIB_BACKUP, backup_name)
     copy2(conf_file, target)
 
     env_logger.debug(f"Current content of the file {conf_file} is copied "
@@ -215,13 +136,11 @@ def generate_cert(username=None):
     Returns:
         tuple with path to the certificate and to the key files.
     """
-    tmp = read_env("TMP")
-
     prefix = username if username == "root" else "User"
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     serial = randint(1, 1000)
-    cert_path = f"{tmp}/rootCA{serial}.pem"
-    key_path = f"{tmp}/private-key-{serial}.pem"
+    cert_path = f"{LIB_CERTS}/rootCA{serial}.pem"
+    key_path = f"{LIB_KEYS}/private-key-{serial}.pem"
     subject = issuer = ""
     basic_constraints = x509.BasicConstraints(ca=True, path_length=None)
     builder = x509.CertificateBuilder()
@@ -253,7 +172,7 @@ def generate_cert(username=None):
             crl_sign=False, encipher_only=False,
             decipher_only=False)
         try:
-            root_cert_path = join(read_env("CA_DIR"), "rootCA.pem")
+            root_cert_path = join(LIB_CA, "rootCA.pem")
             with open(root_cert_path, "rb") as f:
                 root_crt = x509.load_pem_x509_certificate(f.read())
             issuer = root_crt.issuer

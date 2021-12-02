@@ -23,7 +23,7 @@ def test_prepare_fail_config(config_file_incorrect, caplog, runner):
                            catch_exceptions=False, color=True)
     msg = "Field root_passwd is not present in the config."
     assert result.exit_code == 1
-    assert msg in caplog.text
+    assert msg in caplog.messages
 
 
 @pytest.mark.slow()
@@ -35,10 +35,14 @@ def test_prepare_simple_fail_on_packages(config_file_correct, runner, caplog):
     result = runner.invoke(env_cli.prepare, ["--conf", config_file_correct])
 
     # Assert
-    assert result.exit_code == 1
-    assert f"Package {package} is required for testing, but it is not " \
-           f"installed on the system." in caplog.messages
-    assert "General setup is failed" in caplog.messages
+    try:
+        assert result.exit_code == 1
+        assert f"Package {package} is required for testing, but it is not " \
+               f"installed on the system." in caplog.messages
+        assert "General setup is failed" in caplog.messages
+    finally:
+        subprocess.check_output(["dnf", "install", package, "-y"],
+                                encoding="utf-8")
 
 
 @pytest.mark.slow()
@@ -56,18 +60,18 @@ def test_prepare_simple_install_missing(config_file_correct, runner, caplog):
     assert "Preparation of the environments is completed" in caplog.messages
 
 
-def test_prepare_ipa_no_ip(loaded_env_ready, caplog, runner):
-    conf_file = loaded_env_ready[1]
-    result = runner.invoke(env_cli.prepare, ["--conf", conf_file, "--ipa"])
+def test_prepare_ipa_no_ip(config_file_correct, caplog, runner):
+    result = runner.invoke(env_cli.prepare, ["--conf", config_file_correct,
+                                             "--ipa"])
     assert result.exit_code == 1
     assert "No IP address for IPA server is given." in caplog.messages
     assert "Can't find IP address of IPA server in configuration file" \
            in caplog.messages
 
 
-def test_prepare_ca(loaded_env_ready, caplog, runner):
-    _, conf_file = loaded_env_ready
-    result = runner.invoke(env_cli.prepare, ["--conf", conf_file, "--ca"])
+def test_prepare_ca(config_file_correct, caplog, runner):
+    result = runner.invoke(env_cli.prepare, ["--conf", config_file_correct,
+                                             "--ca"])
     assert result.exit_code == 0
     assert "Start setup of local CA" in caplog.messages
     assert "Setup of local CA is completed" in caplog.messages
@@ -79,8 +83,6 @@ def test_prepare_ca_cards(config_file_correct, caplog, runner, src_path):
     result = runner.invoke(
         env_cli.prepare, ["--conf", config_file_correct, "--ca", "--cards"])
 
-    load_dotenv(f"{src_path}/.env")
-    config_file_correct = environ["CONF"]
     with open(config_file_correct, "r") as f:
         data = load(f, Loader=FullLoader)
         user = data["local_user"]
@@ -90,7 +92,7 @@ def test_prepare_ca_cards(config_file_correct, caplog, runner, src_path):
 
     assert result.exit_code == 0
     assert f"Start setup of virtual smart cards for local user {user}" \
-           in caplog.text
+           in caplog.messages
     assert exists(join(conf_dir, "softhsm2.conf"))
     service_path = f"/etc/systemd/system/virt_cacard_{username}.service"
     assert exists(service_path)
@@ -108,8 +110,7 @@ def test_prepare_ca_cards(config_file_correct, caplog, runner, src_path):
 @pytest.mark.slow()
 @pytest.mark.service_restart()
 @pytest.mark.ipa()
-def test_prepare_ipa(config_file_correct, caplog, runner, ipa_ip, ipa_hostname,
-                     remove_env):
+def test_prepare_ipa(config_file_correct, caplog, runner, ipa_ip, ipa_hostname):
     with open("/etc/hosts", "r") as f:
         content = f.read()
     entry = f"{ipa_ip} {ipa_hostname}"
@@ -149,8 +150,6 @@ def test_prepare_ipa_cards(config_file_correct, caplog, runner, ipa_ip,
                             ipa_hostname, "--cards"])
     load_dotenv(f"{src_path}/.env")
 
-    config_file_correct = environ["CONF"]
-
     with open(config_file_correct, "r") as f:
         data = load(f, Loader=FullLoader)
 
@@ -177,13 +176,10 @@ def test_prepare_ipa_cards(config_file_correct, caplog, runner, ipa_ip,
 
 
 @pytest.mark.slow()
-def test_cleanup(real_factory, loaded_env, caplog, runner, clean_conf,
-                 test_user):
+def test_cleanup(real_factory, loaded_env, caplog, runner, test_user):
     """Test that cleanup command cleans and restores necessary
     items."""
-    env_path, _ = loaded_env
-    load_dotenv(env_path)
-    config_file = environ["CONF"]
+    config_file = loaded_env
 
     # Start process with specific user
     src_dir_not_backup = real_factory.create_dir()
@@ -216,7 +212,7 @@ def test_cleanup(real_factory, loaded_env, caplog, runner, clean_conf,
     data["restore"].append({"type": "user", "src": test_user})
     data["restore"].append({"type": "wrong-type", "src": "no_src"})
 
-    with open(config_file, "w") as f:
+    with open(LIB_CONF, "w") as f:
         dump(data, f)
     # Run cleanup command
     result = runner.invoke(env_cli.cleanup, catch_exceptions=False, color=True)

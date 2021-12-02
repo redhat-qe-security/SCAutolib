@@ -1,15 +1,15 @@
 import pwd
 import subprocess
 from configparser import ConfigParser
-from os import remove, environ
+from os import remove, environ, unlink
 from os.path import dirname, join, exists
 from pathlib import Path
 from shutil import copy
 from subprocess import check_output
 
 import pytest
-import yaml
-from SCAutolib.src import load_env, env
+from SCAutolib.src import env, init_config, LIB_DIR, CONF, LIB_CONF
+from SCAutolib.src.env import prepare_dirs
 from dotenv import load_dotenv
 from yaml import dump, load, FullLoader
 from shutil import copy2
@@ -18,19 +18,6 @@ from shutil import copy2
 @pytest.fixture()
 def src_path():
     return dirname(env.__file__)
-
-
-@pytest.fixture(autouse=True)
-def env_backup(tmpdir, src_path):
-    original_env = join(src_path, ".env")
-    copied_env = join(tmpdir, ".env-copied")
-    if exists(original_env):
-        copied_env = copy(original_env, copied_env)
-
-    yield
-
-    if exists(copied_env):
-        copy(copied_env, original_env)
 
 
 @pytest.fixture()
@@ -108,7 +95,8 @@ def config_file_correct(tmpdir, create_yaml_content):
 
 @pytest.fixture()
 def config_file_incorrect(tmpdir, create_yaml_content):
-    """Create configuration file in YAML format with missing root_passwd field"""
+    """Create configuration file in YAML format with missing root_passwd
+    field """
     ymal_path = join(tmpdir, "test_configuration.yaml")
     content = create_yaml_content
     content.pop("root_passwd")
@@ -118,24 +106,10 @@ def config_file_incorrect(tmpdir, create_yaml_content):
 
 
 @pytest.fixture()
-def loaded_env(config_file_correct, real_factory, remove_env, src_path):
-    dir_path = ""
-    if exists(join(src_path, '.env')):
-        dir_path = real_factory.create_dir()
-        copy2(join(src_path, '.env'), dir_path)
-    env_path = load_env(config_file_correct)
-
-    load_dotenv(env_path)
-    ca_dir = environ['CA_DIR']
-    for path in ("CA_DIR", "TMP", "CERTS", "KEYS", "BACKUP"):
-        real_factory.create_dir(Path(environ[path]))
-    real_factory.create_dir(Path(f"{ca_dir}/conf"))
-    real_factory.create_dir(Path("/var/log/scautolib"))
-
-    yield env_path, config_file_correct
-
-    if dir_path != "":
-        copy2(join(dir_path, '.env'), join(src_path, '.env'))
+def loaded_env(config_file_correct, real_factory, src_path):
+    prepare_dirs()
+    init_config(config_file_correct)
+    return config_file_correct
 
 
 @pytest.fixture()
@@ -166,31 +140,16 @@ def real_factory(tmp_path_factory):
 
 
 @pytest.fixture()
-def prep_ca(loaded_env):
+def ca_dirs(loaded_env):
     """Prepare directories and files needed for local CA deployment"""
-    env.create_cnf("ca")
-
-    return environ['CA_DIR']
+    Path(join(LIB_DIR, "ca", "conf")).mkdir(parents=True, exist_ok=True)
 
 
 @pytest.fixture()
-def prep_ca_real(prep_ca):
+def prep_ca(ca_dirs):
     """Prepare directories and files needed for local CA deployment"""
+    env.create_cnf("ca", conf_dir=join(LIB_DIR, "ca", "conf"))
     env.setup_ca_()
-    return environ['CA_DIR']
-
-
-@pytest.fixture()
-def clean_conf(loaded_env):
-    try:
-        yield
-    finally:
-        load_dotenv(loaded_env[0])
-        with open(environ["CONF"], "r") as f:
-            data = load(f, Loader=FullLoader)
-        data["restore"] = []
-        with open(environ["CONF"], "w") as f:
-            dump(data, f)
 
 
 @pytest.fixture()
@@ -202,23 +161,6 @@ def test_user():
         check_output(["useradd", username, "-m"])
     user = {"name": username, "local": True}
     return user
-
-
-@pytest.fixture()
-def loaded_env_ready(loaded_env):
-    env_path = loaded_env[0]
-    with open(env_path, "a") as f:
-        f.write("READY=1")
-    load_dotenv(env_path)
-    return env_path, environ["CONF"]
-
-
-@pytest.fixture()
-def remove_env(src_path):
-    try:
-        yield
-    finally:
-        remove(join(src_path, ".env"))
 
 
 @pytest.fixture(scope="function")
@@ -234,6 +176,16 @@ def dummy_config(tmpdir):
         cnf.write(f)
 
     return conf
+
+
+@pytest.fixture(autouse=True)
+def clean_etc():
+    """Remove existing library configurations after each test case."""
+    yield
+    if exists(CONF):
+        unlink(CONF)
+    if exists(LIB_CONF):
+        unlink(LIB_CONF)
 
 
 @pytest.fixture(scope="function")
