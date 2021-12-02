@@ -13,8 +13,9 @@ from traceback import format_exc
 import paramiko
 import python_freeipa as pipa
 import yaml
-from SCAutolib.src import (utils, env_logger, read_config, read_env,
-                           SETUP_IPA_SERVER, DIR_PATH)
+from SCAutolib.src import (utils, env_logger, read_config, SETUP_IPA_SERVER,
+                           set_config, LIB_CONF, LIB_CA, LIB_BACKUP,
+                           LIB_KEYS, LIB_CERTS, LIB_DIR)
 from SCAutolib.src.exceptions import UnspecifiedParameter, SCAutolibException
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -31,14 +32,13 @@ def create_cnf(user: str, conf_dir=None):
         conf_dir: directory where CNF file would be placed.
     """
     if user == "ca":
-        ca_dir = read_config("ca_dir")
-        conf_dir = join(ca_dir, "conf")
+        conf_dir = join(LIB_CA, "conf")
 
         ca_cnf = f"""[ ca ]
 default_ca = CA_default
 
 [ CA_default ]
-dir              = {ca_dir}
+dir              = {LIB_CA}
 database         = $dir/index.txt
 new_certs_dir    = $dir/newcerts
 
@@ -178,9 +178,9 @@ def create_softhsm2_config(card_dir: str):
 
 
 def create_virt_card_service(username: str, card_dir: str):
-    """Create systemd service for for virtual smart card. Service will have
+    """Create systemd service for virtual smart card. Service will have
     a name in form of virt_cacard_<username>.service where <username> would be
-    replace with value specified by username parameter.
+    replaced with value specified by username parameter.
     Args:
          username: username of the user for the virtual smart card.
          card_dir: directory where all necessary item for virtual smart card
@@ -218,51 +218,50 @@ def create_virt_card_service(username: str, card_dir: str):
 
 def setup_ca_():
     """Executes script for setting up local CA. All necessary files and
-    directories will be created in path specified by ca_dir field in
+    directories will be created in path specified by LIB_CA field in
     the configuration file.
     """
-    ca_dir = read_env("CA_DIR")
-    conf_dir = join(ca_dir, "conf")
-    newcerts = join(ca_dir, "newcerts")
-    certs = join(ca_dir, "certs")
-    crl = join(ca_dir, "crl")
+    conf_dir = join(LIB_CA, "conf")
+    newcerts = join(LIB_CA, "newcerts")
+    certs = join(LIB_CA, "certs")
+    crl = join(LIB_CA, "crl")
     env_logger.debug("Start setup of local CA")
     ca_db = "/etc/sssd/pki/sssd_auth_ca_db.pem"
     try:
-        if exists(ca_dir):
+        if exists(LIB_CA):
             # FIXME restore CA directory
-            env_logger.warning(f"CA directory {ca_dir} alredy exists.")
-            rmtree(ca_dir)
+            env_logger.warning(f"CA directory {LIB_CA} alredy exists.")
+            rmtree(LIB_CA)
             env_logger.warning(f"CA directory is deleted. A new one would "
-                               f"be created in {ca_dir}")
-        for d in (ca_dir, certs, crl, conf_dir, newcerts):
-            prepare_dir(d, conf=False)
-        prep_tmp_dirs()
+                               f"be created in {LIB_CA}")
+        for d in (LIB_CA, certs, crl, conf_dir, newcerts):
+            create_dir(d, conf=False)
+
         env_logger.debug("Directories for local CA are created")
         create_cnf("ca", conf_dir)
 
-        with open(join(ca_dir, "serial"), "w") as f:
+        with open(join(LIB_CA, "serial"), "w") as f:
             f.write("01")
-        for f in (join(ca_dir, "index.txt"), join(ca_dir, "crlnumber"),
-                  join(ca_dir, "index.txt.attr")):
+        for f in (join(LIB_CA, "index.txt"), join(LIB_CA, "crlnumber"),
+                  join(LIB_CA, "index.txt.attr")):
             Path(f).touch()
         env_logger.debug("Files for local CA are created")
 
         run(['openssl', 'req', '-batch', '-config', join(conf_dir, "ca.cnf"),
              '-x509', '-new', '-nodes', '-newkey', 'rsa:2048', '-keyout',
-             join(ca_dir, "rootCA.key"), '-sha256', '-set_serial', '0',
+             join(LIB_CA, "rootCA.key"), '-sha256', '-set_serial', '0',
              '-extensions', 'v3_ca', '-out',
-             join(ca_dir, "rootCA.pem")])
+             join(LIB_CA, "rootCA.pem")])
         env_logger.debug(
-            f"Key for local CA is created {join(ca_dir, 'rootCA.key')}")
+            f"Key for local CA is created {join(LIB_CA, 'rootCA.key')}")
         env_logger.debug(
-            f"Certificate for local CA is created {join(ca_dir,'rootCA.pem')}")
+            f"Certificate for local CA is created {join(LIB_CA,'rootCA.pem')}")
 
         run(['openssl', 'ca', '-config', join(conf_dir, 'ca.cnf'), '-gencrl',
-             '-out', join(ca_dir, "crl", "root.crl")])
+             '-out', join(LIB_CA, "crl", "root.crl")])
         env_logger.debug(f"CRL is created {crl}")
 
-        with open(join(ca_dir, "rootCA.pem"), "r") as f_cert:
+        with open(join(LIB_CA, "rootCA.pem"), "r") as f_cert:
             root_cert = f_cert.read()
 
         if exists(ca_db):
@@ -306,7 +305,6 @@ def setup_virt_card_(user: dict):
     softhsm_conf = join(user_conf_dir, "softhsm2.conf")
 
     p11lib = '/usr/lib64/pkcs11/libsofthsm2.so'
-    ca_dir = read_env("CA_DIR")
     pin = '123456'
     sopin = '12345678'
 
@@ -382,8 +380,8 @@ def setup_virt_card_(user: dict):
 
             env_logger.debug(f"User CSR is created {csr} using {cnf_file}")
 
-            run(["openssl", "ca", "-config", join(ca_dir, "conf", "ca.cnf"),
-                 "-batch", "-keyfile", join(ca_dir, "rootCA.key"), "-in", csr,
+            run(["openssl", "ca", "-config", join(LIB_CA, "conf", "ca.cnf"),
+                 "-batch", "-keyfile", join(LIB_CA, "rootCA.key"), "-in", csr,
                  "-notext", "-days", "365", "-extensions", "usr_cert",
                  "-out", cert])
             env_logger.debug(f"User certificates is created {cert}.")
@@ -427,15 +425,15 @@ def check_semodule():
     """Checks if specific SELinux module for virtual smart card is installed.
     This is implemented be checking the hardcoded name for the module
     (virtcacard) to be present in the list of SELinux modules. If this name is
-    not present in the list, than virtcacard.cil file would be created in conf
-    or sub-directory in the CA directory specified by the configuration file.
+    not present in the list, then virtcacard.cil file would be created in conf
+    or subdirectory in the CA directory specified by the configuration file.
     """
     result = run("semodule -l")
     if "virtcacard" not in result.stdout:
         env_logger.debug(
             "SELinux module for virtual smart cards is not present in the "
             "system. Installing...")
-    conf_dir = join(read_env("CA_DIR"), 'conf')
+    conf_dir = join(LIB_CA, 'conf')
     module = """
 (allow pcscd_t node_t(tcp_socket(node_bind)))
 ; allow p11_child to read softhsm cache - not present in RHEL by default
@@ -459,10 +457,9 @@ def check_semodule():
         raise
 
 
-def prepare_dir(dir_path: str, conf=True):
+def create_dir(dir_path: str, conf=True):
     """Create directory on given path and optionally create the conf/
     sub-directory inside.
-
     Args:
         dir_path: path where directory need to be created.
         conf: specifies if conf / sub-directory need to be created in the given
@@ -475,16 +472,15 @@ def prepare_dir(dir_path: str, conf=True):
         env_logger.debug(f"Directory {join(dir_path, 'conf')} is created")
 
 
-def prep_tmp_dirs():
+def prepare_dirs():
     """
     Prepare directory structure for test environment. All paths are taken from
     previously loaded env file.
     """
-    paths = [read_env(path, cast=str)
-             for path in ("CA_DIR", "TMP", "BACKUP")] + \
-            [join(read_env("CA_DIR"), "conf"), "/var/log/scautolib/"]
+
+    paths = (LIB_CA, LIB_BACKUP, LIB_KEYS, LIB_CERTS, join(LIB_CA, "conf"))
     for path in paths:
-        prepare_dir(path, conf=False)
+        create_dir(path, conf=False)
 
 
 def install_ipa_client_(ip: str, passwd: str, server_hostname: str = None):
@@ -506,7 +502,7 @@ def install_ipa_client_(ip: str, passwd: str, server_hostname: str = None):
     domain = read_config("ipa_domain")
     realm = read_config("ipa_realm")
     admin_passwd = read_config("ipa_server_admin_passwd")
-    ipa_client_script = join(read_env("TMP"), "ipa-client-sc.sh")
+    ipa_client_script = join(LIB_DIR, "ipa-client-sc.sh")
     with open("/etc/hosts", "r") as f:
         data = f.read()
 
@@ -605,7 +601,7 @@ def add_ipa_user_(user: dict, ipa_hostname: str = None):
         user:dictionary with username('name' field), directory where
               virtual smart card to be created ('card_dir' field). This directory
               would contain also certificate & private key, all other
-              sub-directories need be virtual smart card(tokens, db, etc.).
+              subdirectories need be virtual smart card(tokens, db, etc.).
               Also, dictionary can contain custom paths to key, certificate and
               CSR where to save corresponding items.
         ipa_hostname: hostname of IPA server. If non, tries to read
@@ -636,7 +632,7 @@ def add_ipa_user_(user: dict, ipa_hostname: str = None):
 
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
 
-    prepare_dir(user_dir)
+    create_dir(user_dir)
 
     with open(key_path, "wb") as f:
         f.write(key.private_bytes(
@@ -676,7 +672,7 @@ def general_setup(install_missing: bool = True):
         install_missing: specifies if missing packages need to be automatically
                          installed.
     """
-    if read_env("READY", cast=int, default=0) != 1:
+    if not read_config("ready", which="lib"):
         check_semodule()
         packages = ["softhsm", "sssd-tools", "httpd", "sssd", "gdm",
                     "pcsc-lite-ccid", "pcsc-lite"]
@@ -693,7 +689,7 @@ def general_setup(install_missing: bool = True):
                     env_logger.debug("virt_cacard is installed")
 
                 else:
-                    # Currently there is no COPR repository for
+                    # Currently, there is no COPR repository for
                     # smartcards for RHEL 9
                     env_logger.warning("Installing of virtual smartcard has to"
                                        "be done manually in RHEL 9 for now.")
@@ -732,8 +728,7 @@ def general_setup(install_missing: bool = True):
             env_logger.debug("Base user with username 'base-user' is created "
                              "with no password")
 
-            with open(join(DIR_PATH, ".env"), "a") as f:
-                f.write("READY=1\n")
+            set_config("ready", True)
 
         except:
             env_logger.error("General setup is failed")
@@ -748,13 +743,13 @@ def create_sc(sc_user: dict):
         sc_user: dictionary with username('name' field), directory where
                  virtual smart card to be created ('card_dir' field). This
                  directory would contain also a certificate & private key, all
-                 other sub-directories need be virtual smart card
+                 other subdirectories need be virtual smart card
                  (tokens, db, etc.)
     """
     name, card_dir = sc_user["name"], sc_user["card_dir"]
-    prepare_dir(card_dir)
+    create_dir(card_dir)
     for d in (join(card_dir, "db"), join(card_dir, "tokens")):
-        prepare_dir(d, False)
+        create_dir(d, False)
     create_softhsm2_config(card_dir)
     create_virt_card_service(name, card_dir)
     setup_virt_card_(sc_user)
@@ -767,7 +762,7 @@ def check_config(conf: str) -> bool:
     Args:
         conf: path to configuration file in YAML format
     Return:
-        True if config file contain everything what is needed. Otherwise False.
+        True if config file contain everything what is needed. Otherwise, False.
     """
     with open(conf, "r") as file:
         config_data = yaml.load(file, Loader=yaml.FullLoader)
@@ -798,7 +793,7 @@ def add_restore(type_: str, src: str, backup: str = None):
         backup: applicable only for file and dir type. Path where original
                 source was placed.
     """
-    with open(read_env("CONF"), "r") as f:
+    with open(LIB_CONF, "r") as f:
         data = yaml.load(f, Loader=yaml.FullLoader)
         assert data
 
@@ -807,20 +802,13 @@ def add_restore(type_: str, src: str, backup: str = None):
                            f"correctly restored")
     data["restore"].append({"type": type_, "src": src, "backup_dir": backup})
 
-    with open(read_env("CONF"), "w") as f:
+    with open(LIB_CONF, "w") as f:
         yaml.dump(data, f)
 
 
-def cleanup_(restore_items: list):
-    """Cleans the system after library setup testing environment.
-
-    Args:
-        restore_items: list of items to be restore. Item is a dict with specific
-                       fields. Item has to contain at list type (file/dir/user)
-                       and src (or username if type is 'user'). Type field can
-                       also be some custom type, but it wouldn't be restore by
-                       this function.
-    """
+def cleanup_():
+    """Cleans the system after library setup testing environment."""
+    restore_items = read_config("restore", which="lib")
     for item in restore_items:
         type_ = item['type']
         src = item['src']
