@@ -2,6 +2,7 @@
 # Unit tests for of SCAutolib.src.env_cli module
 import subprocess
 import pytest
+from yaml import FullLoader
 from click.testing import CliRunner
 from SCAutolib.src import env_cli
 from SCAutolib.test.fixtures import *
@@ -60,6 +61,7 @@ def test_prepare_simple_install_missing(config_file_correct, runner, caplog):
     assert "Preparation of the environments is completed" in caplog.messages
 
 
+@pytest.mark.ipa()
 def test_prepare_ipa_no_ip(config_file_correct, caplog, runner):
     result = runner.invoke(env_cli.prepare, ["--conf", config_file_correct,
                                              "--ipa"])
@@ -69,6 +71,7 @@ def test_prepare_ipa_no_ip(config_file_correct, caplog, runner):
            in caplog.messages
 
 
+@pytest.mark.ipa()
 def test_prepare_ca(config_file_correct, caplog, runner):
     result = runner.invoke(env_cli.prepare, ["--conf", config_file_correct,
                                              "--ca"])
@@ -148,7 +151,6 @@ def test_prepare_ipa_cards(config_file_correct, caplog, runner, ipa_ip,
                            ["--conf", config_file_correct, "--ipa",
                             "--server-ip", ipa_ip, "--server-hostname",
                             ipa_hostname, "--cards"])
-    load_dotenv(f"{src_path}/.env")
 
     with open(config_file_correct, "r") as f:
         data = load(f, Loader=FullLoader)
@@ -241,7 +243,7 @@ def test_cleanup(real_factory, loaded_env, caplog, runner, test_user):
 
     # Directory is correctly deleted
     assert f"Directory {src_dir_not_backup} is deleted"
-    assert not exists(src_file_not_bakcup)
+    assert not exists(src_dir_not_backup)
 
     # User is correctly deleted
     assert f"Local user {test_user['name']} is removed." in caplog.messages
