@@ -1,18 +1,14 @@
-import pwd
 import subprocess
 from configparser import ConfigParser
-from os import remove, environ, unlink
+from os import unlink
 from os.path import dirname, join, exists
 from pathlib import Path
-from shutil import copy
-from subprocess import check_output
 
+import pwd
 import pytest
+import yaml
 from SCAutolib.src import env, init_config, LIB_DIR, CONF, LIB_CONF
 from SCAutolib.src.env import prepare_dirs
-from dotenv import load_dotenv
-from yaml import dump, load, FullLoader
-from shutil import copy2
 
 
 @pytest.fixture()
@@ -33,12 +29,6 @@ def zero_rc_output(simple_output):
 @pytest.fixture()
 def non_zero_rc_output(simple_output):
     return f"{simple_output}\nRC:256\n{simple_output}"
-
-
-@pytest.fixture()
-def env_file(src_path):
-    with open(f"{src_path}/.env", "w") as f:
-        f.write("")
 
 
 @pytest.fixture()
@@ -89,7 +79,7 @@ def config_file_correct(tmpdir, create_yaml_content):
     """Create configuration file in YAML format with all required fields."""
     ymal_path = join(tmpdir, "test_configuration.yaml")
     with open(ymal_path, "w") as f:
-        dump(create_yaml_content, f)
+        yaml.dump(create_yaml_content, f)
     return ymal_path
 
 
@@ -101,7 +91,7 @@ def config_file_incorrect(tmpdir, create_yaml_content):
     content = create_yaml_content
     content.pop("root_passwd")
     with open(ymal_path, "w") as f:
-        dump(content, f)
+        yaml.dump(content, f)
     return ymal_path
 
 
@@ -158,7 +148,7 @@ def test_user():
     try:
         pwd.getpwnam(username)
     except KeyError:
-        check_output(["useradd", username, "-m"])
+        subprocess.check_output(["useradd", username, "-m"])
     user = {"name": username, "local": True}
     return user
 
@@ -190,7 +180,7 @@ def clean_etc():
 
 @pytest.fixture(scope="function")
 def ready_ipa(loaded_env, ipa_ip, ipa_hostname, src_path):
-    _, config_file = loaded_env
+    config_file = loaded_env
 
     with open(config_file, "r") as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
