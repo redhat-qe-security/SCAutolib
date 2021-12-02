@@ -7,14 +7,13 @@ from os.path import isfile
 from SCAutolib.src.env import *
 from SCAutolib.src.exceptions import *
 from SCAutolib.test.fixtures import *
-from dotenv import load_dotenv
 from pytest import raises
 from yaml import load, FullLoader
 
 
-def test_create_sssd_config(tmpdir, loaded_env, clean_conf):
+def test_create_sssd_config(tmpdir, loaded_env):
     """Check correct creation og sssd.conf with basic sections and
-    permission."""
+    permission. """
     # Arrange
     sssd_conf = "/etc/sssd/sssd.conf"
     if exists(sssd_conf):
@@ -47,8 +46,7 @@ def test_create_cnf(tmpdir):
 
 def test_create_cnf_ca(prep_ca):
     username = "ca"
-    ca_dir = prep_ca
-    conf_dir = f"{ca_dir}/conf"
+    conf_dir = f"{LIB_CA}/conf"
     ca_cnf = join(conf_dir, "ca.cnf")
 
     create_cnf(username, conf_dir)
@@ -56,7 +54,7 @@ def test_create_cnf_ca(prep_ca):
 
     with open(ca_cnf, "r") as f:
         content = f.read()
-    assert re.findall(f"dir[ ]*=[ ]*{ca_dir}", content)
+    assert re.findall(f"dir[ ]*=[ ]*{LIB_CA}", content)
 
 
 def test_create_cnf_exception():
@@ -119,27 +117,13 @@ def test_check_config_false(config_file_incorrect, caplog):
     assert "Field root_passwd is not present in the config." in caplog.messages
 
 
-def test_load_env(config_file_correct):
-    env_path = load_env(config_file_correct)
-    assert exists(env_path)
-    load_dotenv(env_path)
-    for field in ("TMP", "KEYS", "CERTS", "BACKUP", "CONF", "CA_DIR"):
-        assert field in environ
-    with open(config_file_correct, "r") as f:
-        data = load(f, Loader=FullLoader)
-    assert "restore" in data.keys()
-    assert len(data["restore"]) == 0
-
-
-def test_add_restore(loaded_env, clean_conf):
-    env_path, _ = loaded_env
+def test_add_restore(loaded_env):
     src = '/src/some.file'
     dest = '/dest/some.file'
 
     add_restore("file", src, dest)
-    load_dotenv(env_path)
 
-    with open(environ["CONF"], "r") as f:
+    with open(LIB_CONF, "r") as f:
         data = load(f, Loader=FullLoader)
 
     assert len(data["restore"]) == 1
@@ -151,38 +135,36 @@ def test_add_restore(loaded_env, clean_conf):
     assert restore["src"] == src
 
 
-def test_add_restore_wrong_type(caplog, loaded_env, clean_conf):
-    env_path, _ = loaded_env
+def test_add_restore_wrong_type(caplog, loaded_env):
 
     add_restore("file", "src", "dest")
     add_restore("wrong_type", "src", "dest")
 
-    load_dotenv(env_path)
-    with open(environ["CONF"], "r") as f:
+    with open(LIB_CONF, "r") as f:
         data = load(f, Loader=FullLoader)
 
     assert len(data["restore"]) == 2
 
     restore = data["restore"][0]
-    msg = "Type wrong_type is not know, so this item can't be correctly restored"
+    msg = "Type wrong_type is not know, so this item can't be correctly " \
+          "restored"
     assert restore["type"] == "file"
     assert restore["backup_dir"] == "dest"
     assert restore["src"] == "src"
     assert msg in caplog.messages
 
 
-def test_setup_ca(prep_ca, caplog):
-    """Test for secess setup of local CA."""
-    ca_dir = prep_ca
+def test_setup_ca(ca_dirs, caplog):
+    """Test for setup of local CA."""
     create_cnf("ca")
     setup_ca_()
 
     # Assert
     assert "Setup of local CA is completed" in caplog.messages
-    assert exists(f"{ca_dir}/rootCA.pem")
-    assert exists(f"{ca_dir}/rootCA.key")
+    assert exists(f"{LIB_CA}/rootCA.pem")
+    assert exists(f"{LIB_CA}/rootCA.key")
 
-    with open(f"{ca_dir}/rootCA.pem", "r") as f:
+    with open(f"{LIB_CA}/rootCA.pem", "r") as f:
         root_crt = f.read()
 
     with open("/etc/sssd/pki/sssd_auth_ca_db.pem", "r") as f:
@@ -192,7 +174,7 @@ def test_setup_ca(prep_ca, caplog):
 
 
 @pytest.mark.service_restart()
-def test_create_sc(prep_ca_real, caplog):
+def test_create_sc(prep_ca, caplog):
     user = read_config("local_user")
     card_dir = user["card_dir"]
     cert, key = join(card_dir, f"{user['name']}.crt"), join(

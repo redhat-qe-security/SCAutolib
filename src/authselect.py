@@ -10,7 +10,7 @@ class Authselect:
 
     def __init__(self, required=False, lock_on_removal=False, mk_homedir=False):
         """
-        Construcotr for Authselect class. By default only with-smartcard option
+        Constructor for Authselect class. By default, only with-smartcard option
         is used. When setting the SSSD profile, also --force is used. Previous
         configuration would be store into backup file and restored on exiting
         the context manager.
