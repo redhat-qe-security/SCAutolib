@@ -1,5 +1,4 @@
 import os
-import pwd
 import subprocess
 from configparser import ConfigParser
 from os import chmod, remove
@@ -10,7 +9,7 @@ from shutil import rmtree, copytree, copyfile
 from subprocess import PIPE, Popen, CalledProcessError
 from traceback import format_exc
 
-import paramiko
+import pwd
 import python_freeipa as pipa
 import yaml
 from SCAutolib.src import (utils, env_logger, read_config, SETUP_IPA_SERVER,
@@ -19,6 +18,8 @@ from SCAutolib.src import (utils, env_logger, read_config, SETUP_IPA_SERVER,
 from SCAutolib.src.exceptions import UnspecifiedParameter, SCAutolibException
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
+from fabric import Connection
+from invoke import Responder
 
 
 def create_cnf(user: str, conf_dir=None):
@@ -369,14 +370,14 @@ def setup_virt_card_(user: dict):
         out = run(f"modutil -list -dbdir sql:{nssdb}")
         if "library name: p11-kit-proxy.so" not in out.stdout:
             run(["modutil", "-force", "-add", 'SoftHSM PKCS#11', "-dbdir",
-                f"sql:{nssdb}", "-libfile", p11lib])
+                 f"sql:{nssdb}", "-libfile", p11lib])
             env_logger.debug("SoftHSM support is added to NSS database")
 
         if new_cert:
             run(f"openssl genrsa -out {key} 2048")
             env_logger.debug("User key is created")
             run(["openssl", "req", "-new", "-nodes", "-key", key,
-                "-reqexts", "req_exts", "-config", cnf_file, "-out", csr])
+                 "-reqexts", "req_exts", "-config", cnf_file, "-out", csr])
 
             env_logger.debug(f"User CSR is created {csr} using {cnf_file}")
 
@@ -428,7 +429,7 @@ def check_semodule():
     not present in the list, then virtcacard.cil file would be created in conf
     or subdirectory in the CA directory specified by the configuration file.
     """
-    result = run("semodule -l")
+    result = run("semodule -l", print_=False)
     if "virtcacard" not in result.stdout:
         env_logger.debug(
             "SELinux module for virtual smart cards is not present in the "
@@ -551,27 +552,21 @@ def install_ipa_client_(ip: str, passwd: str, server_hostname: str = None):
         run("kinit admin", input=admin_passwd)
         env_logger.debug("Kerberos ticket for admin user is obtained")
 
-        ssh = paramiko.SSHClient()
-        ssh.load_system_host_keys()
-        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh.connect(ip, username="root", password=passwd, look_for_keys=False)
-
-        ssh_stdin, ssh_stdout, ssh_stderr = ssh.exec_command("kinit admin")
-        ssh_stdin.write(f"{admin_passwd}\n")
-        ssh_stdin.flush()
-        ssh_stdin, ssh_stdout, ssh_stderr = ssh.exec_command(
-            "ipa-advise config-client-for-smart-card-auth")  # noqa: E501
-
-        with open(ipa_client_script, "w") as f:
-            f.writelines(ssh_stdout.readlines())
-        ssh.close()
+        kinitpass = Responder(pattern="Password for admin@SC.TEST.COM: ",
+                              response="SECret.123\n")
+        with Connection(ip, user="root",
+                        connect_kwargs={"password": passwd}) as c:
+            c.open()
+            c.run("kinit admin", pty=True, watchers=[kinitpass])
+            result = c.run("ipa-advise config-client-for-smart-card-auth")
+            with open(ipa_client_script, "w") as f:
+                f.write(result.stdout)
 
         if os.stat(ipa_client_script).st_size == 0:
             msg = "Script for IPA client smart card setup is not correctly " \
                   "copied to the host"
-            env_logger.error(ssh_stderr.read())
-            env_logger.error(ssh_stdout.read())
-
+            env_logger.error(result.stdout)
+            env_logger.error(result.stderr)
             raise SCAutolibException(msg)
 
         env_logger.debug("File for setting up IPA client for smart cards is "
@@ -586,6 +581,7 @@ def install_ipa_client_(ip: str, passwd: str, server_hostname: str = None):
             run("ipa pwpolicy-mod global_policy --minlife 0 --maxlife 365")
             env_logger.debug("Password policy for IPA is changed.")
 
+        add_restore(type_="host", src=client_hostname)
         env_logger.debug("IPA client is configured on the system. "
                          "Don't forget to add IPA user by add-ipa-user command")
     except:
@@ -615,19 +611,20 @@ def add_ipa_user_(user: dict, ipa_hostname: str = None):
     csr_path = user["csr"] if "csr" in user.keys() else f"{user_dir}/cert.csr"
     env_logger.debug(f"Adding user {username} to IPA server")
     ipa_admin_passwd = read_config("ipa_server_admin_passwd")
+    default_passwd = "redhat"
     if ipa_hostname is None:
         ipa_hostname = read_config("ipa_server_hostname")
         if ipa_hostname is None:
             raise UnspecifiedParameter("ipa_hostname")
 
-    client = pipa.ClientMeta(ipa_hostname, verify_ssl=False)
-    client.login("admin", ipa_admin_passwd)
+    client_meta = pipa.ClientMeta(ipa_hostname, verify_ssl=False)
+    client_meta.login("admin", ipa_admin_passwd)
     try:
-        client.user_add(username, username, username, username,
-                        o_userpassword=passwd)
+        client_meta.user_add(username, username, username, username,
+                             o_userpassword=default_passwd)
     except pipa.exceptions.DuplicateEntry:
-        env_logger.error(f"User {username} already exists on the IPA server "
-                         f"{ipa_hostname}.")
+        env_logger.error(
+            f"User {username} already exists on the IPA server {ipa_hostname}.")
         raise
 
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
@@ -653,7 +650,11 @@ def add_ipa_user_(user: dict, ipa_hostname: str = None):
         env_logger.error(f"Error while requesting the certificate for user "
                          f"{username} from IPA server")
         raise
+    client = pipa.client.Client(ipa_hostname, verify_ssl=False)
+    client.change_password(username, passwd, default_passwd)
+
     add_restore("user", user)
+
     env_logger.debug(f"User {username} is updated on IPA server. "
                      f"Cert and key stored into {user_dir}")
 
@@ -705,7 +706,8 @@ def general_setup(install_missing: bool = True):
                 if pkg not in out.stdout:
                     if install_missing:
                         env_logger.warning(
-                            f"Package {pkg} is not installed on the system. Installing...")  # noqa: E501
+                            f"Package {pkg} is not installed on the system. "
+                            f"Installing...")
                         run(f"dnf install {pkg} -y")
                         pkg = run(["rpm", "-qa", pkg]).stdout
                         env_logger.debug(f"Package {pkg} is installed")
@@ -845,19 +847,28 @@ def cleanup_():
                 client.user_del(username, o_preserve=True)
                 env_logger.debug(
                     f"IPA user {username} is remove from the IPA server.")
+        elif type_ == "host":
+            ipa_admin_passwd, ipa_hostname = read_config(
+                "ipa_server_admin_passwd", "ipa_server_hostname")
+            client = pipa.ClientMeta(ipa_hostname, verify_ssl=False)
+            client.login("admin", ipa_admin_passwd,)
+            client.host_del(src, o_updatedns=True)
+            env_logger.debug(f"Host {src} is delete from IPA server.")
         else:
             env_logger.warning(f"Skip item with unknown type '{type_}'")
 
 
-def run(cmd, stdout=PIPE, stderr=PIPE, check=False, *args, **kwargs) -> subprocess.CompletedProcess:  # noqa: E501
+def run(cmd, stdout=PIPE, stderr=PIPE, check=False, print_=True,
+        *args, **kwargs) -> subprocess.CompletedProcess:
     if type(cmd) == str:
         cmd = cmd.split(" ")
     out = subprocess.run(cmd, stdout=stdout, stderr=stderr, encoding="utf-8",
                          *args, **kwargs)
-    if out.stdout != "":
-        env_logger.debug(out.stdout)
-    if out.stderr != "":
-        env_logger.warning(out.stderr)
+    if print_:
+        if out.stdout != "":
+            env_logger.debug(out.stdout)
+        if out.stderr != "":
+            env_logger.warning(out.stderr)
 
     if check and out.returncode != 0:
         raise subprocess.CalledProcessError(out.returncode, cmd)
