@@ -9,6 +9,7 @@ from shutil import rmtree, copytree, copyfile
 from subprocess import PIPE, Popen, CalledProcessError
 from traceback import format_exc
 
+import paramiko
 import pwd
 import python_freeipa as pipa
 import yaml
@@ -556,6 +557,14 @@ def install_ipa_client_(ip: str, passwd: str, server_hostname: str = None):
                               response="SECret.123\n")
         with Connection(ip, user="root",
                         connect_kwargs={"password": passwd}) as c:
+            # Delete this block when PR in paramiko will be accepted
+            # https://github.com/paramiko/paramiko/issues/396
+            #### noqa:E266
+            paramiko.PKey.get_fingerprint = \
+                utils.PKeyChild.get_fingerprint_improved
+            c.client = paramiko.SSHClient()
+            c.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            #### noqa:E266
             c.open()
             c.run("kinit admin", pty=True, watchers=[kinitpass])
             result = c.run("ipa-advise config-client-for-smart-card-auth")
