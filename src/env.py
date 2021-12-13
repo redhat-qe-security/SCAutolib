@@ -726,6 +726,7 @@ def general_setup(install_missing: bool = True):
             env_logger.debug("Smart Card Support group in installed.")
 
             run(["useradd", "base-user", "--create-home"])
+            run(["usermod", "-aG", "wheel", "base-user"])
             add_restore("user", {"name": "base-user", "local": True})
             env_logger.debug("Base user with username 'base-user' is created "
                              "with no password")
