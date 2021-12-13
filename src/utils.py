@@ -1,6 +1,8 @@
 import datetime
 import re
 import subprocess as subp
+
+import paramiko
 import sys
 from configparser import RawConfigParser
 from os import listdir
@@ -11,14 +13,14 @@ from time import sleep
 
 import pexpect
 from SCAutolib import env_logger, base_logger
-from SCAutolib.src import env, LIB_CA, LIB_BACKUP, LIB_CERTS, \
-    LIB_KEYS
+from SCAutolib.src import env, LIB_CA, LIB_BACKUP, LIB_CERTS, LIB_KEYS
 from SCAutolib.src.exceptions import *
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 from decouple import UndefinedValueError
+from hashlib import md5
 
 SERVICES = {"sssd": "/etc/sssd/sssd.conf", "krb": "/etc/krb5.conf"}
 
@@ -333,3 +335,15 @@ def check_output(output: str, expect=None, reject=None,
                 base_logger.warning(msg)
 
     return True
+
+
+class PKeyChild(paramiko.PKey):
+    """This child class is need to fix SSH connection with MD5 algorith
+    in FIPS mode
+
+    This is just workaround until PR in paramiko would be accepted
+    https://github.com/paramiko/paramiko/issues/396. After this PR is merged,
+    delete this class
+    """
+    def get_fingerprint_improved(self):
+        return md5(self.asbytes(), usedforsecurity=False).digest()
