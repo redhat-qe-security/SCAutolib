@@ -143,8 +143,6 @@ def test_prepare_ipa(config_file_correct, caplog, runner, ipa_ip, ipa_hostname):
 @pytest.mark.slow()
 @pytest.mark.service_restart()
 @pytest.mark.ipa()
-@pytest.mark.filterwarnings(
-    'ignore:Unverified HTTPS request is being made to host.*')
 def test_prepare_ipa_cards(config_file_correct, caplog, runner, ipa_ip,
                            ipa_hostname, src_path, ipa_user):
     result = runner.invoke(env_cli.prepare,
