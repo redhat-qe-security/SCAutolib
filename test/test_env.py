@@ -202,8 +202,6 @@ matchrule = <SUBJECT>.*CN={user['name']}.*"""
 
 
 @pytest.mark.ipa
-@pytest.mark.filterwarnings(
-    'ignore:Unverified HTTPS request is being made to host.*')
 def test_add_ipa_user_duplicated_user(caplog, ready_ipa, ipa_hostname, src_path,
                                       ipa_user):
     """Test that add_ipa_user_ do not add IPA user if same user already exists

@@ -63,7 +63,7 @@ def create_yaml_content(tmpdir, ipa_user, local_user) -> dict:
         },
         "ipa_user": {
             "name": ipa_user,
-            "passwd": "654321",
+            "passwd": "SECret.123",
             "pin": "123456",
             "card_dir": card_dir,
             "cert": join(card_dir, "cert.pem"),

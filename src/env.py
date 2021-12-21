@@ -624,7 +624,7 @@ def add_ipa_user_(user: dict, ipa_hostname: str = None):
     if ipa_hostname is None:
         ipa_hostname = read_config("ipa_server_hostname")
         if ipa_hostname is None:
-            raise UnspecifiedParameter("ipa_hostname")
+            raise UnspecifiedParameter("ipa_server_hostname")
 
     client_meta = pipa.ClientMeta(ipa_hostname, verify_ssl=False)
     client_meta.login("admin", ipa_admin_passwd)
@@ -635,7 +635,8 @@ def add_ipa_user_(user: dict, ipa_hostname: str = None):
         env_logger.error(
             f"User {username} already exists on the IPA server {ipa_hostname}.")
         raise
-
+    env_logger.debug(f"User {username} is added to the IPA server with default "
+                     f"password '{default_passwd}'")
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
 
     create_dir(user_dir)
@@ -645,6 +646,7 @@ def add_ipa_user_(user: dict, ipa_hostname: str = None):
             encoding=serialization.Encoding.PEM,
             format=serialization.PrivateFormat.TraditionalOpenSSL,
             encryption_algorithm=serialization.NoEncryption()))
+    env_logger.debug(f"Private key is created in {key_path}")
     try:
         run(["openssl", "req", "-new", "-days", "365",
              "-nodes", "-key", key_path, "-out",
@@ -652,6 +654,7 @@ def add_ipa_user_(user: dict, ipa_hostname: str = None):
     except CalledProcessError:
         env_logger.error(f"Error while generating CSR for user {username}")
         raise
+
     try:
         run(["ipa", "cert-request", csr_path, "--principal",
              username, "--certificate-out", cert_path])
@@ -659,8 +662,21 @@ def add_ipa_user_(user: dict, ipa_hostname: str = None):
         env_logger.error(f"Error while requesting the certificate for user "
                          f"{username} from IPA server")
         raise
-    client = pipa.client.Client(ipa_hostname, verify_ssl=False)
-    client.change_password(username, passwd, default_passwd)
+    env_logger.debug(f"User certificate is stored to {cert_path}")
+
+    with open("/etc/hosts", "r") as f:
+        env_logger.info(f.read())
+
+    try:
+        client = pipa.client.Client(ipa_hostname, verify_ssl=False)
+        client.change_password(username, passwd, default_passwd)
+    except Exception as e:
+        env_logger.error(e)
+        env_logger.error("Error while updating the kerberos password for user "
+                         f"{username} from IPA server {ipa_hostname}")
+        raise e
+    env_logger.debug(
+        f"Kerberos password for user {username} is set to {passwd}.")
 
     add_restore("user", user)
 
@@ -685,29 +701,20 @@ def general_setup(install_missing: bool = True):
     if not read_config("ready", which="lib"):
         check_semodule()
         packages = ["softhsm", "sssd-tools", "httpd", "sssd", "gdm",
-                    "pcsc-lite-ccid", "pcsc-lite"]
+                    "pcsc-lite-ccid", "pcsc-lite", "virt_cacard", "vpcd"]
         try:
             with open('/etc/redhat-release', "r") as f:
                 if "Red Hat Enterprise Linux release 9" not in f.read():
                     run("dnf module enable -y idm:DL1")
                     run("dnf install @idm:DL1 -y")
                     env_logger.debug("idm:DL1 module is installed")
-
-                    run("dnf -y copr enable jjelen/vsmartcard")
-                    env_logger.debug("Copr repo for virt_cacard is enabled")
-                    run("dnf install virt_cacard -y")
-                    env_logger.debug("virt_cacard is installed")
-
+                if "Fedora" in f.read():
+                    packages += ["freeipa-client"]
                 else:
-                    # Currently, there is no COPR repository for
-                    # smartcards for RHEL 9
-                    env_logger.warning("Installing of virtual smartcard has to"
-                                       "be done manually in RHEL 9 for now.")
+                    packages += ["ipa-client"]
 
-                    run("dnf install ipa-client -y")
-
-            run("dnf install vpcd -y")
-            env_logger.debug("VPCD is installed")
+            run("dnf -y copr enable jjelen/vsmartcard")
+            env_logger.debug("Copr repo for virt_cacard is enabled")
 
             for pkg in packages:
                 out = run(["rpm", "-qa", pkg])
