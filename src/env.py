@@ -678,6 +678,10 @@ def add_ipa_user_(user: dict, ipa_hostname: str = None):
     env_logger.debug(
         f"Kerberos password for user {username} is set to {passwd}.")
 
+    cmd = f"usermod -aG wheel {username}"
+    run(cmd, check=True)
+    env_logger.debug(f"User {username} is added to wheel group")
+
     add_restore("user", user)
 
     env_logger.debug(f"User {username} is updated on IPA server. "
@@ -800,7 +804,7 @@ def check_config(conf: str) -> bool:
     return result
 
 
-def add_restore(type_: str, src: str, backup: str = None):
+def add_restore(type_: str, src: str or dict, backup: str = None):
     """Add new item to be restored in the cleanup phase.
 
     Args:
