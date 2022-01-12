@@ -1,3 +1,5 @@
+from os.path import exists
+
 from subprocess import check_output, PIPE
 from traceback import format_exc
 
@@ -20,6 +22,7 @@ class Authselect:
             lock_on_removal: specifies with-smartcard-lock-on-removal option
             mk_homedir: specifies with-mkhomedir option
         """
+        self._options = ["with-smartcard"]
         self._required = required
         self._lock_on_removal = lock_on_removal
         self._mk_homedir = mk_homedir
@@ -29,32 +32,37 @@ class Authselect:
         Set authselect with SSSD profile and use given options. Options are
         passed into the constructor.
         """
-        args = ["authselect", "select", "sssd", "--backup", self.backup_name,
-                "with-smartcard"]
-
         if self._required:
-            args.append("with-smartcard-required")
+            self._options.append("with-smartcard-required")
         if self._lock_on_removal:
-            args.append("with-smartcard-lock-on-removal")
+            self._options.append("with-smartcard-lock-on-removal")
         if self._mk_homedir:
-            args.append("with-mkhomedir")
-        args.append("--force")
+            self._options.append("with-mkhomedir")
+        args = ["authselect", "select", "sssd", *self._options,
+                "--backup", self.backup_name, "--force"]
 
         check_output(args, stderr=PIPE, encoding="utf=8")
         base_logger.debug(f"SSSD is set to: {' '.join(args)}")
-        base_logger.debug(f"Backupfile: {self.backup_name}")
+        base_logger.debug(f"Backup file: {self.backup_name}")
 
     def _reset(self):
         """
         Restore the previous configuration of authselect.
         """
-        check_output(["authselect", "backup-restore", self.backup_name,
-                      "--debug"], stderr=PIPE, encoding="utf=8")
+        if exists(self.backup_name):
+            check_output(["authselect", "backup-restore", self.backup_name,
+                          "--debug"], stderr=PIPE, encoding="utf=8")
 
-        check_output(["authselect", "backup-remove", self.backup_name,
-                      "--debug"], stderr=PIPE, encoding="utf=8")
-
-        base_logger.debug("Authselect backup file is restored")
+            check_output(["authselect", "backup-remove", self.backup_name,
+                          "--debug"], stderr=PIPE, encoding="utf=8")
+            base_logger.debug("Authselect backup file is restored")
+        else:
+            base_logger.warning("Authselect backup file does not exist, "
+                                "skip configuration restore.")
+            base_logger.warning("Manually disabling all features")
+            for f in self._options:
+                check_output(["authselect", "disable-feature", f])
+                base_logger.debug(f"Authselect feature {f} is disabled")
 
     def __enter__(self):
         self._set()
