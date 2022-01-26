@@ -692,20 +692,30 @@ def setup_ipa_server_():
     run(["bash", SETUP_IPA_SERVER])
 
 
-def general_setup(install_missing: bool = True):
+def general_setup(install_missing: bool, no_gdm: bool):
     """Executes script for general setup of the system. General setup includes
     check for presence of required packages. Once this function is called,
     READY environment variable is added to .env file and set to 1. When READY
     is 1, script is not executed again, even if this function is called again.
 
-    Args:
-        install_missing: specifies if missing packages need to be automatically
-                         installed.
+    :param install_missing: specifies if missing packages need to be
+                            automatically installed.
+    :type: bool
+    :param no_gdm: specifies if GDM package should not be installed
+    :type: bool
+    :return:
     """
+
     if not read_config("ready", which="lib"):
         check_semodule()
-        packages = ["softhsm", "sssd-tools", "httpd", "sssd", "gdm",
+        packages = ["softhsm", "sssd-tools", "httpd", "sssd",
                     "pcsc-lite-ccid", "pcsc-lite", "virt_cacard", "vpcd"]
+        if no_gdm:
+            env_logger.debug("GDM package is not required on the system.")
+        else:
+            packages += ["gdm"]
+            env_logger.debug("GDM package is required.")
+
         try:
             with open('/etc/redhat-release', "r") as f:
                 if "Red Hat Enterprise Linux release 9" not in f.read():
@@ -865,7 +875,7 @@ def cleanup_():
                     "ipa_server_admin_passwd", "ipa_server_hostname")
                 client = pipa.ClientMeta(ipa_hostname, verify_ssl=False)
                 client.login("admin", ipa_admin_passwd)
-                client.user_del(username, o_preserve=True)
+                client.user_del(username, o_preserve=False)
                 env_logger.debug(
                     f"IPA user {username} is remove from the IPA server.")
         elif type_ == "host":
