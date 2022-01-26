@@ -250,3 +250,10 @@ def test_cleanup(real_factory, loaded_env, caplog, runner, test_user):
 
     # Item with unknown type is skipped
     assert "Skip item with unknown type 'wrong-type'" in caplog.messages
+
+
+def test_prepare_gdm_not_required(runner, config_file_correct, caplog):
+    result = runner.invoke(env_cli.prepare, ["--conf", config_file_correct,
+                                             "--no-gdm"])
+    assert result.exit_code == 0
+    assert "GDM package is not required on the system." in caplog.messages

@@ -28,7 +28,11 @@ def cli():
 @click.option("--install-missing", "-m", is_flag=True, required=False,
               default=False,
               help="Silently install missing packages, if it would be needed")
-def prepare(cards, conf, ipa, server_ip, ca, install_missing, server_hostname):
+@click.option("--no-gdm", is_flag=True, default=False, required=False,
+              help="Specifies if GDM package should not be installed. "
+                   "Will speedup the setup phase")
+def prepare(cards, conf, ipa, server_ip, ca, install_missing, server_hostname,
+            no_gdm):
     """
     Prepare the test environment including temporary directories, necessary
     configuration files and services. Also can automatically run setup for local
@@ -49,7 +53,7 @@ def prepare(cards, conf, ipa, server_ip, ca, install_missing, server_hostname):
                     "completed.")
     env_logger.info("Start general setup")
     try:
-        general_setup(install_missing)
+        general_setup(install_missing, no_gdm)
     except Exception as e:
         env_logger.error(e)
         exit(1)
