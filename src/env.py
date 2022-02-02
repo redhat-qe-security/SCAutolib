@@ -435,28 +435,28 @@ def check_semodule():
         env_logger.debug(
             "SELinux module for virtual smart cards is not present in the "
             "system. Installing...")
-    conf_dir = join(LIB_CA, 'conf')
-    module = """
+        conf_dir = join(LIB_CA, 'conf')
+        module = """
 (allow pcscd_t node_t(tcp_socket(node_bind)))
-; allow p11_child to read softhsm cache - not present in RHEL by default
+;; allow p11_child to read softhsm cache - not present in RHEL by default
 (allow sssd_t named_cache_t(dir(read search)))"""
-    with open(f"{conf_dir}/virtcacard.cil", "w") as f:
-        f.write(module)
-    try:
-        run(["semodule", "-i", f"{conf_dir}/virtcacard.cil"], check=True)
-        env_logger.debug(
-            "SELinux module for virtual smart cards is installed")
-    except CalledProcessError:
-        env_logger.error("Error while installing SELinux module "
-                         "for virt_cacard")
-        raise
+        with open(f"{conf_dir}/virtcacard.cil", "w") as f:
+            f.write(module)
+        try:
+            run(["semodule", "-i", f"{conf_dir}/virtcacard.cil"], check=True)
+        except CalledProcessError:
+            env_logger.error("Error while installing SELinux module "
+                             "for virt_cacard")
+            raise
 
-    try:
-        run(["systemctl", "restart", "pcscd"])
-        env_logger.debug("pcscd service is restarted")
-    except CalledProcessError:
-        env_logger.error("Error while restarting the pcscd service")
-        raise
+        try:
+            run(["systemctl", "restart", "pcscd"])
+            env_logger.debug("pcscd service is restarted")
+        except CalledProcessError:
+            env_logger.error("Error while restarting the pcscd service")
+            raise
+    env_logger.debug(
+        "SELinux module for virtual smart cards is installed")
 
 
 def create_dir(dir_path: str, conf=True):
