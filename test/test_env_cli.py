@@ -144,7 +144,7 @@ def test_prepare_ipa(config_file_correct, caplog, runner, ipa_ip, ipa_hostname):
 @pytest.mark.service_restart()
 @pytest.mark.ipa()
 def test_prepare_ipa_cards(config_file_correct, caplog, runner, ipa_ip,
-                           ipa_hostname, src_path, ipa_user):
+                           ipa_hostname, src_path, ipa_user, ipa_metaclient):
     result = runner.invoke(env_cli.prepare,
                            ["--conf", config_file_correct, "--ipa",
                             "--server-ip", ipa_ip, "--server-hostname",
@@ -171,7 +171,7 @@ def test_prepare_ipa_cards(config_file_correct, caplog, runner, ipa_ip,
         assert f'SOFTHSM2_CONF="{conf_dir}/softhsm2.conf"' in content
         assert f'WorkingDirectory = {card_dir}' in content
     finally:
-        check_output(["ipa", "user-del", ipa_user, "--no-preserve"])
+        ipa_metaclient.user_del(ipa_user, o_preserve=False)
         check_output(["ipa-client-install", "--uninstall", "-U"])
 
 
