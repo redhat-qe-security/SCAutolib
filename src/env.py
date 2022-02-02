@@ -447,6 +447,7 @@ def check_semodule():
         except CalledProcessError:
             env_logger.error("Error while installing SELinux module "
                              "for virt_cacard")
+            env_logger.error(module)
             raise
 
         try:

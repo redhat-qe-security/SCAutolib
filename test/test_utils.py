@@ -117,5 +117,5 @@ def test_edit_config(dummy_config, loaded_env):
 def test_edit_config_no_section(dummy_config, loaded_env, caplog):
     utils.edit_config_(dummy_config, section="no-section", key="one",
                        value="10")
-    assert "New section no-section would be added tp config file " \
+    assert "New section no-section would be added to config file " \
            f"{dummy_config}" in caplog.messages
