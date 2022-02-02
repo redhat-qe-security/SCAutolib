@@ -79,10 +79,9 @@ def edit_config_(conf_file: str, section: str, key: str, value: str = "",
         cnf.read_file(file)
 
     if section not in cnf.sections():
-        base_logger.error(
-            f"Section {section} is not present in config file {conf_file}")
-        raise UnknownOption(
-            msg=f"Section {section} is not present in config file {conf_file}")
+        base_logger.warning(
+            f"New section {section} would be added to config file {conf_file}")
+        cnf.add_section(section)
 
     cnf.set(section, key, value)
 
