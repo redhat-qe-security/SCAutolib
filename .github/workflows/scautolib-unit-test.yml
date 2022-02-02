@@ -1,7 +1,7 @@
 name: SCAutolib Unit test
 on:
   repository_dispatch:
-    types: [test]
+    types: [test-from-dispatch]
   push:
     branches:
     - "*"
