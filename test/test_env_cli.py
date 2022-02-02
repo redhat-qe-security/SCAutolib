@@ -252,6 +252,7 @@ def test_cleanup(real_factory, loaded_env, caplog, runner, test_user):
     assert "Skip item with unknown type 'wrong-type'" in caplog.messages
 
 
+@pytest.mark.service_restart
 def test_prepare_gdm_not_required(runner, config_file_correct, caplog):
     result = runner.invoke(env_cli.prepare, ["--conf", config_file_correct,
                                              "--no-gdm"])
