@@ -6,6 +6,7 @@ from shutil import copy
 from SCAutolib.src import utils
 from SCAutolib.src.exceptions import *
 from SCAutolib.test.fixtures import *
+import pytest
 
 CUR_PATH = path.dirname(path.abspath(__file__))
 FILES = f"{CUR_PATH}/files"
@@ -114,8 +115,7 @@ def test_edit_config(dummy_config, loaded_env):
 
 
 def test_edit_config_no_section(dummy_config, loaded_env, caplog):
-    with pytest.raises(UnknownOption):
-        utils.edit_config_(dummy_config, section="no-section", key="one",
-                           value="10")
-    assert f"Section no-section is not present in config file {dummy_config}" \
-           in caplog.messages
+    utils.edit_config_(dummy_config, section="no-section", key="one",
+                       value="10")
+    assert "New section no-section would be added tp config file " \
+           f"{dummy_config}" in caplog.messages

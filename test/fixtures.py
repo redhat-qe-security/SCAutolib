@@ -9,6 +9,7 @@ import pytest
 import yaml
 from SCAutolib.src import env, init_config, LIB_DIR, CONF, LIB_CONF
 from SCAutolib.src.env import prepare_dirs
+import python_freeipa as pipa
 
 
 @pytest.fixture()
@@ -226,3 +227,10 @@ def ready_ipa(loaded_env, ipa_ip, ipa_hostname, src_path):
 
     subprocess.run(["ipa", "host-del", client_hostname, "--updatedns"])
     subprocess.run(["ipa-client-install", "--uninstall", "-U"])
+
+
+@pytest.fixture()
+def ipa_metaclient(ipa_hostname, ipa_passwd):
+    client = pipa.ClientMeta(ipa_hostname, verify_ssl=False)
+    client.login("admin", ipa_passwd)
+    return client

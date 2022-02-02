@@ -7,7 +7,7 @@ from os.path import isfile
 from SCAutolib.src.env import *
 from SCAutolib.src.exceptions import *
 from SCAutolib.test.fixtures import *
-from pytest import raises
+import pytest
 from yaml import load, FullLoader
 
 
@@ -60,7 +60,7 @@ def test_create_cnf_ca(prep_ca):
 def test_create_cnf_exception():
     username = "test-user"
 
-    with raises(UnspecifiedParameter):
+    with pytest.raises(UnspecifiedParameter):
         create_cnf(username)
 
 
@@ -136,7 +136,6 @@ def test_add_restore(loaded_env):
 
 
 def test_add_restore_wrong_type(caplog, loaded_env):
-
     add_restore("file", "src", "dest")
     add_restore("wrong_type", "src", "dest")
 
@@ -203,15 +202,17 @@ matchrule = <SUBJECT>.*CN={user['name']}.*"""
 
 @pytest.mark.ipa
 def test_add_ipa_user_duplicated_user(caplog, ready_ipa, ipa_hostname, src_path,
-                                      ipa_user):
+                                      ipa_user, ipa_metaclient):
     """Test that add_ipa_user_ do not add IPA user if same user already exists
     on the IPA server and raise corresponding exception."""
 
     card_dir = f"/tmp/{ipa_user}"
     user = {"name": ipa_user, "card_dir": card_dir, "passwd": "qwerty"}
 
-    subprocess.run(["ipa", "user-add", ipa_user, "--first", ipa_user,
-                    "--last", ipa_user])
+    ipa_metaclient.user_add(ipa_user,
+                            o_givenname=ipa_user,
+                            o_sn=ipa_user,
+                            o_cn=ipa_user)
 
     try:
         with pytest.raises(pipa.exceptions.DuplicateEntry):
@@ -219,4 +220,5 @@ def test_add_ipa_user_duplicated_user(caplog, ready_ipa, ipa_hostname, src_path,
         assert f"User {ipa_user} already exists on the IPA server " \
                f"ipa-server-beaker.sc.test.com." in caplog.messages
     finally:
-        subprocess.run(["ipa", "user-del", ipa_user, "--no-preserve"])
+        ipa_metaclient.user_del(ipa_user, o_preserve=False)
+        # subprocess.run(["ipa", "user-del", ipa_user, "--no-preserve"])
