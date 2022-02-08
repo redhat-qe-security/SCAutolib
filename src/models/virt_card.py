@@ -3,9 +3,10 @@ from traceback import format_exc
 
 from SCAutolib import base_logger
 from SCAutolib.src.env import run
+from .card import Card
 
 
-class VirtCard:
+class VirtualCard(Card):
     """
     Class that represents virtual smart card in the tests.
     The of the system level, smart card is represented as a systemd service.
