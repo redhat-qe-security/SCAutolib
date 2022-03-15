@@ -12,8 +12,8 @@ class SoftHSM2Conf(File):
         """
     #   Define how to replace values in SoftHSM2 config file
 
-    def set(self, key: str, value: str):
+    def set(self, key: str, value: str, section: str = None):
         """
-        Add content to SoftHSM2 config file
+        Add content to SoftHSM2 config files
 
         """
