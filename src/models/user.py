@@ -15,6 +15,7 @@ class User:
     username: str = None
     password: str = None
     card: Card = None
+    user_type: UserType = None
 
     def __init__(self, username: str, password: str):
         """
@@ -25,11 +26,6 @@ class User:
         :param password: password to for the user
         :type: str
         """
-        if json_exist(username):
-            self.json_load()
-        else:
-            # TODO: setup all variables
-            self.json_store()
 
     def add_user(self): ...
 
@@ -50,13 +46,6 @@ class User:
 
     def add_cert(self):
         """Add certificate to the user"""
-
-    def json_store(self):
-        """Store current user to JSON file"""
-
-    def json_load(self):
-        """Load object from JSON file"""
-#         TODO: setup all variables from JSON
 
 
 class IPAUser(User):

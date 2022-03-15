@@ -18,20 +18,19 @@ class File:
         :return:
         """
 
-    def set(self, key: str, value: str, *args, **kwargs):
+    def set(self, key: str, value: str, section: str = None):
         """
 
         :param key:
         :param value:
-        :param args:
-        :param kwargs:
+        :param section:
         :return:
         """
 
     def backup(self) -> Path:
         """
         Backup file
-        :return: path to backup file
+        :return: path to back up file
         """
 
     def restore(self):

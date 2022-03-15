@@ -14,13 +14,7 @@ class SSSDConf(File):
         """
     #   Define how to replace values in SSSD config file
 
-    def set(self, key: str, value: str, *args, **kwargs):
+    def set(self, key: str, value: str, section: str = None):
         """
         Set value in SSSD config file. Parameter 'section' has to be specified.
-
-        :param key:
-        :param value:
-        :param args:
-        :param kwargs:
-        :return:
         """
