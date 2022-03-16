@@ -1,3 +1,4 @@
+import subprocess
 from os import symlink
 from os.path import (dirname, abspath, join, exists)
 from pathlib import Path
@@ -6,6 +7,8 @@ import yaml
 from SCAutolib import env_logger
 
 DIR_PATH = dirname(abspath(__file__))
+TEMPLATES_DIR = Path(DIR_PATH, "templates")
+
 SETUP_IPA_SERVER = f"{DIR_PATH}/env/ipa-install-server.sh"
 LIB_DIR = "/etc/SCAutolib"
 Path(LIB_DIR).mkdir(parents=True, exist_ok=True)
@@ -137,3 +140,20 @@ def set_config(path, value, action="replace", type_=str):
         yaml.dump(config_data, f)
 
     env_logger.debug(f"Value for filed {path} is update to {value}")
+
+
+def run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False, print_=True,
+        *args, **kwargs) -> subprocess.CompletedProcess:
+    if type(cmd) == str:
+        cmd = cmd.split(" ")
+    out = subprocess.run(cmd, stdout=stdout, stderr=stderr, encoding="utf-8",
+                         *args, **kwargs)
+    if print_:
+        if out.stdout != "":
+            env_logger.debug(out.stdout)
+        if out.stderr != "":
+            env_logger.warning(out.stderr)
+
+    if check and out.returncode != 0:
+        raise subprocess.CalledProcessError(out.returncode, cmd)
+    return out

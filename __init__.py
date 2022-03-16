@@ -22,6 +22,10 @@ env_logger = colorlog.getLogger("env")
 env_logger.addHandler(handler)
 env_logger.setLevel(colorlog.DEBUG)
 
+logger = colorlog.getLogger("env")
+logger.addHandler(handler)
+logger.setLevel(colorlog.DEBUG)
+
 
 def hello():
     print("Hello. Just check that SCAutolib is imported")

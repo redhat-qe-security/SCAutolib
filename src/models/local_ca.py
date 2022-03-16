@@ -1,7 +1,89 @@
-from .ca import BaseCA
+from .ca import CA
+from pathlib import Path
+from shutil import rmtree, copy
+from SCAutolib import logger
+from SCAutolib.src import TEMPLATES_DIR, run
 
 
-class LocalCA(BaseCA):
+class LocalCA(CA):
+    template = Path(TEMPLATES_DIR, "ca.cnf")
+
+    def __init__(self, root_dir: Path = Path("/etc/SCAutolib/ca")):
+        """
+        Class for local CA. Initialize required attributes, real setup is made
+        by LocalCA.setup() method
+
+        :param root_dir: Path to root directory of the CA. By default, is in
+                         /etc/SCAutolib/ca
+        :type: Path
+        """
+        self.root_dir: Path = root_dir
+        self._conf_dir: Path = Path(root_dir, "conf")
+        self._newcerts: Path = Path(root_dir, "newcerts")
+        self._certs: Path = Path(root_dir, "certs")
+        self._crl_dir: Path = Path(root_dir, "crl")
+        self._crl: Path = Path(self._crl_dir, "root.crl")
+        self._ca_pki_db = Path("/etc/sssd/pki/sssd_auth_ca_db.pem")
+
+        self._ca_cnf = Path(self._conf_dir, "ca.cnf")
+        self._ca_cert = Path(root_dir, "rootCA.pem")
+        self._ca_key = Path(root_dir, "rootCA.key")
+
+        self._serial = Path(root_dir, "serial")
+        self._index = Path(root_dir, "index.txt")
+
+    def setup(self, force: bool = False):
+        # TODO: discuss how to treat if the CA is already configured
+        if self.root_dir.exists():
+            logger.warning(f"Directory {self.root_dir} already exists.")
+            if not force:
+                logger.info("CA directory exists, skipping configuration.")
+                return
+            rmtree(self.root_dir)
+
+        self.root_dir.mkdir(parents=True, exist_ok=True)
+
+        # Copy template and edit it with current root dir for CA
+        copy(self.template, self._ca_cnf)
+        with self._ca_cnf.open("r+") as f:
+            f.write(f.read().format(ROOT_DIR=self.root_dir))
+
+        self._index.touch()
+
+        # Generate self-signed certificate
+        run(['openssl', 'req', '-batch', '-config', self._ca_cnf,
+             '-x509', '-new', '-nodes', '-newkey', 'rsa:2048', '-keyout',
+             self._ca_key, '-sha256', '-set_serial', '0',
+             '-extensions', 'v3_ca', '-out', self._ca_cert])
+        logger.info(f"CA private key is generated into {self._ca_key}")
+        logger.info(
+            f"CA self-signed certificate is generated into {self._ca_cert}")
+
+        # Configuring CRL
+        run(['openssl', 'ca', '-config', self._ca_cnf, '-gencrl',
+             '-out', self._crl])
+
+        with self._ca_cert.open("r") as f_cert:
+            root_cert = f_cert.read()
+
+        if self._ca_pki_db.exists():
+            # Check if current CA cert doesn't present in the sssd auth db
+            with self._ca_pki_db.open("r") as f:
+                data = f.read()
+            if root_cert not in data:
+                with self._ca_pki_db.open("a") as f:
+                    f.write(root_cert)
+        else:
+            # Create /etc/sssd/pki directory if it doesn't exist
+            self._ca_pki_db.parents[0].mkdir(exist_ok=True)
+            with self._ca_pki_db.open("w") as f:
+                f.write(root_cert)
+        logger.debug(
+            f"CA certificate {self._ca_cert} is copied to {self._ca_pki_db}")
+        # Restoring SELinux context on the sssd auth db
+        run(f"restorecon -v {self._ca_pki_db}")
+
+        logger.info("Local CA is configured")
 
     def request_cert(self, csr, username: str):
-        """Request certificate from local CA for given username"""
+        ...
