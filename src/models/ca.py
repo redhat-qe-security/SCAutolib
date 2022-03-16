@@ -1,9 +1,20 @@
-class BaseCA:
+class CA:
 
-    def request_cert(self, csr, username: str): ...
+    def request_cert(self, csr, username: str):
+        """Request certificate from CA for given username"""
+        ...
 
-    def json_store(self):
-        """Store current CA configuration to JSON file"""
+    def setup(self, force: bool = False):
+        """
+        Configure the CA
+        :param force: In case if CA is already configured, specifies if it
+                      should be reconfigured with force
+        :return:
+        """
+        ...
 
-    def json_load(self):
-        """Load CA configuration from JSON file"""
+    def sign_cert(self):
+        ...
+
+    def revoke_cert(self):
+        ...
