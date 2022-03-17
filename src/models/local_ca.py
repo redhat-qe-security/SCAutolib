@@ -59,6 +59,8 @@ class LocalCA(CA):
         copy(self.template, self._ca_cnf)
         with self._ca_cnf.open("r+") as f:
             f.write(f.read().format(ROOT_DIR=self.root_dir))
+        with self._serial.open("w") as f:
+            f.write("01")
 
         self._index.touch()
 
@@ -97,5 +99,19 @@ class LocalCA(CA):
 
         logger.info("Local CA is configured")
 
-    def request_cert(self, csr, username: str):
-        ...
+    def request_cert(self, csr: Path, username: str) -> Path:
+        """
+        Create the certificate from CSR and sign it. Certificate is store
+        in the <root ca directory>/ca/newcerts directory with name username.pem
+
+        :param csr: path to CSR
+        :param username: subject in the CSR
+
+        :return: returns path to the signed certificate
+        """
+        cert = Path(self._certs, f"{username}.pem")
+        run(["openssl", "ca", "-config", self._ca_cnf,
+             "-batch", "-keyfile", self._ca_key, "-in", csr,
+             "-notext", "-days", "365", "-extensions", "usr_cert",
+             "-out", cert])
+        return cert
