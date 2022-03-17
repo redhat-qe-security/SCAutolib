@@ -21,9 +21,8 @@ class LocalCA(CA):
         self._conf_dir: Path = Path(root_dir, "conf")
         self._newcerts: Path = Path(root_dir, "newcerts")
         self._certs: Path = Path(root_dir, "certs")
-        self._crl_dir: Path = Path(root_dir, "crl")
-        self._crl: Path = Path(self._crl_dir, "root.crl")
-        self._ca_pki_db = Path("/etc/sssd/pki/sssd_auth_ca_db.pem")
+        self._crl: Path = Path(root_dir, "crl", "root.crl")
+        self._ca_pki_db: Path = Path("/etc/sssd/pki/sssd_auth_ca_db.pem")
 
         self._ca_cnf = Path(self._conf_dir, "ca.cnf")
         self._ca_cert = Path(root_dir, "rootCA.pem")
@@ -33,15 +32,28 @@ class LocalCA(CA):
         self._index = Path(root_dir, "index.txt")
 
     def setup(self, force: bool = False):
-        # TODO: discuss how to treat if the CA is already configured
+        """
+        Creates directory and file structure needed by local CA. If directory
+        already exists and force = True, directory would be recursively deleted
+        and new local CA would be created. Otherwise, configuration would be
+        skipped.
+
+        :param force: overwrite existing configuration with force if True,
+                      otherwise, skip configuration.
+        """
         if self.root_dir.exists():
             logger.warning(f"Directory {self.root_dir} already exists.")
             if not force:
-                logger.info("CA directory exists, skipping configuration.")
+                logger.warning("Skipping configuration.")
                 return
+            logger.warning("Removing configuration.")
             rmtree(self.root_dir)
 
         self.root_dir.mkdir(parents=True, exist_ok=True)
+        self._ca_cnf.parent.mkdir()
+        self._newcerts.mkdir()
+        self._certs.mkdir()
+        self._crl.parent.mkdir()
 
         # Copy template and edit it with current root dir for CA
         copy(self.template, self._ca_cnf)
