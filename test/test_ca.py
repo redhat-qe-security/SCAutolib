@@ -1,6 +1,10 @@
 from SCAutolib.src.models import ca, local_ca, ipa_server
 from pathlib import Path
 import pytest
+from SCAutolib.test.fixtures import local_ca
+from subprocess import check_output
+from shutil import copyfile
+from SCAutolib.src import TEMPLATES_DIR
 
 
 def test_local_ca_setup(tmpdir, caplog):
@@ -37,3 +41,20 @@ def test_local_ca_setup_force(tmpdir, caplog, force):
     else:
         assert tmp_file.exists()
         assert "Skipping configuration." in caplog.messages
+
+
+def test_request_cert(local_ca, tmpdir):
+    csr = Path(tmpdir,  "username.csr")
+    cnf = Path(tmpdir, "user.cnf")
+    copyfile(Path(TEMPLATES_DIR, "user.cnf"), Path(tmpdir, cnf))
+
+    with cnf.open("r+") as f:
+        f.write(f.read().format(user="username"))
+
+    cmd = ['openssl', 'req', '-new', '-days', '365', '-nodes', '-newkey',
+          'rsa:2048', '-keyout', f'{tmpdir}/username.key', '-out', csr,
+           "-reqexts", "req_exts", "-config", cnf]
+    check_output(cmd, encoding="utf-8")
+
+    cert = local_ca.request_cert(csr, "username")
+    assert cert.exists()
