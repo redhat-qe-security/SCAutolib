@@ -7,7 +7,7 @@ from pathlib import Path
 import pwd
 import pytest
 import yaml
-from SCAutolib.src import env, init_config, LIB_DIR, CONF, LIB_CONF
+from SCAutolib.src import env, init_config, LIB_DIR, CONF, LIB_CONF, models
 from SCAutolib.src.env import prepare_dirs
 import python_freeipa as pipa
 
@@ -138,9 +138,17 @@ def ca_dirs(loaded_env):
 
 @pytest.fixture()
 def prep_ca(ca_dirs):
+    # TODO: reevaluate neccesaty of this fixture
     """Prepare directories and files needed for local CA deployment"""
     env.create_cnf("ca", conf_dir=join(LIB_DIR, "ca", "conf"))
     env.setup_ca_()
+
+
+@pytest.fixture(scope="session")
+def local_ca(tmp_path_factory):
+    ca = models.local_ca.LocalCA(tmp_path_factory.mktemp("local-ca"))
+    ca.setup(force=True)
+    return ca
 
 
 @pytest.fixture()
