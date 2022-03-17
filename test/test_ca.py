@@ -1,11 +1,11 @@
 from SCAutolib.src.models import ca, local_ca, ipa_server
 from pathlib import Path
 import pytest
-from SCAutolib.test.fixtures import local_ca
+from SCAutolib.test.fixtures import local_ca_fixture
 from subprocess import check_output
 from shutil import copyfile
 from SCAutolib.src import TEMPLATES_DIR
-
+import re
 
 def test_local_ca_setup(tmpdir, caplog):
     ca = local_ca.LocalCA(Path(tmpdir, "ca"))
@@ -43,7 +43,7 @@ def test_local_ca_setup_force(tmpdir, caplog, force):
         assert "Skipping configuration." in caplog.messages
 
 
-def test_request_cert(local_ca, tmpdir):
+def test_request_cert(local_ca_fixture, tmpdir):
     csr = Path(tmpdir,  "username.csr")
     cnf = Path(tmpdir, "user.cnf")
     copyfile(Path(TEMPLATES_DIR, "user.cnf"), Path(tmpdir, cnf))
@@ -56,5 +56,30 @@ def test_request_cert(local_ca, tmpdir):
            "-reqexts", "req_exts", "-config", cnf]
     check_output(cmd, encoding="utf-8")
 
-    cert = local_ca.request_cert(csr, "username")
+    cert = local_ca_fixture.request_cert(csr, "username")
     assert cert.exists()
+
+
+def test_revoke_cert(local_ca_fixture, tmpdir):
+    csr = Path(tmpdir,  "username.csr")
+    cnf = Path(tmpdir, "user.cnf")
+    copyfile(Path(TEMPLATES_DIR, "user.cnf"), Path(tmpdir, cnf))
+    username = "username"
+    with cnf.open("r+") as f:
+        f.write(f.read().format(user=username))
+    cmd = ['openssl', 'req', '-new', '-days', '365', '-nodes', '-newkey',
+          'rsa:2048', '-keyout', f'{tmpdir}/{username}.key', '-out', csr,
+           "-reqexts", "req_exts", "-config", cnf]
+    check_output(cmd, encoding="utf-8")
+
+    cert = local_ca_fixture.request_cert(csr, username)
+    local_ca_fixture.revoke_cert(cert)
+
+    with local_ca_fixture._serial.open("r") as f:
+        index = int(f.read()) - 1
+
+    rex = re.compile(
+        f"^R\s+[0-9A-Z]+\s+[0-9A-Z]+\s+.*{index}\s+.*\/CN={username}\n$")
+
+    with open(Path(local_ca_fixture.root_dir, "index.txt"), "r") as f:
+        assert re.match(rex, f.read())
