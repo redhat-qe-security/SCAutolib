@@ -115,3 +115,12 @@ class LocalCA(CA):
              "-notext", "-days", "365", "-extensions", "usr_cert",
              "-out", cert])
         return cert
+
+    def revoke_cert(self, cert: Path):
+        """
+        Revoke given certificate
+
+        :param cert: path to the certificate
+        """
+        cmd = ['openssl', 'ca', '-config', self._ca_cnf, '-revoke', cert]
+        run(cmd, check=True)
