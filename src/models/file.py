@@ -9,15 +9,6 @@ class File:
         # create a file if not created
         ...
 
-    def replace(self, old: str, new: str):
-        """
-        Replace 'old' pattern with 'new' pattern in the file
-
-        :param old:
-        :param new:
-        :return:
-        """
-
     def set(self, key: str, value: str, section: str = None):
         """
 
@@ -26,6 +17,8 @@ class File:
         :param section:
         :return:
         """
+
+    def get(self):
 
     def backup(self) -> Path:
         """
