@@ -1,3 +1,6 @@
+from pathlib import Path
+
+
 class CA:
 
     def request_cert(self, csr, username: str):
@@ -16,5 +19,5 @@ class CA:
     def sign_cert(self):
         ...
 
-    def revoke_cert(self):
+    def revoke_cert(self, cert: Path):
         ...
