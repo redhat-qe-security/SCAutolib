@@ -2,7 +2,8 @@ from SCAutolib.src.models import ca, local_ca, ipa_server
 from pathlib import Path
 from SCAutolib.src.models.ipa_server import IPAServerCA
 import pytest
-from SCAutolib.test.fixtures import local_ca_fixture, ipa_ca_fixture, remove_ipa_client
+from SCAutolib.test.fixtures import local_ca_fixture, ipa_ca_fixture,\
+    remove_ipa_client, ipa_ca_with_user_fixture
 from subprocess import check_output
 from shutil import copyfile
 from SCAutolib.src import TEMPLATES_DIR
@@ -116,3 +117,10 @@ def test_ipa_server_setup_force(ipa_ip, ipa_hostname, remove_ipa_client,
     with open("/etc/ipa/ca.crt") as f:
         with open("/etc/sssd/pki/sssd_auth_ca_db.pem") as f_db:
             assert f.read() in f_db.read()
+
+
+def test_cert_request(ipa_ca_with_user_fixture):
+    ipa_ca, user = ipa_ca_with_user_fixture
+    csr = Path("./files/user.csr")
+    ipa_ca.request_cert(csr, username=user["username"], cert_out=Path("./files"))
+    assert Path(f"./files/{user['username']}.pem").exists()

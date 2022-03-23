@@ -196,6 +196,20 @@ def ipa_ca_fixture(ipa_ip, ipa_hostname, remove_ipa_client):
                              root_passwd="redhat",
                              client_hostname="client.sc.test.com")
     ipa_client.setup()
+    return ipa_client
+
+
+@pytest.fixture()
+def ipa_ca_with_user_fixture(ipa_ca_fixture):
+    user = {"username": "test-user", "passwd": "redhat"}
+    ipa_ca_fixture.meta_client.user_add(user["username"],
+                                        user["username"],
+                                        user["username"],
+                                        user["username"],
+                                        o_userpassword=user["passwd"])
+    yield ipa_ca_fixture, user
+    ipa_ca_fixture.meta_client.user_del(user["username"], o_continue=True,
+                                        o_preserve=False)
 
 
 @pytest.fixture(scope="function")
