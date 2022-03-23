@@ -12,7 +12,7 @@ from SCAutolib.src.models.user import IPAUser
 from fabric.connection import Connection
 from invoke import Responder
 from python_freeipa.client_meta import ClientMeta
-
+from cryptography import x509
 from .ca import CA
 
 
@@ -124,7 +124,7 @@ class IPAServerCA(CA):
                               response="SECret.123\n")
         with Connection(self._ipa_server_ip, user="root",
                         connect_kwargs=
-                            {"password": self._ipa_server_root_passwd}) as c:
+                        {"password": self._ipa_server_root_passwd}) as c:
             # Delete this block when PR in paramiko will be accepted
             # https://github.com/paramiko/paramiko/issues/396
             #### noqa:E266
@@ -209,8 +209,21 @@ class IPAServerCA(CA):
                                   user.username, o_userpassword=user.password)
         logger.info(f"User {user.username} is added to the IPA server")
 
-    def revoke_cert(self, cert: Path):
-        ...
+    def revoke_cert(self, cert_path: Path):
+        """
+        Revoke given certificate on the IPA server. It is a wrapper on the
+        python_freeipa.client_meta.ClientMeta.revoke_cert method. It extracts
+        serial number of the certificate from the file
+
+        :param cert_path:
+        Path to the certificate in PEM format
+        """
+        with cert_path.open("rb") as f:
+            cert = x509.load_pem_x509_certificate(f.read())
+        resp = self.meta_client.cert_revoke(cert.serial_number)
+        logger.debug(f"Response {resp}")
+        logger.info(f"Certificate {cert.serial_number} is revoked")
+        return cert.serial_number
 
     def restore(self):
         """
