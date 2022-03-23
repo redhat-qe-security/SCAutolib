@@ -8,6 +8,7 @@ from SCAutolib import logger
 from SCAutolib.src import run, LIB_DIR
 from SCAutolib.src.exceptions import SCAutolibException
 from SCAutolib.src.models.sssd_conf import SSSDConf
+from SCAutolib.src.models.user import IPAUser
 from fabric.connection import Connection
 from invoke import Responder
 from python_freeipa.client_meta import ClientMeta
@@ -184,14 +185,29 @@ class IPAServerCA(CA):
 
         if cert_out.is_dir():
             cert_out = cert_out.joinpath(f"{username}.pem")
+        elif cert_out.is_file() and not cert_out.name.endswith(".pem"):
+            cert_out.rename(cert_out.with_suffix(".pem"))
 
         with cert_out.open("w") as f:
             f.write("-----BEGIN CERTIFICATE-----\n"
                     f"{cert}\n"
                     f"-----END CERTIFICATE-----")
+        return cert_out
 
-    def add_user(self):
-        ...
+    def add_user(self, user: IPAUser):
+        """
+        Add given user to IPA server. It is a wrapper on the
+        python_freeipa.client_meta.ClientMeta.user_add method. Just extracts
+        necessary fields from IPAUser objet and pass them to the method. As a
+        result, o_givenname == o_uid == o_sn == o_cn for simplicity.
+
+        :param user:
+        User to be added to the IPA server.
+        """
+        logger.info("Adding user to IPA server")
+        self.meta_client.user_add(user.username, user.username, user.username,
+                                  user.username, o_userpassword=user.password)
+        logger.info(f"User {user.username} is added to the IPA server")
 
     def revoke_cert(self, cert: Path):
         ...
