@@ -109,7 +109,7 @@ def test_ipa_server_setup_force(ipa_ip, ipa_hostname, remove_ipa_client,
     ipa_client.setup(force=force)
     if force:
         assert "System is configured on some IPA server." in caplog.messages
-        assert "Previous installation of IPA client is removed." in caplog.messages
+        assert "IPA client is removed." in caplog.messages
     else:
         assert "IPA client is already configured on the system." in caplog.messages
 

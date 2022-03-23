@@ -62,18 +62,15 @@ class IPAServerCA(CA):
         :param force: if True, previous installation of the IPA client would be
                       removed
         """
-        out = run(["ipa", "-v"])
+        out = run(["ipa", "-v"], print_=False)
         if "IPA client is not configured on this system" not in out.stderr:
             if not force:
                 logger.warning("IPA client is already configured on the system.")
-                logger.warning("Set force argument to True to remove previous "
+                logger.warning("Set force argument to True to _remove previous "
                                "installation")
                 return
             logger.warning("System is configured on some IPA server.")
-            run(["ipa", "host-del", gethostname(), "--updatedns"],
-                check=True)
-            run(["ipa-client-install", "--uninstall", "-U"], check=True)
-            logger.info("Previous installation of IPA client is removed.")
+            self.restore()
 
         logger.info(f"Start setup of IPA client on the system for "
                     f"{self._ipa_server_hostname} IPA server.")
@@ -165,8 +162,13 @@ class IPAServerCA(CA):
     def revoke_cert(self, cert: Path):
         ...
 
-    def remove(self):
-        ...
+    def restore(self):
+        logger.info("Removing IPA client from the host "
+                    f"{self._ipa_client_hostname}")
+        run(["ipa", "host-del", gethostname(), "--updatedns"],
+            check=True)
+        run(["ipa-client-install", "--uninstall", "-U"], check=True)
+        logger.info("IPA client is removed.")
 
     class __PKeyChild(paramiko.PKey):
         """This child class is need to fix SSH connection with MD5 algorith
