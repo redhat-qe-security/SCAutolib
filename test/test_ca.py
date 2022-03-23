@@ -124,3 +124,13 @@ def test_cert_request(ipa_ca_with_user_fixture):
     csr = Path("./files/user.csr")
     ipa_ca.request_cert(csr, username=user["username"], cert_out=Path("./files"))
     assert Path(f"./files/{user['username']}.pem").exists()
+
+
+def test_cert_revoke(ipa_ca_with_user_fixture):
+    ipa_ca, user = ipa_ca_with_user_fixture
+    csr = Path("./files/user.csr")
+    cert_path = ipa_ca.request_cert(csr, username=user["username"], cert_out=Path("./files"))
+
+    serial_num = ipa_ca.revoke_cert(cert_path)
+    cert = ipa_ca.meta_client.cert_show(serial_num)
+    assert cert["result"]["revoked"]
