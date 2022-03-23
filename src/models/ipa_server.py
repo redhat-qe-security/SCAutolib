@@ -158,7 +158,14 @@ class IPAServerCA(CA):
 
     def request_cert(self, csr: Path, username: str, cert_out: Path):
         """
-        Request certificate using CSR from IPA CA for given username
+        Request certificate using CSR from IPA CA for given username. It is
+        a wrapper around the python_freeipa.client_meta.ClientMeta.cert_request
+        method. It works with a file, extracts CSR data from it and then
+        stores in PEM format adding required prefix and suffix as in normal
+        certificate and. If cert_out is a directory, then certificate would be
+        stored in this directory with name <username>.pem. If it is a file,
+        then check if it has PEM extension. If not, append .pem suffix to the
+        name.
 
         :param csr:
         path to CSR
@@ -166,6 +173,8 @@ class IPAServerCA(CA):
         subject for the certificate
         :param cert_out:
         path where the certificate is stored. Can be a directory or a file.
+        :return:
+        Path to the PEM certificate.
         """
         with csr.open() as f:
             csr_content = f.read()
@@ -188,6 +197,10 @@ class IPAServerCA(CA):
         ...
 
     def restore(self):
+        """
+        Remove IPA client from the system and from the IPA server
+        """
+
         logger.info("Removing IPA client from the host "
                     f"{self._ipa_client_hostname}")
         run(["ipa", "host-del", gethostname(), "--updatedns"],
