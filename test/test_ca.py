@@ -1,11 +1,13 @@
 from SCAutolib.src.models import ca, local_ca, ipa_server
 from pathlib import Path
+from SCAutolib.src.models.ipa_server import IPAServerCA
 import pytest
-from SCAutolib.test.fixtures import local_ca_fixture
+from SCAutolib.test.fixtures import local_ca_fixture, ipa_ca_fixture, remove_ipa_client
 from subprocess import check_output
 from shutil import copyfile
 from SCAutolib.src import TEMPLATES_DIR
 import re
+
 
 def test_local_ca_setup(tmpdir, caplog):
     ca = local_ca.LocalCA(Path(tmpdir, "ca"))
@@ -83,3 +85,34 @@ def test_revoke_cert(local_ca_fixture, tmpdir):
 
     with open(Path(local_ca_fixture.root_dir, "index.txt"), "r") as f:
         assert re.match(rex, f.read())
+
+
+def test_ipa_server_ca_setup(ipa_ip, ipa_hostname, remove_ipa_client):
+    ipa_client = IPAServerCA(ip_addr=ipa_ip, hostname=ipa_hostname,
+                             domain="sc.test.com", admin_passwd="SECret.123",
+                             root_passwd="redhat",
+                             client_hostname="client.sc.test.com")
+    ipa_client.setup()
+
+    with open("/etc/ipa/ca.crt") as f:
+        with open("/etc/sssd/pki/sssd_auth_ca_db.pem") as f_db:
+            assert f.read() in f_db.read()
+
+
+@pytest.mark.parametrize("force", (False, True))
+def test_ipa_server_setup_force(ipa_ip, ipa_hostname, remove_ipa_client,
+                                force, caplog, ipa_ca_fixture):
+    ipa_client = IPAServerCA(ip_addr=ipa_ip, hostname=ipa_hostname,
+                             domain="sc.test.com", admin_passwd="SECret.123",
+                             root_passwd="redhat",
+                             client_hostname="client.sc.test.com")
+    ipa_client.setup(force=force)
+    if force:
+        assert "System is configured on some IPA server." in caplog.messages
+        assert "Previous installation of IPA client is removed." in caplog.messages
+    else:
+        assert "IPA client is already configured on the system." in caplog.messages
+
+    with open("/etc/ipa/ca.crt") as f:
+        with open("/etc/sssd/pki/sssd_auth_ca_db.pem") as f_db:
+            assert f.read() in f_db.read()
