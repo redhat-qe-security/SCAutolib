@@ -156,8 +156,33 @@ class IPAServerCA(CA):
         # TODO: add to restore client host name
         logger.info("IPA client is configured on the system.")
 
-    def request_cert(self, csr: Path, username: str):
-        """Request certificate from the IPA server for given username"""
+    def request_cert(self, csr: Path, username: str, cert_out: Path):
+        """
+        Request certificate using CSR from IPA CA for given username
+
+        :param csr:
+        path to CSR
+        :param username:
+        subject for the certificate
+        :param cert_out:
+        path where the certificate is stored. Can be a directory or a file.
+        """
+        with csr.open() as f:
+            csr_content = f.read()
+        resp = self.meta_client.cert_request(a_csr=csr_content,
+                                             o_principal=username)
+        cert = resp["result"]["certificate"]
+
+        if cert_out.is_dir():
+            cert_out = cert_out.joinpath(f"{username}.pem")
+
+        with cert_out.open("w") as f:
+            f.write("-----BEGIN CERTIFICATE-----\n"
+                    f"{cert}\n"
+                    f"-----END CERTIFICATE-----")
+
+    def add_user(self):
+        ...
 
     def revoke_cert(self, cert: Path):
         ...
