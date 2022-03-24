@@ -133,8 +133,10 @@ class IPAServerCA(CA):
             c.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             #### noqa:E266
             c.open()
-            c.run("kinit admin", pty=True, watchers=[kinitpass])
-            result = c.run("ipa-advise config-client-for-smart-card-auth")
+            # in_stream = False is required because while testing with pytest
+            # it collision appears with capturing of the output.
+            c.run("kinit admin", pty=True, watchers=[kinitpass], in_stream=False)
+            result = c.run("ipa-advise config-client-for-smart-card-auth", hide=True, in_stream=False)
             with open(ipa_client_script, "w") as f:
                 f.write(result.stdout)
         if os.stat(ipa_client_script).st_size == 0:
