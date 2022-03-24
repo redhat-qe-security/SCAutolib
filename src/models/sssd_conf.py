@@ -1,6 +1,5 @@
 from configparser import ConfigParser
 from pathlib import Path
-import os
 from shutil import copy2
 from SCAutolib import logger
 from SCAutolib.src import TEMPLATES_DIR, LIB_BACKUP
@@ -27,10 +26,10 @@ class SSSDConf(File):
         # this method should be executed only once to create default config
         # existing backup files indicates that this method was already executed
         # in such case exception should be raised
-        if Path(cls._backup_original).is_file():
+        if cls._backup_original.exists():
             logger.error("Backup of original sssd.conf already exists")
             raise FileExistsError('backup file exists')
-        if Path(cls._backup_default).is_file():
+        if cls._backup_default.exists():
             logger.error("Default sssd.conf backup already exists")
             raise FileExistsError('backup file exists')
 
@@ -39,8 +38,8 @@ class SSSDConf(File):
                 parser.read_file(config)
             copy2(cls._sssd_conf_path, cls._backup_original)        # BACKUP
         except FileNotFoundError:
-            logger.info(f"sssd.conf not present in {cls._sssd_conf_path}")
-            logger.info("Creating sssd.conf based on the template")
+            logger.warning(f"sssd.conf not present in {cls._sssd_conf_path}")
+            logger.warning("Creating sssd.conf based on the template")
         with cls._template.open() as template:
             logger.info("Updating sssd.conf with values from the template")
             parser.read_file(template)
@@ -60,7 +59,7 @@ class SSSDConf(File):
             with cls._sssd_conf_path.open() as config:
                 parser.read_file(config)
         except FileNotFoundError:
-            logger.info(f"sssd.conf not present in {cls._sssd_conf_path}")
+            logger.error(f"sssd.conf not present in {cls._sssd_conf_path}")
             raise
 
         if not parser.has_section(section):
@@ -68,13 +67,9 @@ class SSSDConf(File):
             logger.warning(f"Adding section {section} to sssd.conf")
             parser.add_section(section)
 
-        if not parser.has_option(section, key):
-            previous = "Not set"
-        else:
-            previous = parser.get(section, key, fallback=None)
+        previous = parser.get(section, key, fallback="Not set")
 
         parser.set(section, key, value)
-
         logger.info(f"Value is change in {cls._sssd_conf_path}")
         logger.debug(f"Old value in section [{section}] {key}={previous}")
         logger.debug(f"New value in section [{section}] {key}={value}")
@@ -88,7 +83,7 @@ class SSSDConf(File):
         Removes sssd.conf file in case it was created by this package or
         restore original sssd.conf in case the file was modified.
         """
-        if Path(cls._backup_original).is_file():
+        if cls._backup_original.exists():
             copy2(cls._backup_original, cls._sssd_conf_path)
         else:
-            os.remove(cls._sssd_conf_path)
+            cls._sssd_conf_path.unlink()
