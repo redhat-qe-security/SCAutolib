@@ -99,22 +99,31 @@ class LocalCA(CA):
 
         logger.info("Local CA is configured")
 
-    def request_cert(self, csr: Path, username: str) -> Path:
+    def request_cert(self, csr: Path, username: str, cert_out: Path = None) -> Path:
         """
         Create the certificate from CSR and sign it. Certificate is store
         in the <root ca directory>/ca/newcerts directory with name username.pem
 
         :param csr: path to CSR
         :param username: subject in the CSR
+        :param cert_out: path where the certificate should be duplicated.
+                         Default None
 
         :return: returns path to the signed certificate
         """
-        cert = Path(self._certs, f"{username}.pem")
+        if cert_out is not None:
+            if cert_out.is_dir():
+                cert_out = cert_out.joinpath(f"{username}.pem")
+            elif cert_out.is_file():
+                cert_out.rename(cert_out.with_suffix(".pem"))
+        else:
+            cert_out = Path(self._certs, f"{username}.pem")
+
         run(["openssl", "ca", "-config", self._ca_cnf,
              "-batch", "-keyfile", self._ca_key, "-in", csr,
              "-notext", "-days", "365", "-extensions", "usr_cert",
-             "-out", cert])
-        return cert
+             "-out", cert_out])
+        return cert_out
 
     def revoke_cert(self, cert: Path):
         """
@@ -124,3 +133,9 @@ class LocalCA(CA):
         """
         cmd = ['openssl', 'ca', '-config', self._ca_cnf, '-revoke', cert]
         run(cmd, check=True)
+        logger.info("Certificate is revoked")
+
+    def restore(self):
+        logger.debug("Removing local CA")
+        rmtree(self.root_dir, ignore_errors=True)
+        logger.info(f"Local CA from {self.root_dir} is removed")
