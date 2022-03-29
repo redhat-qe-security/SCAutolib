@@ -86,6 +86,7 @@ def test_revoke_cert(local_ca_fixture, tmpdir):
         assert re.match(rex, f.read())
 
 
+@pytest.mark.ipa
 def test_ipa_server_ca_setup(ipa_ip, ipa_hostname, remove_ipa_client):
     ipa_client = IPAServerCA(ip_addr=ipa_ip, hostname=ipa_hostname,
                              domain="sc.test.com", admin_passwd="SECret.123",
@@ -98,6 +99,7 @@ def test_ipa_server_ca_setup(ipa_ip, ipa_hostname, remove_ipa_client):
             assert f.read() in f_db.read()
 
 
+@pytest.mark.ipa
 @pytest.mark.parametrize("force", (False, True))
 def test_ipa_server_setup_force(ipa_ip, ipa_hostname, remove_ipa_client,
                                 force, caplog, ipa_ca_fixture):
@@ -118,6 +120,7 @@ def test_ipa_server_setup_force(ipa_ip, ipa_hostname, remove_ipa_client,
             assert f.read() in f_db.read()
 
 
+@pytest.mark.ipa
 def test_cert_request(ipa_ca_with_user_fixture):
     ipa_ca, user = ipa_ca_with_user_fixture
     csr = Path("./files/user.csr")
@@ -125,6 +128,7 @@ def test_cert_request(ipa_ca_with_user_fixture):
     assert Path(f"./files/{user['username']}.pem").exists()
 
 
+@pytest.mark.ipa
 def test_cert_revoke(ipa_ca_with_user_fixture):
     ipa_ca, user = ipa_ca_with_user_fixture
     csr = Path("./files/user.csr")

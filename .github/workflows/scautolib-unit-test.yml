@@ -15,19 +15,10 @@ jobs:
     # The type of runner that the job will run on
     runs-on: ubuntu-latest
     container:
-        image: plovec/rhel8-smartcards:latest
+        image: plovec/rhel8-smartcards
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v2
 
-      - name: Install missing sudo package
-        run: dnf install sudo -y
-      
-      - name: Install library decencies
-        run: python3 -m pip install --upgrade -I -r src/env/requirements.txt
-      
-      - name: Install test decencies
-        run: python3 -m pip install --upgrade -I -r test/requirements.txt
-
-      - name: Run unit tests
+      - name: Unit tests
         run: pytest test/ -sv -m "not ipa and not service_restart"
