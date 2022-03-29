@@ -1,9 +1,7 @@
-from SCAutolib.src.models import ca, local_ca, ipa_server
+from SCAutolib.src.models import local_ca
 from pathlib import Path
 from SCAutolib.src.models.ipa_server import IPAServerCA
 import pytest
-from SCAutolib.test.fixtures import local_ca_fixture, ipa_ca_fixture,\
-    remove_ipa_client, ipa_ca_with_user_fixture
 from subprocess import check_output
 from shutil import copyfile
 from SCAutolib.src import TEMPLATES_DIR
@@ -47,7 +45,7 @@ def test_local_ca_setup_force(tmpdir, caplog, force):
 
 
 def test_request_cert(local_ca_fixture, tmpdir):
-    csr = Path(tmpdir,  "username.csr")
+    csr = Path(tmpdir, "username.csr")
     cnf = Path(tmpdir, "user.cnf")
     copyfile(Path(TEMPLATES_DIR, "user.cnf"), Path(tmpdir, cnf))
 
@@ -55,7 +53,7 @@ def test_request_cert(local_ca_fixture, tmpdir):
         f.write(f.read().format(user="username"))
 
     cmd = ['openssl', 'req', '-new', '-days', '365', '-nodes', '-newkey',
-          'rsa:2048', '-keyout', f'{tmpdir}/username.key', '-out', csr,
+           'rsa:2048', '-keyout', f'{tmpdir}/username.key', '-out', csr,
            "-reqexts", "req_exts", "-config", cnf]
     check_output(cmd, encoding="utf-8")
 
@@ -64,14 +62,14 @@ def test_request_cert(local_ca_fixture, tmpdir):
 
 
 def test_revoke_cert(local_ca_fixture, tmpdir):
-    csr = Path(tmpdir,  "username.csr")
+    csr = Path(tmpdir, "username.csr")
     cnf = Path(tmpdir, "user.cnf")
     copyfile(Path(TEMPLATES_DIR, "user.cnf"), Path(tmpdir, cnf))
     username = "username"
     with cnf.open("r+") as f:
         f.write(f.read().format(user=username))
     cmd = ['openssl', 'req', '-new', '-days', '365', '-nodes', '-newkey',
-          'rsa:2048', '-keyout', f'{tmpdir}/{username}.key', '-out', csr,
+           'rsa:2048', '-keyout', f'{tmpdir}/{username}.key', '-out', csr,
            "-reqexts", "req_exts", "-config", cnf]
     check_output(cmd, encoding="utf-8")
 
@@ -82,7 +80,7 @@ def test_revoke_cert(local_ca_fixture, tmpdir):
         index = int(f.read()) - 1
 
     rex = re.compile(
-        f"^R\s+[0-9A-Z]+\s+[0-9A-Z]+\s+.*{index}\s+.*\/CN={username}\n$")
+        fr"^R\s+[0-9A-Z]+\s+[0-9A-Z]+\s+.*{index}\s+.*/CN={username}\n$")
 
     with open(Path(local_ca_fixture.root_dir, "index.txt"), "r") as f:
         assert re.match(rex, f.read())
@@ -112,7 +110,8 @@ def test_ipa_server_setup_force(ipa_ip, ipa_hostname, remove_ipa_client,
         assert "System is configured on some IPA server." in caplog.messages
         assert "IPA client is removed." in caplog.messages
     else:
-        assert "IPA client is already configured on the system." in caplog.messages
+        assert \
+            "IPA client is already configured on the system." in caplog.messages
 
     with open("/etc/ipa/ca.crt") as f:
         with open("/etc/sssd/pki/sssd_auth_ca_db.pem") as f_db:
@@ -129,7 +128,8 @@ def test_cert_request(ipa_ca_with_user_fixture):
 def test_cert_revoke(ipa_ca_with_user_fixture):
     ipa_ca, user = ipa_ca_with_user_fixture
     csr = Path("./files/user.csr")
-    cert_path = ipa_ca.request_cert(csr, username=user["username"], cert_out=Path("./files"))
+    cert_path = ipa_ca.request_cert(csr, username=user["username"],
+                                    cert_out=Path("./files"))
 
     serial_num = ipa_ca.revoke_cert(cert_path)
     cert = ipa_ca.meta_client.cert_show(serial_num)

@@ -3,8 +3,16 @@ from pathlib import Path
 
 class CA:
 
-    def request_cert(self, csr, username: str):
-        """Request certificate from CA for given username"""
+    def request_cert(self, csr, username: str, cert_out: Path):
+        """
+        Request certificate from CA for given username
+
+        :param csr: path to CSR
+        :param username: subject for the certificate
+        :param cert_out: path where the certificate should be duplicated.
+                         Default None
+        :return: None or path where the certificate is stored.
+        """
         ...
 
     def setup(self, force: bool = False):
