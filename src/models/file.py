@@ -19,12 +19,15 @@ class File:
         """
 
     def get(self):
+        ...
 
     def backup(self) -> Path:
         """
         Backup file
         :return: path to back up file
         """
+        ...
 
     def restore(self):
         """Restore file from the last backup"""
+        ...

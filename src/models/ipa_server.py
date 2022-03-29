@@ -38,9 +38,12 @@ class IPAServerCA(CA):
         :param hostname: Hostname of the IPA server
         :param domain: Domain name of the IPA server
         :param admin_passwd: Password for admin user on the IPA server
-        :param root_passwd: Password for root user on the IPA server (system user)
-        :param client_hostname: Hostname for the client. This name would be set on the client host
-        :param realm: Kerberos realm. If not set, domain in upper cases would be used instead
+        :param root_passwd: Password for root user on the IPA server
+        (system user)
+        :param client_hostname: Hostname for the client. This name would be set
+        on the client host
+        :param realm: Kerberos realm. If not set, domain in upper cases would
+        be used instead
         """
 
         self._ipa_server_ip = ip_addr
@@ -92,11 +95,12 @@ class IPAServerCA(CA):
         with open("/etc/resolv.conf", "w+") as f:
             cnt = f.read()
             if nameserver not in cnt:
-                logger.warning(f"Nameserver {self._ipa_server_ip} is not present in "
-                               f"/etc/resolve.conf. Adding...")
+                logger.warning(f"Nameserver {self._ipa_server_ip} is not "
+                               "present in /etc/resolve.conf. Adding...")
                 f.write(nameserver + "\n" + cnt)
                 logger.info(
-                    "IPA server is added to /etc/resolv.conf as first nameserver")
+                    "IPA server is added to /etc/resolv.conf "
+                    "as first nameserver")
                 run("chattr -i /etc/resolv.conf")
                 logger.info("File /etc/resolv.conf is blocked for editing")
 
@@ -115,7 +119,8 @@ class IPAServerCA(CA):
 
         SSSDConf.set(key="certificate_verification", value="no_ocsp",
                      section="sssd")
-        run("systemctl restart sssd")  # FIXME: restart service with internal call
+        # FIXME: restart service with internal call
+        run("systemctl restart sssd")
 
         run("kinit admin", input=self._ipa_server_admin_passwd)
         logger.debug("Kerberos ticket for admin user is obtained")
@@ -123,12 +128,13 @@ class IPAServerCA(CA):
         kinitpass = Responder(pattern="Password for admin@SC.TEST.COM: ",
                               response="SECret.123\n")
         with Connection(self._ipa_server_ip, user="root",
-                        connect_kwargs=
-                        {"password": self._ipa_server_root_passwd}) as c:
+                        connect_kwargs={"password":
+                                        self._ipa_server_root_passwd}) as c:
             # Delete this block when PR in paramiko will be accepted
             # https://github.com/paramiko/paramiko/issues/396
             #### noqa:E266
-            paramiko.PKey.get_fingerprint = self.__PKeyChild.get_fingerprint_improved
+            paramiko.PKey.get_fingerprint = \
+                self.__PKeyChild.get_fingerprint_improved
             c.client = paramiko.SSHClient()
             c.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             #### noqa:E266
@@ -136,7 +142,8 @@ class IPAServerCA(CA):
             # in_stream = False is required because while testing with pytest
             # it collision appears with capturing of the output.
             c.run("kinit admin", pty=True, watchers=[kinitpass], in_stream=False)
-            result = c.run("ipa-advise config-client-for-smart-card-auth", hide=True, in_stream=False)
+            result = c.run("ipa-advise config-client-for-smart-card-auth",
+                           hide=True, in_stream=False)
             with open(ipa_client_script, "w") as f:
                 f.write(result.stdout)
         if os.stat(ipa_client_script).st_size == 0:

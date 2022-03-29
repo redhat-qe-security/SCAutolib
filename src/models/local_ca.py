@@ -99,7 +99,8 @@ class LocalCA(CA):
 
         logger.info("Local CA is configured")
 
-    def request_cert(self, csr: Path, username: str, cert_out: Path = None) -> Path:
+    def request_cert(self, csr: Path, username: str,
+                     cert_out: Path = None) -> Path:
         """
         Create the certificate from CSR and sign it. Certificate is store
         in the <root ca directory>/ca/newcerts directory with name username.pem

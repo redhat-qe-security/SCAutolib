@@ -1,6 +1,5 @@
 from .card import Card
 from enum import Enum, auto
-from .json import json_exist
 
 
 class UserType(Enum):
@@ -27,9 +26,11 @@ class User:
         :type: str
         """
 
-    def add_user(self): ...
+    def add_user(self):
+        ...
 
-    def del_user(self): ...
+    def del_user(self):
+        ...
 
     def add_card(self, card: Card):
         """
