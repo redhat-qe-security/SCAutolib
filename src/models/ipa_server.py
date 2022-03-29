@@ -7,13 +7,13 @@ import paramiko
 from SCAutolib import logger
 from SCAutolib.src import run, LIB_DIR
 from SCAutolib.src.exceptions import SCAutolibException
+from SCAutolib.src.models.ca import CA
 from SCAutolib.src.models.sssd_conf import SSSDConf
 from SCAutolib.src.models.user import IPAUser
+from cryptography import x509
 from fabric.connection import Connection
 from invoke import Responder
 from python_freeipa.client_meta import ClientMeta
-from cryptography import x509
-from .ca import CA
 
 
 class IPAServerCA(CA):

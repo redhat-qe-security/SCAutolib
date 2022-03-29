@@ -3,7 +3,7 @@
 
 from subprocess import check_output
 
-from SCAutolib.src.authselect import Authselect
+from SCAutolib.src.models.authselect import Authselect
 
 
 def test_authselect_init():
