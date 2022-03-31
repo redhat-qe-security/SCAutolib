@@ -3,13 +3,19 @@ from os.path import curdir, realpath
 
 description = "Python library for automation tests of smart cards using "\
     "virtualization."
-with open(f"{realpath(curdir)}/requirements.txt", "r") as f:
+here = realpath(curdir)
+with open(f"{here}/requirements.txt", "r") as f:
     reqs = f.readlines()
+
+with open(f"{here}/README.md", "r") as f:
+    long_description = f.read()
 
 setup(
     name="SCAutolib",
-    version="1.0.5",
+    version="v1.0.9",
     description=description,
+    long_description=long_description,
+    long_description_content_type='text/markdown',
     url="https://github.com/x00Pavel/SCAutolib",
     author="Pavel Yadlouski",
     author_email="pyadlous@redhat.com",

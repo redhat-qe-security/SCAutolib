@@ -171,7 +171,7 @@ def create_softhsm2_config(card_dir: str):
     conf_dir = f"{card_dir}/conf"
 
     with open(f"{conf_dir}/softhsm2.conf", "w") as f:
-        f.write("directories.tokendir = <card_dir>/tokens/\n"
+        f.write(f"directories.tokendir = {card_dir}/tokens/\n"
                 "slots.removable = true\n"
                 "objectstore.backend = file\n"
                 "log.level = INFO\n")

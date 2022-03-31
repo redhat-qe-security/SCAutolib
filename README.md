@@ -11,10 +11,3 @@ functionality for automation of smart cards testing. This automation includes:
 1. Environment setup via CLI commands
 2. Interaction with created environment from the tests written in Python
 3. Cleanup of the created environment
-
-### TO BE DONE
-
-Original design of the library is week and not flexible for new features and
-needs. This why current design of the library would be changed. Until new
-architecture is implemented, only critical bug fixes would be added to current
-version.
