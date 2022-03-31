@@ -1,15 +1,15 @@
 import click
-from .controller import *
+from .controller import Controller
 
 
 @click.command()
 def setup_user(env, *args, **kwargs):
-    setup_user_(*args, **kwargs)
+    Controller.setup_user(*args, **kwargs)
 
 
 @click.command()
 def create_card():
-    create_card_()
+    Controller.create_card()
 
 
 @click.command()

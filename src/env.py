@@ -171,10 +171,10 @@ def create_softhsm2_config(card_dir: str):
     conf_dir = f"{card_dir}/conf"
 
     with open(f"{conf_dir}/softhsm2.conf", "w") as f:
-        f.write(f"directories.tokendir = {card_dir}/tokens/\n"
-                f"slots.removable = true\n"
-                f"objectstore.backend = file\n"
-                f"log.level = INFO\n")
+        f.write("directories.tokendir = <card_dir>/tokens/\n"
+                "slots.removable = true\n"
+                "objectstore.backend = file\n"
+                "log.level = INFO\n")
         env_logger.debug(f"Configuration file for SoftHSM2 is created "
                          f"in {conf_dir}/softhsm2.conf.")
 
@@ -244,6 +244,7 @@ def setup_ca_():
 
         with open(join(LIB_CA, "serial"), "w") as f:
             f.write("01")
+
         for f in (join(LIB_CA, "index.txt"), join(LIB_CA, "crlnumber"),
                   join(LIB_CA, "index.txt.attr")):
             Path(f).touch()
@@ -252,8 +253,8 @@ def setup_ca_():
         run(['openssl', 'req', '-batch', '-config', join(conf_dir, "ca.cnf"),
              '-x509', '-new', '-nodes', '-newkey', 'rsa:2048', '-keyout',
              join(LIB_CA, "rootCA.key"), '-sha256', '-set_serial', '0',
-             '-extensions', 'v3_ca', '-out',
-             join(LIB_CA, "rootCA.pem")])
+             '-extensions', 'v3_ca', '-out', join(LIB_CA, "rootCA.pem")])
+
         env_logger.debug(
             f"Key for local CA is created {join(LIB_CA, 'rootCA.key')}")
         env_logger.debug(

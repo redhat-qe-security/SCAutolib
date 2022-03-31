@@ -142,8 +142,8 @@ def set_config(path, value, action="replace", type_=str):
     env_logger.debug(f"Value for filed {path} is update to {value}")
 
 
-def run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False, print_=True,
-        *args, **kwargs) -> subprocess.CompletedProcess:
+def run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False,
+        print_=True, *args, **kwargs) -> subprocess.CompletedProcess:
     if type(cmd) == str:
         cmd = cmd.split(" ")
     out = subprocess.run(cmd, stdout=stdout, stderr=stderr, encoding="utf-8",

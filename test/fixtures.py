@@ -11,6 +11,8 @@ from SCAutolib.src import env, init_config, LIB_DIR, CONF, LIB_CONF, models
 from SCAutolib.src.env import prepare_dirs
 import python_freeipa as pipa
 
+from SCAutolib.src.models.ipa_server import IPAServerCA
+
 
 @pytest.fixture()
 def src_path():
@@ -187,6 +189,29 @@ def clean_etc():
         unlink(LIB_CONF)
 
 
+@pytest.fixture()
+def ipa_ca_fixture(ipa_ip, ipa_hostname, remove_ipa_client):
+    ipa_client = IPAServerCA(ip_addr=ipa_ip, hostname=ipa_hostname,
+                             domain="sc.test.com", admin_passwd="SECret.123",
+                             root_passwd="redhat",
+                             client_hostname="client.sc.test.com")
+    ipa_client.setup()
+    return ipa_client
+
+
+@pytest.fixture()
+def ipa_ca_with_user_fixture(ipa_ca_fixture):
+    user = {"username": "test-user", "passwd": "redhat"}
+    ipa_ca_fixture.meta_client.user_add(user["username"],
+                                        user["username"],
+                                        user["username"],
+                                        user["username"],
+                                        o_userpassword=user["passwd"])
+    yield ipa_ca_fixture, user
+    ipa_ca_fixture.meta_client.user_del(user["username"], o_continue=True,
+                                        o_preserve=False)
+
+
 @pytest.fixture(scope="function")
 def ready_ipa(loaded_env, ipa_ip, ipa_hostname, src_path):
     config_file = loaded_env
@@ -242,3 +267,10 @@ def ipa_metaclient(ipa_hostname, ipa_passwd):
     client = pipa.ClientMeta(ipa_hostname, verify_ssl=False)
     client.login("admin", ipa_passwd)
     return client
+
+
+@pytest.fixture()
+def remove_ipa_client():
+    yield
+    subprocess.run(["ipa", "host-del", "client.sc.test.com", "--updatedns"])
+    subprocess.run(["ipa-client-install", "--uninstall", "-U"])
