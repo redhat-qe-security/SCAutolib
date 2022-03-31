@@ -7,11 +7,11 @@ from pathlib import Path
 import pwd
 import pytest
 import yaml
-from SCAutolib.src import env, init_config, LIB_DIR, CONF, LIB_CONF, models
-from SCAutolib.src.env import prepare_dirs
+from SCAutolib import env, init_config, LIB_DIR, CONF, LIB_CONF, models
+from SCAutolib.env import prepare_dirs
 import python_freeipa as pipa
 
-from SCAutolib.src.models.ipa_server import IPAServerCA
+from SCAutolib.models.ipa_server import IPAServerCA
 
 
 @pytest.fixture()

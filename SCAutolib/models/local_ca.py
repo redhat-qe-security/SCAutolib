@@ -2,7 +2,7 @@ from .ca import CA
 from pathlib import Path
 from shutil import rmtree, copy
 from SCAutolib import logger
-from SCAutolib.src import TEMPLATES_DIR, run
+from SCAutolib import TEMPLATES_DIR, run
 
 
 class LocalCA(CA):

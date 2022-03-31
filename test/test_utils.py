@@ -1,11 +1,11 @@
 # author: Pavel Yadlouski <pyadlous@redhat.com>
-# Unit tests for of SCAutolib.src.utils module
+# Unit tests for of SCAutolib.utils module
+from configparser import ConfigParser
 from os import path, system, remove
 from shutil import copy
 
-from SCAutolib.src import utils
-from SCAutolib.src.exceptions import *
-from SCAutolib.test.fixtures import *
+from SCAutolib import utils
+from SCAutolib.exceptions import *
 import pytest
 
 CUR_PATH = path.dirname(path.abspath(__file__))
