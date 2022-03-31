@@ -11,7 +11,7 @@ TEMPLATES_DIR = Path(DIR_PATH, "templates")
 
 SETUP_IPA_SERVER = f"{DIR_PATH}/env/ipa-install-server.sh"
 LIB_DIR = "/etc/SCAutolib"
-Path(LIB_DIR).mkdir(parents=True, exist_ok=True)
+# Path(LIB_DIR).mkdir(parents=True, exist_ok=True)
 CONF = join(LIB_DIR, "user-conf.yaml")
 LIB_CONF = join(LIB_DIR, "lib-conf.yaml")
 LIB_CA = join(LIB_DIR, "ca")
