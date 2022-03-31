@@ -74,8 +74,8 @@ def test_create_softhsm2_config():
         assert isfile(softhsm2_config)
         with open(softhsm2_config, "r") as f:
             content = f.read()
-        assert re.findall(f"directories.tokendir[ ]*=[ ]*{card_dir}/tokens/",
-                          content)
+        assert re.findall(f"directories.tokendir\s*=\s*{card_dir}/tokens/",
+                          content) != []
     finally:
         rmtree(card_dir)
 

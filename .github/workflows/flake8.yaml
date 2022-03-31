@@ -21,4 +21,4 @@ jobs:
       run: python3 -m pip install tox
 
     - name: Running tox
-      run: tox flake8
+      run: tox -e flake8
