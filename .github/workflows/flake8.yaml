@@ -1,6 +1,8 @@
 name: Linter
 
-on: [push, workflow_dispatch]
+on:
+  push:
+  workflow_dispatch:
 
 jobs:
   flake:

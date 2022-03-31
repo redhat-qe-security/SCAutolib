@@ -1,8 +1,9 @@
 click
-pexpect
-pyyaml
+colorlog
+cryptography
+fabric
+pyparsing
 python-decouple
 python-freeipa
-cryptography
-colorlog
-fabric
+PyYAML
+pexpect
