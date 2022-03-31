@@ -1,10 +1,10 @@
-from SCAutolib.src.models import local_ca
+from SCAutolib.models import local_ca
 from pathlib import Path
-from SCAutolib.src.models.ipa_server import IPAServerCA
+from SCAutolib.models.ipa_server import IPAServerCA
 import pytest
 from subprocess import check_output
 from shutil import copyfile
-from SCAutolib.src import TEMPLATES_DIR
+from SCAutolib import TEMPLATES_DIR
 import re
 
 

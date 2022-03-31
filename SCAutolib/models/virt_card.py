@@ -1,8 +1,8 @@
 import time
 from traceback import format_exc
 
-from SCAutolib import base_logger
-from SCAutolib.src.env import run
+from SCAutolib import logger
+from SCAutolib.env import run
 from .card import Card
 
 
@@ -26,7 +26,7 @@ class VirtualCard(Card):
         """
         self._insert = insert
         self.service_name = f"virt_cacard_{username}.service"
-        base_logger.debug("Smart card initialized")
+        logger.debug("Smart card initialized")
 
     def __enter__(self):
         if self._insert:
@@ -35,8 +35,8 @@ class VirtualCard(Card):
 
     def __exit__(self, exp_type, exp_value, exp_traceback):
         if exp_type is not None:
-            base_logger.error("Exception in virtual smart card context")
-            base_logger.error(format_exc())
+            logger.error("Exception in virtual smart card context")
+            logger.error(format_exc())
         self.remove()
 
     def remove(self):
@@ -44,14 +44,14 @@ class VirtualCard(Card):
         """
         run(["systemctl", "stop", self.service_name])
         time.sleep(2)
-        base_logger.debug("Smart card removed")
+        logger.debug("Smart card removed")
 
     def insert(self):
         """Simulate inserting of the smart card by starting the systemd service.
         """
         run(["systemctl", "start", self.service_name])
         time.sleep(2)
-        base_logger.debug("Smart card is inserted")
+        logger.debug("Smart card is inserted")
 
     def enroll(self):
         """Upload new certificates to the virtual smart card. TO BE DONE"""

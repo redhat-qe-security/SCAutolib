@@ -21,4 +21,4 @@ jobs:
       - uses: actions/checkout@v2
 
       - name: Unit tests
-        run: pytest test/ -sv -m "not ipa and not service_restart"
+        run: tox -e pytest

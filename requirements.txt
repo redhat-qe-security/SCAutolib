@@ -1,5 +1,5 @@
 click
-colorlog
+coloredlogs
 cryptography
 fabric
 pyparsing
@@ -7,3 +7,5 @@ python-decouple
 python-freeipa
 PyYAML
 pexpect
+pytest
+flake8

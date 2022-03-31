@@ -1,12 +1,11 @@
 # author: Pavel Yadlouski <pyadlous@redhat.com>
-# Unit tests for of SCAutolib.src.env_cli module
+# Unit tests for of SCAutolib.env_cli module
 import subprocess
 import pytest
 from yaml import FullLoader
 from click.testing import CliRunner
-from SCAutolib.src import env_cli
-from SCAutolib.test.fixtures import *
-from os.path import basename, exists
+from SCAutolib import env_cli, LIB_CONF
+from os.path import basename, exists, join
 from yaml import load, dump, Loader
 from subprocess import check_output, run, PIPE
 import pwd

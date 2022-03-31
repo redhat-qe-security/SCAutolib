@@ -5,11 +5,11 @@ from socket import gethostname
 
 import paramiko
 from SCAutolib import logger
-from SCAutolib.src import run, LIB_DIR
-from SCAutolib.src.exceptions import SCAutolibException
-from SCAutolib.src.models.ca import CA
-from SCAutolib.src.models.sssd_conf import SSSDConf
-from SCAutolib.src.models.user import IPAUser
+from SCAutolib import run, LIB_DIR
+from SCAutolib.exceptions import SCAutolibException
+from SCAutolib.models.ca import CA
+from SCAutolib.models.sssd_conf import SSSDConf
+from SCAutolib.models.user import IPAUser
 from cryptography import x509
 from fabric.connection import Connection
 from invoke import Responder

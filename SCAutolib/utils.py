@@ -12,9 +12,9 @@ from shutil import copy2, copytree
 from time import sleep
 
 import pexpect
-from SCAutolib import env_logger, base_logger
-from SCAutolib.src import env, LIB_CA, LIB_BACKUP, LIB_CERTS, LIB_KEYS
-from SCAutolib.src.exceptions import *
+from SCAutolib import logger
+from SCAutolib import env, LIB_CA, LIB_BACKUP, LIB_CERTS, LIB_KEYS
+from SCAutolib.exceptions import *
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -31,7 +31,7 @@ def restore_file_(source, destination):
     """
     copy2(source, destination)
     env.run(["restorecon", "-v", destination])
-    base_logger.debug(f"File from {source} is restored to {destination}")
+    logger.debug(f"File from {source} is restored to {destination}")
 
 
 def backup_(file_path):
@@ -54,7 +54,7 @@ def backup_(file_path):
         target = copytree(file_path, target)
     env.run(f"restorecon -v {target}")
 
-    base_logger.debug(f"Source from {file_path} is copied to {target}")
+    logger.debug(f"Source from {file_path} is copied to {target}")
     return target
 
 
@@ -79,7 +79,7 @@ def edit_config_(conf_file: str, section: str, key: str, value: str = "",
         cnf.read_file(file)
 
     if section not in cnf.sections():
-        base_logger.warning(
+        logger.warning(
             f"New section {section} would be added to config file {conf_file}")
         cnf.add_section(section)
 
@@ -96,10 +96,10 @@ def edit_config_(conf_file: str, section: str, key: str, value: str = "",
     target = join(LIB_BACKUP, backup_name)
     copy2(conf_file, target)
 
-    env_logger.debug(f"Current content of the file {conf_file} is copied "
-                     f"to {target}")
-    base_logger.debug(f"Value for key {key} in section {section} is set to "
-                      f"{value} in file {conf_file}")
+    logger.debug(f"Current content of the file {conf_file} is copied "
+                 f"to {target}")
+    logger.debug(f"Value for key {key} in section {section} is set to "
+                 f"{value} in file {conf_file}")
 
 
 def restart_service(service: str) -> int:
@@ -117,14 +117,14 @@ def restart_service(service: str) -> int:
             result = env.run(
                 ["systemctl", "restart", f"{service}"])
             sleep(5)
-            env_logger.debug(f"Service {service} is restarted")
+            logger.debug(f"Service {service} is restarted")
             return result.returncode
         except subp.CalledProcessError as e:
-            env_logger.error(
+            logger.error(
                 f"Command {' '.join(e.cmd)} is ended with non-zero return "
                 f"code ({e.returncode})")
-            env_logger.error(f"stdout:\n{e.stdout}")
-            env_logger.error(f"stderr:\n{e.stderr}")
+            logger.error(f"stdout:\n{e.stdout}")
+            logger.error(f"stderr:\n{e.stderr}")
             return e.returncode
     return 0
 
@@ -185,16 +185,16 @@ def generate_cert(username=None):
                                    f"{prefix}-{serial} Test Ca"),
             ])
         except UndefinedValueError:
-            base_logger.error("You are trying to generate user certificate, "
-                              "but .env file do not have name for certificate "
-                              "issuer.Did you generate self-signed CA "
-                              "certificate?")
+            logger.error("You are trying to generate user certificate, "
+                         "but .env file do not have name for certificate "
+                         "issuer.Did you generate self-signed CA "
+                         "certificate?")
 
     subject_key = x509.SubjectKeyIdentifier.from_public_key(key.public_key())
     authority_key = x509.AuthorityKeyIdentifier \
         .from_issuer_subject_key_identifier(subject_key)
 
-    env_logger.debug("Type of subject is " + str(type(subject)))
+    logger.debug("Type of subject is " + str(type(subject)))
     builder = builder \
         .subject_name(subject) \
         .issuer_name(issuer) \
@@ -236,10 +236,10 @@ def run_cmd(cmd: str = None, pin: bool = True, passwd: str = None, shell=None,
     """
     try:
         if shell is None and cmd is not None:
-            env_logger.warning("No shell given")
+            logger.warning("No shell given")
             cmd = ["-c", f'{cmd} ; echo "RC:$?"']
             shell = pexpect.spawn("/bin/bash", cmd, encoding='utf-8')
-            env_logger.debug("Shell is spawned")
+            logger.debug("Shell is spawned")
         shell.logfile = sys.stdout
 
         if passwd is not None:
@@ -248,15 +248,15 @@ def run_cmd(cmd: str = None, pin: bool = True, passwd: str = None, shell=None,
 
             if out != 1:
                 if out == 0:
-                    base_logger.error("Timed out on password / PIN waiting")
+                    logger.error("Timed out on password / PIN waiting")
 
                 raise PatternNotFound(f"Pattern '{pattern}' is not "
                                       f"found in the output.")
             shell.sendline(passwd)
 
     except PatternNotFound:
-        base_logger.error(f"Command: {cmd}")
-        base_logger.error(f"Output:\n{str(shell.before)}\n")
+        logger.error(f"Command: {cmd}")
+        logger.error(f"Output:\n{str(shell.before)}\n")
         raise
 
     if return_val == "stdout":
@@ -320,8 +320,8 @@ def check_output(output: str, expect=None, reject=None,
     for pattern in expect:
         compiled = re.compile(pattern)
         if compiled.search(output) is None:
-            base_logger.error(f"Pattern: {pattern} not found in output")
-            base_logger.error(f"Output:\n{output}\n")
+            logger.error(f"Pattern: {pattern} not found in output")
+            logger.error(f"Output:\n{output}\n")
             raise PatternNotFound(f"Pattern '{expect}' is not "
                                   f"found in the output.")
 
@@ -331,7 +331,7 @@ def check_output(output: str, expect=None, reject=None,
             if zero_rc:
                 raise NonZeroReturnCode(msg)
             else:
-                base_logger.warning(msg)
+                logger.warning(msg)
 
     return True
 
@@ -344,5 +344,6 @@ class PKeyChild(paramiko.PKey):
     https://github.com/paramiko/paramiko/issues/396. After this PR is merged,
     delete this class
     """
+
     def get_fingerprint_improved(self):
         return md5(self.asbytes(), usedforsecurity=False).digest()

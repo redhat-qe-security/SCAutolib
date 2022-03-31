@@ -1,5 +1,5 @@
 import yaml
-from SCAutolib.src import set_config, LIB_CONF
+from SCAutolib import set_config, LIB_CONF
 
 
 def test_set_config():

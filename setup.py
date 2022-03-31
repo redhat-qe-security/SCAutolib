@@ -5,12 +5,10 @@ description = "Python library for automation tests of smart cards using "\
     "virtualization."
 with open(f"{realpath(curdir)}/requirements.txt", "r") as f:
     reqs = f.readlines()
-with open(f"{realpath(curdir)}/SCAutolib/test/requirements.txt", "r") as f:
-    test_reqs = f.readlines()
 
 setup(
     name="SCAutolib",
-    version="1.0.4",
+    version="1.0.5",
     description=description,
     url="https://github.com/x00Pavel/SCAutolib",
     author="Pavel Yadlouski",
@@ -28,9 +26,7 @@ setup(
     packages=find_packages(),
     python_requires='>=3',
     install_requires=reqs,
-    tests_require=test_reqs,
+    tests_require=["pytest"],
     entry_points={
-        "console_scripts": [
-            "scauto=SCAutolib.src.cli_commands:cli",
-            ]}
-    )
+        "console_scripts": ["scauto=SCAutolib.cli_commands:cli"]}
+)

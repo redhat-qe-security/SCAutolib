@@ -1,12 +1,11 @@
 # author: Pavel Yadlouski <pyadlous@redhat.com>
-# Unit tests for of SCAutolib.src.env module
+# Unit tests for of SCAutolib.env module
 import re
 from os import stat, mkdir
 from os.path import isfile
 
-from SCAutolib.src.env import *
-from SCAutolib.src.exceptions import *
-from SCAutolib.test.fixtures import *
+from SCAutolib.env import *
+from SCAutolib.exceptions import *
 import pytest
 from yaml import load, FullLoader
 

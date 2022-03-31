@@ -1,10 +1,10 @@
 name: Publish SCAutolib to PyPi
 
-on: push
+on: workflow_dispatch
 
 jobs:
   build-n-push:
-    name: Build and publish Python 🐍 distributions 📦 to PyPI and TestPyPI
+    name: Build and publish Python distributions to PyPI and TestPyPI
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2

@@ -1,6 +1,6 @@
 import click
-from SCAutolib.src import init_config
-from SCAutolib.src.env import *
+from SCAutolib import init_config
+from SCAutolib.env import *
 
 
 @click.group()
@@ -39,72 +39,72 @@ def prepare(cards, conf, ipa, server_ip, ca, install_missing, server_hostname,
     CA, virtual smart card and installing IPA client with adding IPA users
     defined in configuration file.
     """
-    env_logger.info("Start setting up system for smart card testing")
+    logger.info("Start setting up system for smart card testing")
     if not check_config(conf):
-        env_logger.error("Configuration file miss required fields. Check logs "
-                         "for more information.")
+        logger.error("Configuration file miss required fields. Check logs "
+                     "for more information.")
         exit(1)
 
-    env_logger.info("Preparing necessary directories")
+    logger.info("Preparing necessary directories")
     prepare_dirs()
-    env_logger.info("Directories are created")
+    logger.info("Directories are created")
     init_config(conf)
-    env_logger.info("Initialisation of library configuration files is "
-                    "completed.")
-    env_logger.info("Start general setup")
+    logger.info("Initialisation of library configuration files is "
+                "completed.")
+    logger.info("Start general setup")
     try:
         general_setup(install_missing, no_gdm)
     except Exception as e:
-        env_logger.error(e)
+        logger.error(e)
         exit(1)
 
     create_sssd_config()
 
     if ipa:
         try:
-            env_logger.info("Start setup of IPA client")
+            logger.info("Start setup of IPA client")
             if not server_ip:
-                env_logger.debug("No IP address for IPA server is given.")
-                env_logger.debug("Try to get IP address of IPA server from "
-                                 "configuration file.")
+                logger.debug("No IP address for IPA server is given.")
+                logger.debug("Try to get IP address of IPA server from "
+                             "configuration file.")
                 server_ip = read_config("ipa_server_ip")
                 if not server_ip:
-                    env_logger.error("Can't find IP address of IPA server in "
-                                     "configuration file")
+                    logger.error("Can't find IP address of IPA server in "
+                                 "configuration file")
                     exit(1)
             else:
                 set_config("ipa_server_ip", server_ip)
             server_root_passwd = read_config("ipa_server_root")
             install_ipa_client_(server_ip, server_root_passwd, server_hostname)
-            env_logger.info("IPA client is installed on the system")
+            logger.info("IPA client is installed on the system")
         except:
-            env_logger.error(format_exc())
-            env_logger.error("IPA client installation is failed.")
+            logger.error(format_exc())
+            logger.error("IPA client installation is failed.")
             run("ipa-client-install --uninstall -U")
             exit(1)
 
     if ca:
-        env_logger.info("Start setup of local CA")
+        logger.info("Start setup of local CA")
         create_dir(LIB_CA)
         setup_ca_()
 
     if cards:
         if ca:
             user = read_config("local_user")
-            env_logger.info(
+            logger.info(
                 f"Start setup of virtual smart cards for local user {user}")
             create_sc(user)
-            env_logger.info(f"Setup of virtual smart card for user {user} "
-                            f"is completed")
+            logger.info(f"Setup of virtual smart card for user {user} "
+                        f"is completed")
         if ipa:
             user = read_config("ipa_user")
             add_ipa_user_(user, server_hostname)
-            env_logger.info(
+            logger.info(
                 f"Start setup of virtual smart cards for IPA user {user}")
             create_sc(user)
-            env_logger.info(f"Setup of virtual smart card for user {user} "
-                            f"is completed")
-    env_logger.info("Preparation of the environments is completed")
+            logger.info(f"Setup of virtual smart card for user {user} "
+                        f"is completed")
+    logger.info("Preparation of the environments is completed")
     exit(0)
 
 
@@ -140,7 +140,7 @@ def setup_virt_card(username, key, cert, card_dir, password, local):
     Setup virtual smart card. Has to be run after configuration of the local CA.
     """
     if not read_config("ready"):
-        env_logger.error(
+        logger.error(
             "Please, run prepare command with configuration file.")
         exit(1)
 
@@ -148,13 +148,13 @@ def setup_virt_card(username, key, cert, card_dir, password, local):
     general_setup()
     if user is None:
         if not all([key, cert, username, card_dir, password, local]):
-            env_logger.error("Not all required parameters are set for adding "
-                             f"virtual smart card to user {username}. "
-                             f"Add all parameters via configuration file or via"
-                             f"CLI parameters.")
+            logger.error("Not all required parameters are set for adding "
+                         f"virtual smart card to user {username}. "
+                         f"Add all parameters via configuration file or via"
+                         f"CLI parameters.")
             exit(1)
-        env_logger.debug(f"User {username} is not in the configuration file. "
-                         f"Using values from parameters")
+        logger.debug(f"User {username} is not in the configuration file. "
+                     f"Using values from parameters")
         user = dict()
         user["name"] = username
         user["key"] = key
@@ -172,16 +172,16 @@ def cleanup():
     Cleanup the host after configuration of the testing environment. Delete
     created directories/files, or restore if directory/file already existed.
     """
-    env_logger.debug("Start cleanup")
+    logger.debug("Start cleanup")
 
     try:
         cleanup_()
     except:
-        env_logger.error("Cleanup is failed. Check logs for more info")
-        env_logger.error(format_exc())
+        logger.error("Cleanup is failed. Check logs for more info")
+        logger.error(format_exc())
         exit(1)
 
-    env_logger.debug("Cleanup is completed")
+    logger.debug("Cleanup is completed")
     exit(0)
 
 
@@ -198,7 +198,7 @@ def install_ipa_client(ip):
         ip = read_config("ipa_server_ip")
     if ip is None:
         msg = "No IP address for IPA server is provided. Can't continue..."
-        env_logger.error(msg)
+        logger.error(msg)
         exit(1)
     root_passwd = read_config("ipa_server_root")
     install_ipa_client_(ip, root_passwd)
@@ -215,10 +215,10 @@ def install_ipa_client(ip):
 def add_ipa_user(username, user_dir):
     user = read_config(username)
     if user is None:
-        env_logger.debug(f"User {username} is not present in the configuration "
-                         f"file. Creating a new one")
+        logger.debug(f"User {username} is not present in the configuration "
+                     f"file. Creating a new one")
         if user_dir is None:
-            env_logger.error("No user directory is specified. Exit")
+            logger.error("No user directory is specified. Exit")
             exit(1)
         user = dict()
         user["name"] = username
@@ -234,7 +234,6 @@ cli.add_command(prepare)
 cli.add_command(setup_ipa_server)
 cli.add_command(install_ipa_client)
 cli.add_command(add_ipa_user)
-
 
 if __name__ == "__main__":
     cli()
