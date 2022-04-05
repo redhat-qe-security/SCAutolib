@@ -1,3 +1,12 @@
+"""
+Here we implement all CLI API. These functions are wrappers for methods in
+Controller class.
+
+Check documentation for CLI commands in ``scauto --help`` after
+:ref:`installation<SCAutolib installation!>`.
+
+"""
+
 import click
 from .controller import Controller
 

@@ -18,7 +18,6 @@ TEMPLATES_DIR = Path(DIR_PATH, "templates")
 
 SETUP_IPA_SERVER = f"{DIR_PATH}/env/ipa-install-server.sh"
 LIB_DIR = "/etc/SCAutolib"
-Path(LIB_DIR).mkdir(parents=True, exist_ok=True)
 CONF = join(LIB_DIR, "user-conf.yaml")
 LIB_CONF = join(LIB_DIR, "lib-conf.yaml")
 LIB_CA = join(LIB_DIR, "ca")
@@ -32,11 +31,15 @@ def init_config(user_config=None, config_content: dict = None):
     creates internal library configuration file for storing internal values
     to share them between different phases and creates symlink to user
     configuration file to access it in standard way
-    :param user_config - path to user configuration file
-    :param config_content - content to be inserted into library internal
-    config file. If not provided, default content would be generated.
+
+    :param user_config: path to user configuration file
+    :param config_content: content to be inserted into library internal
+                           config file. If not provided, default content
+                           would be generated.
     """
     logger.debug("Initializing configuration file")
+    if not exists(LIB_DIR):
+        Path(LIB_DIR).mkdir(parents=True, exist_ok=True)
     if not exists(LIB_CONF):
         logger.debug("Library configuration file does not exists. "
                      "Creating...")
@@ -64,12 +67,10 @@ def read_config(*items, cast=None, which="user", config_file=None) \
            If None, full content would be returned
     :param cast: data type to cast value to
     :param which: define which configuration file to read: library
-    internal or user configuration file
-    :param config_file: path to custom specific file in YAML format to read
-    from
+                  internal or user configuration file
+    :param config_file: path to custom specific file in YAML format to read from
 
-    :return list with required items
-
+    :return: list with required items
     """
     if config_file is None:
         config_file = CONF if which == "user" else LIB_CONF
@@ -103,13 +104,13 @@ def set_config(path, value, action="replace", type_=str):
     """Sets field to given value in configuration file.
 
     :param path: path in the configuration file in doted notation (a.b.c). If
-    any of path part doesn't exist, then it would be created.
+                 any of path part doesn't exist, then it would be created.
     :param value: value to be set for last key in path
     :param action: action for value. By default, is "replace". If "append", then
-    given value would be appended to the list of value for the last key in the
-    path.
+                   given value would be appended to the list of value for the
+                   last key in the path.
     :param type_: data type to which value would be converted and inserted to
-    configuration file. By default, is "str".
+                  configuration file. By default, is "str".
     """
     logger.debug(f"Reading configuration from {LIB_CONF}")
 

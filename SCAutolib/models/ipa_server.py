@@ -17,6 +17,9 @@ from python_freeipa.client_meta import ClientMeta
 
 
 class IPAServerCA(CA):
+    """
+    Some documentation about IPAServer CA
+    """
     _ipa_server_ip: str = None
     _ipa_server_hostname: str = None
     _ipa_server_domain: str = None
@@ -39,11 +42,11 @@ class IPAServerCA(CA):
         :param domain: Domain name of the IPA server
         :param admin_passwd: Password for admin user on the IPA server
         :param root_passwd: Password for root user on the IPA server
-        (system user)
+                            (system user)
         :param client_hostname: Hostname for the client. This name would be set
-        on the client host
+                                on the client host
         :param realm: Kerberos realm. If not set, domain in upper cases would
-        be used instead
+                      be used instead
         """
 
         self._ipa_server_ip = ip_addr
@@ -64,7 +67,8 @@ class IPAServerCA(CA):
         IPA server obtained via SSH.
 
         :param force: if True, previous installation of the IPA client would be
-                      removed
+            removed
+        :type force: bool
         """
         out = run(["ipa", "-v"], print_=False)
         if "IPA client is not configured on this system" not in out.stderr:
@@ -177,14 +181,12 @@ class IPAServerCA(CA):
         then check if it has PEM extension. If not, append .pem suffix to the
         name.
 
-        :param csr:
-        path to CSR
-        :param username:
-        subject for the certificate
-        :param cert_out:
-        path where the certificate is stored. Can be a directory or a file.
-        :return:
-        Path to the PEM certificate.
+        :param csr: path to CSR
+        :param username: subject for the certificate
+        :param cert_out: path where the certificate is stored. Can be a
+                         directory or a file.
+
+        :return: Path to the PEM certificate.
         """
         with csr.open() as f:
             csr_content = f.read()
@@ -210,8 +212,7 @@ class IPAServerCA(CA):
         necessary fields from IPAUser objet and pass them to the method. As a
         result, o_givenname == o_uid == o_sn == o_cn for simplicity.
 
-        :param user:
-        User to be added to the IPA server.
+        :param user: User to be added to the IPA server.
         """
         logger.info("Adding user to IPA server")
         self.meta_client.user_add(user.username, user.username, user.username,
@@ -224,8 +225,8 @@ class IPAServerCA(CA):
         python_freeipa.client_meta.ClientMeta.revoke_cert method. It extracts
         serial number of the certificate from the file
 
-        :param cert_path:
-        Path to the certificate in PEM format
+        :param cert_path: Path to the certificate in PEM format
+
         """
         with cert_path.open("rb") as f:
             cert = x509.load_pem_x509_certificate(f.read())

@@ -4,6 +4,7 @@ from .models import user
 class Controller:
 
     def setup_user(self, *args, **kwargs):
+        """Some documentation"""
         u = None
         username = kwargs["username"]
         password = kwargs["password"]

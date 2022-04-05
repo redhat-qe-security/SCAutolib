@@ -63,14 +63,18 @@ def edit_config_(conf_file: str, section: str, key: str, value: str = "",
     """
     Function for actual editing the config file.
 
-    Args:
-        conf_file: path to config file
-        key: key to be updated
-        value: value to be set for key
-        section: section where a key is placed.
-        backup_name: name of file where original file should be copied. If not
-                     set, default name <original file name>.bak.<number of
-                     copies would be used
+    :param conf_file: path to config file
+    :type conf_file: str
+    :param key: key to be updated
+    :type key: str
+    :param value: value to be set for key
+    :type value: str
+    :param section: section where a key is placed.
+    :type section: str
+    :param backup_name: name of file where original file should be copied.
+        If not set, default name <original file name>.bak.<number of
+        copies would be used
+    :type backup_name: str
     """
     cnf = RawConfigParser()
     cnf.optionxform = str
@@ -222,17 +226,15 @@ def run_cmd(cmd: str = None, pin: bool = True, passwd: str = None, shell=None,
     login wth given PIN or password. Hitting reject pattern during cmd
     execution cause fail.
 
-    Args:
-        cmd: shell command to be executed
-        pin: specify if passwd is a smart card PIN or a password for the
+    :param cmd: shell command to be executed
+    :param pin: specify if passwd is a smart card PIN or a password for the
              user. Base on this, corresponding pattern would be matched
              in login output.
-        passwd: smart card PIN or user password if login is needed
-        shell: shell child where command need to be execute.
-        return_val: return shell (shell) or stdout (stdout - default) or
+    :param passwd: smart card PIN or user password if login is needed
+    :param shell: shell child where command need to be execute.
+    :param return_val: return shell (shell) or stdout (stdout - default) or
                     both (all)
-    Returns:
-        stdout of executed command (cmd; see above)
+    :return: stdout of executed command (cmd; see above)
     """
     try:
         if shell is None and cmd is not None:
@@ -281,21 +283,25 @@ def check_output(output: str, expect=None, reject=None,
     exit value of executed command and raise an exception in case of
     non-zero value.
 
-    Args:
-        output: string where to look for expect/reject patterns. If check_rc
+    :param output: string where to look for expect/reject patterns. If check_rc
                 and zero_rc are True, than string has to contain substring
                 RC:<rc> where <rc> is a return value of the command. NOTE:
                 substring with return value is automatically added by run_cmd
                 function.
-        expect: pattern or list of patterns to be matched in the output
-        reject: pattern or list of  patterns that cause failure if matched in
-                the output
-        check_rc: if True, return code of the command will be checked. If False,
-                  (default), return code is not checked.
-        zero_rc: applicable only with check_rc = True. If zero_rc = True, return
-                 code of the command has to ve 0, otherwise an exception
-                 NonZeroReturnCode would be raise. If False (default), warning
-                 would be added to logs instead of raising an exception.
+    :type output: str
+    :param expect: pattern or list of patterns to be matched in the output
+    :type expect: str or list
+    :param reject: pattern or list of  patterns that cause failure if matched in
+        the output
+    :type reject: str or list
+    :param check_rc: if True, return code of the command will be checked.
+        If False, (default), return code is not checked.
+    :type check_rc: bool
+    :param zero_rc: applicable only with check_rc = True. If zero_rc = True,
+        return code of the command has to ve 0, otherwise an exception
+        NonZeroReturnCode would be raise. If False (default), warning
+        would be added to logs instead of raising an exception.
+    :type zero_rc: bool
     """
 
     # TODO: add switch and functionality

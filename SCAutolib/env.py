@@ -28,10 +28,9 @@ def create_cnf(user: str, conf_dir=None):
     Create configuration files for OpenSSL to generate certificates and requests
     by local CA.
 
-    Args:
-        user: username for which CNF should be created. If user = ca, then cnf
-              would be created for CA.
-        conf_dir: directory where CNF file would be placed.
+    :param user: username for which CNF should be created. If user = ca, then cnf
+                 would be created for CA.
+    :param conf_dir: directory where CNF file would be placed.
     """
     if user == "ca":
         conf_dir = join(LIB_CA, "conf")
@@ -183,11 +182,11 @@ def create_virt_card_service(username: str, card_dir: str):
     """Create systemd service for virtual smart card. Service will have
     a name in form of virt_cacard_<username>.service where <username> would be
     replaced with value specified by username parameter.
-    Args:
-         username: username of the user for the virtual smart card.
-         card_dir: directory where all necessary item for virtual smart card
-                   are located (need to specify path to softhsm2.conf file in
-                   the service file).s
+
+    :param username: username of the user for the virtual smart card.
+    :param card_dir: directory where all necessary item for virtual smart card
+        are located (need to specify path to softhsm2.conf file in
+        the service file).
     """
     path = f"/etc/systemd/system/virt_cacard_{username}.service"
     conf_dir = f"{card_dir}/conf"
@@ -291,8 +290,7 @@ def setup_virt_card_(user: dict):
     """
     Executes setup script fot virtual smart card
 
-    Args:
-        user: dictionary with user information
+    :param user: dictionary with user information
     """
 
     username, card_dir, passwd = user["name"], user["card_dir"], user["passwd"]
@@ -461,14 +459,14 @@ def check_semodule():
         "SELinux module for virtual smart cards is installed")
 
 
-def create_dir(dir_path: str, conf=True):
+def create_dir(dir_path: str, conf: bool = True):
     """Create directory on given path and optionally create the conf/
-    sub-directory inside.
-    Args:
-        dir_path: path where directory need to be created.
-        conf: specifies if conf / sub-directory need to be created in the given
-              directory (default True).
-     """
+    subdirectory inside.
+
+    :param dir_path: path where directory need to be created.
+    :param conf: specifies if conf / subdirectory need to be created in the given
+        directory (default True).
+    """
     Path(dir_path).mkdir(parents=True, exist_ok=True)
     logger.debug(f"Directory {dir_path} is created")
     if conf:
@@ -489,13 +487,17 @@ def prepare_dirs():
 
 def install_ipa_client_(ip: str, passwd: str, server_hostname: str = None):
     """Install ipa-client package to the system and run ipa-advice script for
-    configuring the client for smart card support.     Args:
-        ip: IP address of IPA server
-        passwd: root password from IPA server(needed to obtain ipa-advice
-                script).
-                NOTE: currently passwd would be used both for login to the system
-                with root and for obtaining admin kerberos ticket on the server.
-        server_hostname: hostname of IPA server
+    configuring the client for smart card support.
+
+    :param ip: IP address of IPA server
+    :type ip: str
+    :param passwd: root password from IPA server(needed to obtain ipa-advice
+        script). Passwd would be used both for login to the system
+        with root and for obtaining admin kerberos ticket on the server.
+        server_hostname: hostname of IPA server`
+    :type passwd: str
+    :param server_hostname: hostname of the server
+    :type server_hostname: str
     """
     logger.debug("Start installation of IPA client")
     if server_hostname is None:
@@ -604,15 +606,17 @@ def add_ipa_user_(user: dict, ipa_hostname: str = None):
     """Add IPA user to IPA server and prepare local directories for virtual
     smart card for this user. Also, function generate CSR for this user and
     requests the certificate from the CA located on IPA server.
-    Args:
-        user:dictionary with username('name' field), directory where
-              virtual smart card to be created ('card_dir' field). This directory
-              would contain also certificate & private key, all other
-              subdirectories need be virtual smart card(tokens, db, etc.).
-              Also, dictionary can contain custom paths to key, certificate and
-              CSR where to save corresponding items.
-        ipa_hostname: hostname of IPA server. If non, tries to read
-                      ipa_server_hostname field from the configuration file
+
+    :param user: dictionary with username('name' field), directory where
+                 virtual smart card to be created ('card_dir' field). This
+                 directory would contain also certificate & private key, all
+                 other subdirectories need be virtual smart card(tokens, db,
+                 etc.). Also, dictionary can contain custom paths to key,
+                 certificate and CSR where to save corresponding items.
+    :type user: dict
+    :param ipa_hostname: hostname of IPA server. If non, tries to read
+           ipa_server_hostname field from the configuration file
+    :type ipa_hostname: str
     """
     username, user_dir, passwd = user["name"], user["card_dir"], user["passwd"]
     cert_path = user["cert"] if "cert" in user.keys(
@@ -702,10 +706,7 @@ def general_setup(install_missing: bool, no_gdm: bool):
 
     :param install_missing: specifies if missing packages need to be
                             automatically installed.
-    :type: bool
     :param no_gdm: specifies if GDM package should not be installed
-    :type: bool
-    :return:
     """
 
     if not read_config("ready", which="lib"):
@@ -794,10 +795,9 @@ def check_config(conf: str) -> bool:
     """Check if all required fields are present in the config file. Warn user if
     some fields are missing.
 
-    Args:
-        conf: path to configuration file in YAML format
-    Return:
-        True if config file contain everything what is needed. Otherwise, False.
+    :param conf: path to configuration file in YAML format
+    :return: True if config file contain everything what is needed.
+        Otherwise, False.
     """
     with open(conf, "r") as file:
         config_data = yaml.load(file, Loader=yaml.FullLoader)
@@ -819,14 +819,13 @@ def check_config(conf: str) -> bool:
 def add_restore(type_: str, src: str or dict, backup: str = None):
     """Add new item to be restored in the cleanup phase.
 
-    Args:
-        type_: type of item. Cane be one of user, file or dir. If type is not
-               matches any of mentioned types, warning is written, but item
-               is added.
-        src: for file and dir should be an original path. For type == user
-             should be username
-        backup: applicable only for file and dir type. Path where original
-                source was placed.
+    :param type_: type of item. Cane be one of user, file or dir. If type is not
+                  matches any of mentioned types, warning is written, but item
+                  is added.
+    :param src: for file and dir should be an original path. For type == user
+                should be username
+    :param backup: applicable only for file and dir type. Path where original
+                   source was placed.
     """
     with open(LIB_CONF, "r") as f:
         data = yaml.load(f, Loader=yaml.FullLoader)
