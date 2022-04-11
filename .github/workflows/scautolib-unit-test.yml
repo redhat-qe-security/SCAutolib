@@ -8,10 +8,8 @@ on:
   pull_request:
     branches:
     - master
-    - dev
   workflow_dispatch:
 
-  
 jobs:
   test:
     # The type of runner that the job will run on
@@ -22,14 +20,5 @@ jobs:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v2
 
-      - name: Install missing sudo package
-        run: dnf install sudo -y
-      
-      - name: Install library decencies
-        run: python3 -m pip install --upgrade -I -r src/env/requirements.txt
-      
-      - name: Install test decencies
-        run: python3 -m pip install --upgrade -I -r test/requirements.txt
-
-      - name: Run unit tests
-        run: pytest test/ -sv -m "not ipa and not service_restart"
+      - name: Unit tests
+        run: tox -e pytest

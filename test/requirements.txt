@@ -1,5 +1,0 @@
-click
-python-dotenv
-pytest
-coverage
-python_freeipa
