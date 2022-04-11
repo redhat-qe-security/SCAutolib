@@ -19,3 +19,8 @@ def pytest_generate_tests(metafunc):
         metafunc.parametrize("ipa_hostname", [ipa_hostname])
     if 'ipa_passwd' in metafunc.fixturenames and ipa_passwd is not None:
         metafunc.parametrize("ipa_passwd", [ipa_passwd])
+
+
+def pytest_sessionfinish(session, exitstatus):
+    if exitstatus == 5:
+        session.exitstatus = 0

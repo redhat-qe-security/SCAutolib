@@ -1,8 +1,0 @@
-click
-pexpect
-pyyaml
-python-decouple
-python-freeipa
-cryptography
-colorlog
-fabric
