@@ -1,2 +1,3 @@
 include requirements.txt
-recursive-include SCAutolib/templates/ *
+include tox.ini
+recursive-include SCAutolib/templates *
