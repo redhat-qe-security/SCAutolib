@@ -16,7 +16,7 @@ with readme.open() as f:
 
 setup(
     name="SCAutolib",
-    version="v1.0.9",
+    version="1.0.9",
     description=description,
     long_description=long_description,
     long_description_content_type='text/markdown',
@@ -36,6 +36,7 @@ setup(
     packages=find_packages(),
     python_requires='>=3',
     install_requires=reqs,
+    include_package_data=True,
     tests_require=["pytest"],
     entry_points={
         "console_scripts": ["scauto=SCAutolib.cli_commands:cli"]}
