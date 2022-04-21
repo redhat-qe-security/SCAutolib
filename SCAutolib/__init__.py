@@ -7,11 +7,16 @@ from pathlib import Path
 import coloredlogs
 import yaml
 
-logger = logging.getLogger(__name__)
-fmt = "%(module)s.%(funcName)s.%(lineno)d [%(levelname)s] %(message)s"
+
+fmt = "%(name)s:%(module)s.%(funcName)s.%(lineno)d [%(levelname)s] %(message)s"
 date_fmt = "%H:%M:%S"
 coloredlogs.install(level="DEBUG", fmt=fmt, datefmt=date_fmt,
                     field_styles={'levelname': {'bold': True, 'color': 'blue'}})
+logger = logging.getLogger(__name__)
+# Disable logs from imported packages
+logging.getLogger("paramiko").setLevel(logging.WARNING)
+logging.getLogger("invoke").setLevel(logging.WARNING)
+logging.getLogger("fabric").setLevel(logging.WARNING)
 
 DIR_PATH = dirname(abspath(__file__))
 TEMPLATES_DIR = Path(DIR_PATH, "templates")

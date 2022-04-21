@@ -1,11 +1,11 @@
 click
 coloredlogs
 cryptography
+paramiko
 fabric
 pyparsing
 python-decouple
 python-freeipa
 PyYAML
 pexpect
-pytest
-flake8
+invoke
