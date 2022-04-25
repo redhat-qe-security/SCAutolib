@@ -1,5 +1,10 @@
+import os
+
 from fixtures import *  # noqa: F401
 from os import environ
+
+DIR_PATH = os.path.dirname(os.path.abspath(__file__))
+FILES_DIR = os.path.join(DIR_PATH, "files")
 
 
 def pytest_addoption(parser):
