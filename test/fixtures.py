@@ -2,6 +2,32 @@ import pytest
 from pathlib import Path
 from shutil import copyfile
 
+from SCAutolib.models.sssd_conf import SSSDConf
+from SCAutolib.models.file import File
+
+
+@pytest.fixture()
+def file_test_prepare(tmpdir):
+    """
+    Return instance of File class with custom setup of class variables
+    """
+    file_test = File(Path(tmpdir, "config"))
+    file_test._template = Path(tmpdir, "template")
+    return file_test
+
+
+@pytest.fixture()
+def sssd_test_prepare(tmpdir):
+    """
+    Return instance of SSSDconf class with custom setup of class variables
+    """
+    sssd_test = SSSDConf()
+    sssd_test._conf_file = Path(tmpdir, "config")
+    sssd_test._backup_original = Path(tmpdir, "original")
+    sssd_test._backup_default = Path(tmpdir, "default")
+
+    return sssd_test
+
 
 @pytest.fixture(scope="session")
 def backup_sssd_ca_db(tmp_path_factory):
