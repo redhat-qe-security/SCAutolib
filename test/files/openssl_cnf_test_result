@@ -1,0 +1,17 @@
+[ req ]
+distinguished_name = req_distinguished_name
+prompt = no
+
+[ req_distinguished_name ]
+O = Example
+OU = Example Test
+CN = test_user_123
+
+[ req_exts ]
+basicConstraints = CA:FALSE
+nsCertType = client, email
+nsComment = "test_user_123"
+subjectKeyIdentifier = hash
+keyUsage = critical, nonRepudiation, digitalSignature
+extendedKeyUsage = clientAuth, emailProtection, msSmartcardLogin
+subjectAltName = otherName:msUPN;UTF8:test_user_123@EXAMPLE.COM, email:test_user_123@example.com

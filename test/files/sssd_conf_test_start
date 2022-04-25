@@ -1,0 +1,15 @@
+[sssd]
+debug_level = 9
+services = nss, pam, ssh, sudo
+domains = shadowutils
+certificate_verification = no_ocsp
+
+[pam]
+pam_cert_auth = False
+
+[domain/shadowutils]
+debug_level = 9
+id_provider = files
+
+[testsection]
+testkey = testvalue
