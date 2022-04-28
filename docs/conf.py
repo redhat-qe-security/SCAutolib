@@ -9,18 +9,8 @@
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
-#
-# import os
-# import sys
-# sys.path.insert(0, os.path.abspath('.'))
-
-
 # -- Project information -----------------------------------------------------
-import os
-import sys
 import sphinx_rtd_theme
-
-sys.path.insert(0, os.path.abspath('../SCAutolib'))
 
 project = 'SCAutolib'
 copyright = '2022, Pavel Yadlouski'
@@ -53,6 +43,7 @@ intersphinx_mapping = {
 }
 
 autosummary_generate = True  # Turn on sphinx.ext.autosummary
+autosummary_generate_overwrite = True  # Overwrite existing autosummary
 autoclass_content = "both"  # Add __init__ doc (ie. params) to class summaries
 autodoc_inherit_docstrings = True  # If no docstring, inherit from base class
 set_type_checking_flag = True  # Enable 'expensive' imports for sphinx_autodoc_typehints
