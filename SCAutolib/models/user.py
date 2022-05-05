@@ -11,6 +11,7 @@ create or remove a specified user in the system or in the specified IPA server.
 from pathlib import Path
 
 from SCAutolib.models.CA import IPAServerCA
+from SCAutolib.models import card as card_model
 from SCAutolib import run, logger
 
 
@@ -19,24 +20,27 @@ class User:
     Generic class to represent system users.
     """
 
-    def __init__(self, username: str, password: str, pin: str, card=None,
-                 cnf: Path = None, key: Path = None, cert: Path = None):
+    def __init__(self, username: str, password: str, pin: str,
+                 card: card_model.Card = None, cnf: Path = None,
+                 key: Path = None, cert: Path = None, card_dir: Path = None):
 
         """
         :param username: Username for the system user
-        :type: str
+        :type username: str
         :param password: Password for the system user
-        :type str
+        :type password: str
         :param pin: Smart card pin for the system user
-        :type str
+        :type pin: str
         :param card: Card to be associated with the user
-        :type Card
+        :type card: Card
         :param cnf: CNF file to be associated with the user
-        :type Path
+        :type cnf: Path
         :param key: Key to be associated with the user
-        :type Path
+        :type key: Path
         :param cert: Certificate to be associated with the user.
-        :type Path
+        :type cert: Path
+        :param card_dir: Directory for the card
+        :type card_dir: Path
         """
 
         self.username = username
@@ -46,14 +50,15 @@ class User:
         self._cnf = cnf
         self._key = key
         self._cert = cert
-        self.card_dir = None
+        self.card_dir = card_dir if card_dir is not None \
+            else Path("/home", self.username)
 
     @property
     def card(self):
         return self._card
 
     @card.setter
-    def card(self, card: Path):
+    def card(self, card: card_model.Card):
         if self._card:
             logger.error("Delete the existing card before adding a new one.")
             raise ValueError("A card is already assigned to this user")
@@ -115,7 +120,6 @@ class User:
 
     def add_user(self):
         run(['useradd', '-m', '-p', self.password, self.username], check=True)
-        self.card_dir = f"/home/{self.username}"
         logger.info(f"Creating new user {self.username}")
 
 
@@ -130,27 +134,25 @@ class IPAUser(User):
 
         """
         :param ipa_server: IPAServerCA object which provides the ipa hostname
-        :type IPAServerCA
+        :type ipa_server: IPAServerCA
         :param username: Username for the system user
-        :type: str
+        :type username: str
         :param password: Password for the system user
-        :type str
+        :type password: str
         :param pin: Smart card pin for the system user
-        :type str
+        :type pin: str
         :param card: Card to be associated with the user
-        :type Card
+        :type card: Card
         :param cnf: CNF file to be associated with the user
-        :type Path
+        :type cnf: Path
         :param key: Key to be associated with the user
-        :type Path
+        :type key: Path
         :param cert: Certificate to be associated with the user.
-        :type Path
+        :type cert: Path
         """
 
         super().__init__(username, password, pin, card, cnf, key, cert)
         self._meta_client = ipa_server.meta_client
-
-        self._meta_client.login("admin", ipa_server._ipa_server_admin_passwd)
 
     def add_user(self):
         r = self._meta_client.user_add(self.username, self.username,

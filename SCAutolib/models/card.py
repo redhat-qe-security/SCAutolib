@@ -10,7 +10,8 @@ from traceback import format_exc
 
 from SCAutolib import run, logger, TEMPLATES_DIR
 from SCAutolib.models.file import SoftHSM2Conf
-from SCAutolib.models.user import User
+# from SCAutolib.models.user import User
+from SCAutolib.models import user as user_model
 
 
 class Card:
@@ -19,7 +20,7 @@ class Card:
     based on the type of the card.
     """
     uri: str = None
-    user: User = None
+    _user = None
     _pattern: str = None
 
     def _set_uri(self):
@@ -73,7 +74,7 @@ class VirtualCard(Card):
     _pattern = r"(pkcs11:model=PKCS%2315%20emulated;" \
                r"manufacturer=Common%20Access%20Card;serial=.*)"
 
-    def __init__(self, user: User, insert: bool = False,
+    def __init__(self, user = None, insert: bool = False,
                  softhsm2_conf: Path = None):
         """
         Initialise virtual smart card. Constructor of the base class is also
@@ -88,7 +89,7 @@ class VirtualCard(Card):
         :type softhsm2_conf: pathlib.Path
         """
 
-        self.user = user
+        self._user = user
         assert self.user.card_dir.exists(), "Card root directory doesn't exists"
 
         self._private_key = self.user.key
@@ -139,8 +140,18 @@ class VirtualCard(Card):
 
     @softhsm2_conf.setter
     def softhsm2_conf(self, conf: SoftHSM2Conf):
-        assert conf.conf_path.exists(), "File doesn't exist"
-        self._softhsm2_conf = conf.conf_path
+        assert conf.path.exists(), "File doesn't exist"
+        self._softhsm2_conf = conf.path
+
+    @property
+    def user(self):
+        return self.user
+
+    @user.setter
+    def user(self, system_user):
+        self._user = system_user
+        self._cert = system_user.cert
+        self._private_key = system_user.key
 
     def insert(self):
         """
@@ -167,6 +178,9 @@ class VirtualCard(Card):
         Upload certificate and private key to the virtual smart card (upload to
         NSS database) with pkcs11-tool.
         """
+        assert self._private_key is not None, "Private key is not set"
+        assert self._cert is not None, "Certificate is not set"
+
         cmd = ["pkcs11-tool", "--module", "libsofthsm2.so", "--slot-index",
                '0', "-w", self._private_key, "-y", "privkey", "--label",
                f"'{self.user.username}'", "-p", self.user.pin, "--set-id", "0",

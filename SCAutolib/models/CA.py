@@ -10,10 +10,9 @@ from python_freeipa.client_meta import ClientMeta
 from shutil import rmtree, copy
 from socket import gethostname
 
-# from SCAutolib.models.user import IPAUser
 from SCAutolib import TEMPLATES_DIR, logger, run, LIB_DIR
 from SCAutolib.exceptions import SCAutolibException
-
+from SCAutolib.models.file import OpensslCnf
 
 class CA:
 
@@ -61,28 +60,35 @@ class CA:
 class LocalCA(CA):
     template = Path(TEMPLATES_DIR, "ca.cnf")
 
-    def __init__(self, root_dir: Path = Path("/etc/SCAutolib/ca")):
+    def __init__(self, dir: Path = None, cnf: OpensslCnf = None):
         """
         Class for local CA. Initialize required attributes, real setup is made
         by LocalCA.setup() method
 
-        :param root_dir: Path to root directory of the CA. By default, is in
-                         /etc/SCAutolib/ca
+        :param dir: Path to root directory of the CA. By default, is in
+            /etc/SCAutolib/ca
         :type: Path
         """
-        self.root_dir: Path = root_dir
-        self._conf_dir: Path = Path(root_dir, "conf")
-        self._newcerts: Path = Path(root_dir, "newcerts")
-        self._certs: Path = Path(root_dir, "certs")
-        self._crl: Path = Path(root_dir, "crl", "root.pem")
+        self.root_dir: Path = dir if dir is not None \
+            else Path("/etc/SCAutolib/ca")
+        self._conf_dir: Path = Path(dir, "conf")
+        self._newcerts: Path = Path(dir, "newcerts")
+        self._certs: Path = Path(dir, "certs")
+        self._crl: Path = Path(dir, "crl", "root.pem")
         self._ca_pki_db: Path = Path("/etc/sssd/pki/sssd_auth_ca_db.pem")
 
-        self._ca_cnf: Path = Path(self._conf_dir, "ca.cnf")
-        self._ca_cert: Path = Path(root_dir, "rootCA.pem")
-        self._ca_key: Path = Path(root_dir, "rootCA.key")
+        self._ca_cnf: OpensslCnf = cnf
+        # self._ca_cnf: Path = cnf_path if cnf_path is not None \
+        #     else self.root_dir.joinpath("ca.cnf")
+        self._ca_cert: Path = Path(dir, "rootCA.pem")
+        self._ca_key: Path = Path(dir, "rootCA.key")
 
-        self._serial: Path = Path(root_dir, "serial")
-        self._index: Path = Path(root_dir, "index.txt")
+        self._serial: Path = Path(dir, "serial")
+        self._index: Path = Path(dir, "index.txt")
+
+    @property
+    def cnf(self):
+        return self._ca_cnf
 
     def setup(self, force: bool = False):
         """
@@ -104,15 +110,15 @@ class LocalCA(CA):
             self.cleanup()
 
         self.root_dir.mkdir(parents=True, exist_ok=True)
-        self._ca_cnf.parent.mkdir()
+        self._ca_cnf.path.parent.mkdir()
         self._newcerts.mkdir()
         self._certs.mkdir()
         self._crl.parent.mkdir()
 
         # Copy template and edit it with current root dir for CA
-        copy(self.template, self._ca_cnf)
-        with self._ca_cnf.open("r+") as f:
-            f.write(f.read().format(ROOT_DIR=self.root_dir))
+        # copy(self.template, self._ca_cnf)
+        # with self._ca_cnf.open("r+") as f:
+        #     f.write(f.read().format(ROOT_DIR=self.root_dir))
         with self._serial.open("w") as f:
             f.write("01")
 
@@ -231,7 +237,7 @@ class IPAServerCA(CA):
     _ipa_server_root_passwd: str = None
     meta_client: ClientMeta = None
 
-    def __init__(self, ip_addr: str, hostname: str, domain: str,
+    def __init__(self, ip_addr: str, server_hostname: str, domain: str,
                  admin_passwd: str, root_passwd: str, client_hostname: str,
                  realm: str = None):
         """
@@ -241,8 +247,8 @@ class IPAServerCA(CA):
 
         :param ip_addr: IP address of the IPA server
         :type ip_addr: str
-        :param hostname: Hostname of the IPA server
-        :type hostname: str
+        :param server_hostname: Hostname of the IPA server
+        :type server_hostname: str
         :param domain: Domain name of the IPA server
         :type domain: str
         :param admin_passwd: Password for admin user on the IPA server
@@ -258,7 +264,7 @@ class IPAServerCA(CA):
         :type realm: str
         """
         self._ipa_server_ip = ip_addr
-        self._ipa_server_hostname = hostname
+        self._ipa_server_hostname = server_hostname
         self._add_to_hosts()  # So we can log in to the IPA before setup
 
         self._ipa_server_domain = domain

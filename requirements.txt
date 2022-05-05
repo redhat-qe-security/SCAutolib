@@ -3,9 +3,10 @@ coloredlogs
 cryptography
 paramiko
 fabric
-pyparsing
-python-decouple
-python-freeipa
 PyYAML
-pexpect
 invoke
+
+pytest
+SCAutolib
+setuptools
+schema

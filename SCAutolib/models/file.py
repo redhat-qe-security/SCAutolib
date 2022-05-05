@@ -53,6 +53,10 @@ class File:
         if template is not None:
             self._template = Path(template)
 
+    @property
+    def path(self):
+        return self._conf_file
+
     def create(self):
         """
         Populate internal parser object with content based on template.
@@ -414,3 +418,7 @@ class OpensslCnf(File):
             else:
                 # in case set method was used
                 self._default_parser.write(config)
+
+    @property
+    def path(self):
+        return self._conf_file

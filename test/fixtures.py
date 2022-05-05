@@ -2,13 +2,13 @@ import pytest
 from pathlib import Path
 from shutil import copyfile
 
-from SCAutolib.models.file import SSSDConf, File
-from SCAutolib.models.user import User
+from SCAutolib.models import (file as file_model,
+                              user as user_model)
 
 
 @pytest.fixture
 def local_user(tmp_path):
-    user = User("testuser", "testpassword", "123456")
+    user = user_model.User("testuser", "testpassword", "123456")
     user.card_dir = tmp_path
     return user
 
@@ -18,7 +18,7 @@ def file_test_prepare(tmpdir):
     """
     Return instance of File class with custom setup of class variables
     """
-    file_test = File(Path(tmpdir, "config"))
+    file_test = file_model.File(Path(tmpdir, "config"))
     file_test._template = Path(tmpdir, "template")
     return file_test
 
@@ -28,7 +28,7 @@ def sssd_test_prepare(tmpdir):
     """
     Return instance of SSSDconf class with custom setup of class variables
     """
-    sssd_test = SSSDConf()
+    sssd_test = file_model.SSSDConf()
     sssd_test._conf_file = Path(tmpdir, "config")
     sssd_test._backup_original = Path(tmpdir, "original")
     sssd_test._backup_default = Path(tmpdir, "default")
