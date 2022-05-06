@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from SCAutolib.models.sssd_conf import SSSDConf
+from SCAutolib.models.file import SSSDConf
 from test_sssd_conf import compare_conf_files
 from conftest import FILES_DIR
 
@@ -17,7 +17,8 @@ def test_create_fail(file_test_prepare):
     file_test = file_test_prepare
     with file_test._conf_file.open('w') as config:
         config.write('Test config file')
-    with pytest.raises(FileExistsError, match=f'{file_test._conf_file } already exists'):
+    with pytest.raises(FileExistsError, match=f'{file_test._conf_file } '
+                                              f'already exists'):
         file_test.create()
 
 
@@ -46,7 +47,7 @@ def test_set_add_value(file_test_prepare):
 
 def test_set_add_section(file_test_prepare):
     """
-    # Tests that section is added with key and value if the section was not present
+    Tests that section is added with key and value if the section wasn't present
     """
     file_test = file_test_prepare
     file_test._conf_file = Path(FILES_DIR, "sssd_conf_test_start")
@@ -56,7 +57,7 @@ def test_set_add_section(file_test_prepare):
 
 def test_set_overwrite_value(file_test_prepare):
     """
-    # Tests that value in is overwritten if section and key already existed
+    Tests that value in is overwritten if section and key already existed
     """
     file_test = file_test_prepare
     file_test._conf_file = Path(FILES_DIR, "sssd_conf_test_start")

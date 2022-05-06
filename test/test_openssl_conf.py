@@ -1,9 +1,9 @@
 """
-This module contains unit tests for openssl_conf.py
+This module contains unit tests for OpensslCnf
 """
 from pathlib import Path
 
-from SCAutolib.models.openssl_conf import OpensslCnf
+from SCAutolib.models.file import OpensslCnf
 from conftest import FILES_DIR
 from test_sssd_conf import compare_conf_files
 

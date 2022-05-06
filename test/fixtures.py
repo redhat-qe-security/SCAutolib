@@ -2,8 +2,7 @@ import pytest
 from pathlib import Path
 from shutil import copyfile
 
-from SCAutolib.models.sssd_conf import SSSDConf
-from SCAutolib.models.file import File
+from SCAutolib.models.file import SSSDConf, File
 
 
 @pytest.fixture()

@@ -1,5 +1,5 @@
 """
-This module contains unit tests for sssd_conf.py and related functions
+This module contains unit tests for SSSDConf and related functions
 
 The unit test name reflects mane of tested sssd_conf method. For example
 'test_create_template_exists' is unit test for method 'create' of sssd_conf.
@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from SCAutolib.models.sssd_conf import SSSDConf
+from SCAutolib.models.file import SSSDConf
 from conftest import FILES_DIR
 
 
@@ -37,7 +37,8 @@ def parser_object_to_dict(parser_object: configparser.ConfigParser):
     :param parser_object: object to be transformed
     :return: dictionary reflecting content of parser object
     """
-    content = {section: dict(parser_object.items(section)) for section in parser_object.sections()}
+    content = {section: dict(parser_object.items(section)) for section in
+               parser_object.sections()}
     return content
 
 
@@ -101,7 +102,8 @@ def test_create_conf_updated(sssd_test_prepare):
     reference_file = Path(FILES_DIR, "sssd_conf_test_result")
     reference_content = load_file_to_parser(reference_file)
 
-    assert parser_object_to_dict(sssd_test._default_parser) == parser_object_to_dict(reference_content)
+    assert parser_object_to_dict(sssd_test._default_parser) == \
+           parser_object_to_dict(reference_content)
 
 
 def test_set_conf_add_value(sssd_test_prepare):
@@ -119,7 +121,8 @@ def test_set_conf_add_value(sssd_test_prepare):
 
 def test_set_conf_add_section(sssd_test_prepare):
     """
-    Tests that section is added with key and value if the section was not present
+    Tests that section is added with key and value if the section was not
+    present
     """
     sssd_test = sssd_test_prepare
     sssd_test._conf_file = Path(FILES_DIR, "sssd_conf_test_start")
