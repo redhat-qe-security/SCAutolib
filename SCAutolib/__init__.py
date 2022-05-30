@@ -155,7 +155,7 @@ def set_config(path, value, action="replace", type_=str):
     logger.debug(f"Value for filed {path} is update to {value}")
 
 
-def run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False,
+def run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True,
         print_=True, **kwargs) -> subprocess.CompletedProcess:
     """
     Wrapper for subrpocess.run function. This function explicitly set several
