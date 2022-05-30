@@ -1,0 +1,12 @@
+[Unit]
+Description = Virtual smart card for user '{username}'
+Requires = pcscd.service
+
+[Service]
+Environment = SOFTHSM2_CONF={softhsm2_conf}
+WorkingDirectory = {card_dir}
+ExecStart = /usr/bin/virt_cacard >> /var/log/virt_cacard.debug 2>&1
+KillMode = process
+
+[Install]
+WantedBy = multi-user.target

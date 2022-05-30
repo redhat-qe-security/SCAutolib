@@ -3,13 +3,7 @@ import pwd
 import os
 from pathlib import Path
 
-from SCAutolib.models.user import User
 from SCAutolib.models.CA import LocalCA
-
-
-@pytest.fixture
-def local_user():
-    return User("testuser", "testpassword", "123456")
 
 
 @pytest.mark.skipif(os.getuid() != 0, reason="Requires root privileges!")

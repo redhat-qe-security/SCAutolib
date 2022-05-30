@@ -32,8 +32,8 @@ basicConstraints       = CA:true
 keyUsage               = critical, digitalSignature, cRLSign, keyCertSign
 
 [ policy_any ]
-organizationName       = supplied
-organizationalUnitName = supplied
+organizationName       = optional
+organizationalUnitName = optional
 commonName             = supplied
 emailAddress           = optional
 

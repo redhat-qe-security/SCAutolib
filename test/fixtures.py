@@ -3,6 +3,14 @@ from pathlib import Path
 from shutil import copyfile
 
 from SCAutolib.models.file import SSSDConf, File
+from SCAutolib.models.user import User
+
+
+@pytest.fixture
+def local_user(tmp_path):
+    user = User("testuser", "testpassword", "123456")
+    user.card_dir = tmp_path
+    return user
 
 
 @pytest.fixture()
