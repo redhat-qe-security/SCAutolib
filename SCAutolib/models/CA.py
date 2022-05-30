@@ -310,7 +310,7 @@ class IPAServerCA(CA):
         logger.debug("Setup of IPA client for smart card is finished")
 
         policy = self.meta_client.pwpolicy_show(a_cn="global_policy")["result"]
-        if "0" not in policy["krbminpwdlife"]:
+        if ["0"] != policy["krbminpwdlife"]:
             self.meta_client.pwpolicy_mod(a_cn="global_policy",
                                           o_krbminpwdlife=0)
             logger.debug("Minimal kerberos password lifetime is set to 0 days")
@@ -329,7 +329,7 @@ class IPAServerCA(CA):
             returns zero return code), otherwise False
         :rtype: bool
         """
-        out = run(["ipa", "help"], print_=False)
+        out = run(["ipa", "help"], print_=False, check=False)
         return out.returncode == 0
 
     def _set_hostname(self):

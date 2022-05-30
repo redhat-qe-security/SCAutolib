@@ -186,8 +186,6 @@ def test_ipa_server_setup_force(installed_ipa, force, dummy_ipa_vals,
 
 @pytest.mark.ipa
 def test_ipa_setup_change_pwpolicy(ipa_meta_client, dummy_ipa_vals, clean_ipa):
-    ipa_meta_client.pwpolicy_mod(a_cn="global_policy", o_krbminpwdlife=10,
-                                 o_krbmaxpwdlife=300)
     ipa_ca = CA.IPAServerCA(ip_addr=dummy_ipa_vals["server_ip"],
                             client_hostname=dummy_ipa_vals[
                                 "client_hostname"],
@@ -199,9 +197,13 @@ def test_ipa_setup_change_pwpolicy(ipa_meta_client, dummy_ipa_vals, clean_ipa):
                             domain=dummy_ipa_vals["server_domain"])
     ipa_ca.setup()
 
-    policy = ipa_meta_client.pwpolicy_show(a_cn="global_policy")["result"]
-    assert "0" in policy["krbminpwdlife"]
-    assert "365" in policy["krbmaxpwdlife"]
+    try:
+        policy = ipa_meta_client.pwpolicy_show(a_cn="global_policy")["result"]
+        assert "0" in policy["krbminpwdlife"]
+        assert "365" in policy["krbmaxpwdlife"]
+    finally:
+        ipa_meta_client.pwpolicy_mod(a_cn="global_policy", o_krbminpwdlife=10,
+                                     o_krbmaxpwdlife=300)
 
 
 @pytest.mark.ipa
