@@ -18,8 +18,8 @@ from pathlib import Path
 from shutil import copy2
 from typing import Union
 
-from SCAutolib import logger
 from SCAutolib import TEMPLATES_DIR, LIB_BACKUP
+from SCAutolib import logger
 
 
 class File:
@@ -311,7 +311,7 @@ class SoftHSM2Conf(File):
     _content = None
     _card_dir = None
 
-    def __init__(self, filepath: str, card_dir: str):
+    def __init__(self, filepath: Union[str, Path], card_dir: Union[str, Path]):
         """
         Init of SoftHSM2Conf
 
@@ -320,24 +320,20 @@ class SoftHSM2Conf(File):
         :param card_dir: parameter to be updated in config file
         :type card_dir: str
         """
-        self._conf_file = Path(filepath)
-        self._card_dir = card_dir
+        self._conf_file = filepath if isinstance(filepath, Path) else \
+            Path(filepath)
+        self._card_dir = card_dir if isinstance(card_dir, Path) else \
+            Path(card_dir)
 
     def create(self):
         """
         Populate internal file object with content based on template.
         """
         with self._template.open('r') as template:
-            content = template.readlines()
-        self._content = []
-        for line in content:
-            modified = line.format(card_dir=self._card_dir)
-            self._content.append(modified)
+            self._content = template.read().format(card_dir=self._card_dir)
 
         logger.info(f"Creating content of {self._conf_file} "
                     f"based on {self._template}")
-        logger.info(f" {self._conf_file}: directories.tokendir needs to be "
-                    f"updated")
 
     def set(self, *args):
         """
@@ -353,7 +349,8 @@ class SoftHSM2Conf(File):
         Save content stored in internal file object to config file.
         """
         with self._conf_file.open("w") as config:
-            config.writelines(self._content)
+            config.write(self._content)
+        logger.debug(f"Config file {self._conf_file} is created")
 
 
 class OpensslCnf(File):
