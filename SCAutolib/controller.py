@@ -126,6 +126,12 @@ class Controller:
                                  password=user_dict["passwd"],
                                  card_dir=user_dict["card_dir"],
                                  cert=user_dict["cert"], key=user_dict["key"])
+            csr_path = new_user.card_dir.joinpath(f"csr-{new_user.username}.csr")
+            cnf = file.OpensslCnf(filepath=csr_path, conf_type="user",
+                                  replace=new_user.username)
+            cnf.create()
+            cnf.save()
+            new_user.cnf = cnf.path
 
         else:
             if self.ipa_ca is None:

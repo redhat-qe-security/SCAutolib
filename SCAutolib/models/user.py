@@ -124,7 +124,11 @@ class User:
         logger.info(f"Creating new user {self.username}")
 
     def gen_csr(self):
-        pass
+        csr_path = self.card_dir.joinpath(f"csr-{self.username}.csr")
+        cmd = ["openssl", "req", "-new", "-nodes", "-key", self._key,
+               "-reqexts", "req_exts", "-config", self._cnf, "-out", csr_path]
+        run(cmd)
+        return csr_path
 
 
 class IPAUser(User):
