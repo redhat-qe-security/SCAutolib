@@ -77,7 +77,7 @@ class LocalCA(CA):
         self._crl: Path = Path(root_dir, "crl", "root.pem")
         self._ca_pki_db: Path = Path("/etc/sssd/pki/sssd_auth_ca_db.pem")
 
-        self._ca_cnf: Path = Path(self._conf_dir, "ca.cnf")
+        self._ca_cnf: Path = self.root_dir.joinpath("ca.cnf")
         self._ca_cert: Path = Path(root_dir, "rootCA.pem")
         self._ca_key: Path = Path(root_dir, "rootCA.key")
 
