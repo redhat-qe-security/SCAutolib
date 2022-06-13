@@ -172,3 +172,14 @@ class IPAUser(User):
         run(['rm', '-r', '-f', f"/home/{self.username}"], check=True)
         logger.info(f"User {self.username} directory is removed.")
         logger.debug(r)
+
+    def gen_csr(self):
+        if not self._key:
+            raise SCAutolibException("Can't generate CSR because private key "
+                                     "is not set")
+        csr_path = self.card_dir.joinpath(f"csr-{self.username}.csr")
+        cmd = ["openssl", "req", "-new", "-days", "365",
+               "-nodes", "-key", self._key, "-out",
+               str(csr_path), "-subj", f"/CN={self.username}"]
+        run(cmd)
+        return csr_path

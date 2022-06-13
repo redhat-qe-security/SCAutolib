@@ -60,10 +60,6 @@ class Controller:
         """
         ...
 
-    @property
-    def conf_path(self):
-        return self._lib_conf_path
-
     def setup_system(self):
         """
         This method would set up whole system for smart card testing.
@@ -197,7 +193,7 @@ class Controller:
         """
         Prepare the system for virtual smart card
         """
-        # TODO: This steps should be done in the Controller
+        # TODO: Add configuration of SELinux module for smart cards
         with open("/usr/lib/systemd/system/pcscd.service", "r+") as f:
             data = f.read().replace("--auto-exit", "")
             f.write(data)
@@ -239,8 +235,9 @@ class Controller:
         :param params: CLI arguments
         :return:
         """
-        # FIXME: no schema requires all values to be in the config file, and
+        # FIXME: any schema requires all values to be in the config file, and
         #  only IP address of IPA server is accepted from CLI arguments.
+        #  Add loading of the values from params dict
         # IP regex
         # Specify validation schema for CAs
         schema_cas = Schema(And(

@@ -181,7 +181,7 @@ class LocalCA(CA):
         if cert_out is not None:
             if cert_out.is_dir():
                 cert_out = cert_out.joinpath(f"{username}.pem")
-            elif cert_out.is_file():
+            elif cert_out.is_file() and cert_out.suffixes[-1] != ".pem":
                 cert_out = cert_out.with_suffix(".pem")
         else:
             cert_out = self._certs.joinpath(f"{username}.pem")
