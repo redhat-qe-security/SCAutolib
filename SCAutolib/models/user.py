@@ -10,6 +10,7 @@ create or remove a specified user in the system or in the specified IPA server.
 """
 from pathlib import Path
 
+from SCAutolib.exceptions import SCAutolibException
 from SCAutolib.models.CA import IPAServerCA
 from SCAutolib.models import card as card_model
 from SCAutolib import run, logger
@@ -21,8 +22,8 @@ class User:
     """
 
     def __init__(self, username: str, password: str, pin: str,
-                 card: card_model.Card = None, cnf: Path = None,
-                 key: Path = None, cert: Path = None, card_dir: Path = None):
+                 cnf: Path = None, key: Path = None, cert: Path = None,
+                 card_dir: Path = None):
 
         """
         :param username: Username for the system user
@@ -31,15 +32,14 @@ class User:
         :type password: str
         :param pin: Smart card pin for the system user
         :type pin: str
-        :param card: Card to be associated with the user
-        :type card: Card
         :param cnf: CNF file to be associated with the user
         :type cnf: Path
         :param key: Key to be associated with the user
         :type key: Path
         :param cert: Certificate to be associated with the user.
         :type cert: Path
-        :param card_dir: Directory for the card
+        :param card_dir: Directory for the card. If None, standard
+            home directory would be used (/home/<username>)
         :type card_dir: Path
         """
 
@@ -62,6 +62,7 @@ class User:
         if self._card:
             logger.error("Delete the existing card before adding a new one.")
             raise ValueError("A card is already assigned to this user")
+        card.user = self
         self._card = card
 
     @card.deleter
@@ -122,6 +123,9 @@ class User:
         run(['useradd', '-m', '-p', self.password, self.username], check=True)
         logger.info(f"Creating new user {self.username}")
 
+    def gen_csr(self):
+        pass
+
 
 class IPAUser(User):
     """
@@ -129,10 +133,12 @@ class IPAUser(User):
     """
 
     def __init__(self, ipa_server: IPAServerCA, username: str, password: str,
-                 pin: str, card=None, cnf: Path = None, key: Path = None,
-                 cert: Path = None):
-
+                 pin: str, cnf: Path = None, key: Path = None,
+                 cert: Path = None, card_dir: Path = None):
         """
+        Class for IPA user. IPA client should be configured first before
+        creating an IPA user through this class.
+
         :param ipa_server: IPAServerCA object which provides the ipa hostname
         :type ipa_server: IPAServerCA
         :param username: Username for the system user
@@ -141,8 +147,6 @@ class IPAUser(User):
         :type password: str
         :param pin: Smart card pin for the system user
         :type pin: str
-        :param card: Card to be associated with the user
-        :type card: Card
         :param cnf: CNF file to be associated with the user
         :type cnf: Path
         :param key: Key to be associated with the user
@@ -151,15 +155,14 @@ class IPAUser(User):
         :type cert: Path
         """
 
-        super().__init__(username, password, pin, card, cnf, key, cert)
+        super().__init__(username, password, pin, cnf, key, cert, card_dir)
         self._meta_client = ipa_server.meta_client
 
     def add_user(self):
         r = self._meta_client.user_add(self.username, self.username,
                                        self.username, self.username,
                                        o_userpassword=self.password,
-                                       o_homedirectory=f"/home/{self.username}")
-        self.card_dir = f"/home/{self.username}"
+                                       o_homedirectory=str(self.card_dir))
         logger.debug(r)
         logger.info(f"User {self.username} is added to the IPA server")
 

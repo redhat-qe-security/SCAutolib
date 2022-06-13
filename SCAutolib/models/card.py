@@ -68,44 +68,28 @@ class VirtualCard(Card):
 
     _service_name: str = None
     _service_location: Path = None
-    _softhsm2_conf: Path = None
+    _softhsm2_conf = None
     _nssdb: Path = None
     _template: Path = Path(TEMPLATES_DIR, "virt_cacard.service")
     _pattern = r"(pkcs11:model=PKCS%2315%20emulated;" \
                r"manufacturer=Common%20Access%20Card;serial=.*)"
 
-    def __init__(self, user = None, insert: bool = False,
-                 softhsm2_conf: Path = None):
+    def __init__(self, insert: bool = False):
         """
         Initialise virtual smart card. Constructor of the base class is also
         used.
 
-        :param user: User of this card
-        :type user: User
+        Note: when the card is added to the user, card would be linked to that
+        particular user and this would be done in setter of the user
+
         :param insert: If True, the card would be inserted on entering the
             context manager. Default False.
         :type insert: bool
-        :param softhsm2_conf: path to SoftHSM2 configuration file
-        :type softhsm2_conf: pathlib.Path
         """
-
-        self._user = user
-        assert self.user.card_dir.exists(), "Card root directory doesn't exists"
-
-        self._private_key = self.user.key
-        self._cert = self.user.cert
-
         self._service_name = f"virt-sc-{self.user.username}"
         self._service_location = Path(
             f"/etc/systemd/system/{self._service_name}.service")
         self._insert = insert
-        self._nssdb = self.user.card_dir.joinpath("db")
-        self._softhsm2_conf = softhsm2_conf if softhsm2_conf \
-            else Path("/home", self.user.username, "softhsm2.conf")
-
-        if not self._softhsm2_conf.exists():
-            logger.warning(f"Configuration file {self._softhsm2_conf} doesn't "
-                           f"exist.")
 
     def __enter__(self):
         """
@@ -141,17 +125,16 @@ class VirtualCard(Card):
     @softhsm2_conf.setter
     def softhsm2_conf(self, conf: SoftHSM2Conf):
         assert conf.path.exists(), "File doesn't exist"
-        self._softhsm2_conf = conf.path
+        self._softhsm2_conf = conf
 
     @property
     def user(self):
-        return self.user
+        return self._user
 
     @user.setter
     def user(self, system_user):
         self._user = system_user
-        self._cert = system_user.cert
-        self._private_key = system_user.key
+        self._nssdb = self.user.card_dir.joinpath("db")
 
     def insert(self):
         """
@@ -178,21 +161,18 @@ class VirtualCard(Card):
         Upload certificate and private key to the virtual smart card (upload to
         NSS database) with pkcs11-tool.
         """
-        assert self._private_key is not None, "Private key is not set"
-        assert self._cert is not None, "Certificate is not set"
-
         cmd = ["pkcs11-tool", "--module", "libsofthsm2.so", "--slot-index",
-               '0', "-w", self._private_key, "-y", "privkey", "--label",
-               f"'{self.user.username}'", "-p", self.user.pin, "--set-id", "0",
+               '0', "-w", self._user.key, "-y", "privkey", "--label",
+               f"'{self._user.username}'", "-p", self._user.pin, "--set-id", "0",
                "-d", "0"]
-        run(cmd, env={"SOFTHSM2_CONF": self._softhsm2_conf})
+        run(cmd, env={"SOFTHSM2_CONF": self._softhsm2_conf.path})
         logger.debug(
             f"User key {self._private_key} is added to virtual smart card")
 
         cmd = ['pkcs11-tool', '--module', 'libsofthsm2.so', '--slot-index', "0",
-               '-w', self._cert, '-y', 'cert', '-p', self.user.pin,
-               '--label', f"'{self.user.username}'", '--set-id', "0", '-d', "0"]
-        run(cmd, env={"SOFTHSM2_CONF": self._softhsm2_conf})
+               '-w', self._user.cert, '-y', 'cert', '-p', self._user.pin,
+               '--label', f"'{self._user.username}'", '--set-id', "0", '-d', "0"]
+        run(cmd, env={"SOFTHSM2_CONF": self._softhsm2_conf.path})
         logger.debug(
             f"User certificate {self._cert} is added to virtual smart card")
 
@@ -210,7 +190,7 @@ class VirtualCard(Card):
         required for each virtual card.
         """
 
-        assert self._softhsm2_conf.exists(),\
+        assert self._softhsm2_conf.path.exists(), \
             "Can't proceed, SoftHSM2 conf doesn't exist"
         Path(f"{self.user.card_dir}/tokens").mkdir()
 
@@ -220,7 +200,7 @@ class VirtualCard(Card):
         cmd = ["softhsm2-util", "--init-token", "--free", "--label",
                self.user.username, "--so-pin", "12345678",
                "--pin", self.user.pin]
-        run(cmd, env={"SOFTHSM2_CONF": self._softhsm2_conf}, check=True)
+        run(cmd, env={"SOFTHSM2_CONF": self._softhsm2_conf.path}, check=True)
         logger.debug(
             f"SoftHSM token is initialized with label '{self.user.username}'")
 
