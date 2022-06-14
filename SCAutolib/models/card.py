@@ -10,8 +10,6 @@ from traceback import format_exc
 
 from SCAutolib import run, logger, TEMPLATES_DIR
 from SCAutolib.models.file import SoftHSM2Conf
-# from SCAutolib.models.user import User
-from SCAutolib.models import user as user_model
 
 
 class Card:

@@ -7,12 +7,13 @@ from invoke import Responder
 from pathlib import Path
 from python_freeipa import exceptions
 from python_freeipa.client_meta import ClientMeta
-from shutil import rmtree, copy
+from shutil import rmtree
 from socket import gethostname
 
 from SCAutolib import TEMPLATES_DIR, logger, run, LIB_DIR
 from SCAutolib.exceptions import SCAutolibException
 from SCAutolib.models.file import OpensslCnf
+
 
 class CA:
 

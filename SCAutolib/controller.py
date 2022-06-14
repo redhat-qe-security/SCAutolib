@@ -1,6 +1,4 @@
 import json
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
 from pathlib import Path
 from schema import Schema, Use, Or, And, Optional
 from shutil import rmtree
@@ -9,71 +7,8 @@ from typing import Union
 from SCAutolib import logger, run
 from SCAutolib.exceptions import SCAutolibWrongConfig, SCAutolibException
 from SCAutolib.models import CA, file, user, card
-
-
-def _check_selinux():
-    """
-    Checks if specific SELinux module for virtual smart card is installed.
-    This is implemented be checking the hardcoded name for the module
-    (virtcacard) to be present in the list of SELinux modules. If this name is
-    not present in the list, then virtcacard.cil file would be created in conf
-    or subdirectory in the CA directory specified by the configuration file.
-    """
-    result = run("semodule -l", print_=False)
-    if "virtcacard" not in result.stdout:
-        logger.debug(
-            "SELinux module for virtual smart cards is not present in the "
-            "system. Installing...")
-
-        run(["semodule", "-i", f"{TEMPLATES_DIR}/virtcacard.cil"])
-
-        run(["systemctl", "restart", "pcscd"])
-        logger.debug("pcscd service is restarted")
-
-    logger.debug(
-        "SELinux module for virtual smart cards is installed")
-
-
-def _gen_private_key(key_path: Path):
-    """
-    Generate RSA private key to specified location.
-
-    :param key_path: path to output certificate
-    """
-    key = rsa.generate_private_key(public_exponent=65537, key_size=4096)
-
-    with key_path.open("wb") as f:
-        f.write(key.private_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PrivateFormat.TraditionalOpenSSL,
-            encryption_algorithm=serialization.NoEncryption()))
-
-
-def _general_steps_for_virtual_sc():
-    """
-    Prepare the system for virtual smart card
-    """
-
-    _check_selinux()
-
-    with open("/usr/lib/systemd/system/pcscd.service", "r+") as f:
-        data = f.read().replace("--auto-exit", "")
-        f.write(data)
-
-    with open("/usr/share/p11-kit/modules/opensc.module", "r+") as f:
-        data = f.read()
-        if "disable-in: virt_cacard" not in data:
-            f.write("disable-in: virt_cacard\n")
-            logger.debug("opensc.module is updated")
-
-    run(['systemctl', 'stop', 'pcscd.service', 'pcscd.socket', 'sssd'])
-    rmtree("/var/lib/sss/mc/*", ignore_errors=True)
-    rmtree("/var/lib/sss/db/*", ignore_errors=True)
-    logger.debug(
-        "Directories /var/lib/sss/mc/ and /var/lib/sss/db/ removed")
-
-    run("systemctl daemon-reload")
-    run("systemctl restart pcscd sssd")
+from SCAutolib.utils import OSVersion, _check_selinux, _gen_private_key, _get_os_version, _install_packages, \
+    _check_packages
 
 
 class Controller:
@@ -116,22 +51,52 @@ class Controller:
         with self._lib_conf_path.open("r") as f:
             self.lib_conf = json.load(f)
             assert self.lib_conf, "Data are not loaded correctly."
-        self.lib_conf = self._validate_schema(params)
+        self.lib_conf = self._validate_configuration(params)
 
     def prepare(self):
         """
-        Method for setting up whole system based on configuration file and CLI commands
+        Method for setting up whole system based on configuration file and
+        CLI commands
+
         :return:
         """
         ...
 
-    def setup_system(self):
+    def setup_system(self, install_missing: bool, gdm: bool):
         """
-        This method would set up whole system for smart card testing.
-        """
+        Do general system setup meaning package installation based on
+        specifications in the configuration file, SSSD configuration,
+        configurations for virtual smart cards, etc.
 
-        # Update SSSD with values for local users
-        ...
+        :param install_missing: If True, all missing packages would be
+            installed
+        :type install_missing:
+        :param gdm: If True, GDM package would be installed
+        :type gdm: bool
+        :return:
+        """
+        packages = ["opensc", "httpd", "sssd", "sssd-tools"]
+        if gdm:
+            packages.append("gdm")
+
+        # Prepare for virtual cards
+        if "virtual" in [u["card_type"] for u in self.lib_conf["users"]]:
+            packages += self._general_steps_for_virtual_sc()
+
+        # Add IPA packages if needed
+        if not all([u["local"] for u in self.lib_conf["users"]]):
+            packages += self._general_steps_for_ipa()
+
+        # Check for installed packages
+        missing = _check_packages(packages)
+        if install_missing:
+            _install_packages(missing)
+
+        run(['dnf', 'groupinstall', "Smart Card Support", '-y'])
+        logger.debug("Smart Card Support group in installed.")
+
+        self.sssd_conf.create()
+        self.sssd_conf.save()
 
     def setup_local_ca(self, force: bool = False):
         """
@@ -153,7 +118,7 @@ class Controller:
         ca_dir.mkdir(exist_ok=True)
         cnf = file.OpensslCnf(ca_dir, "CA", str(ca_dir))
 
-        self.local_ca = CA.LocalCA(dir=ca_dir, cnf=cnf,)
+        self.local_ca = CA.LocalCA(dir=ca_dir, cnf=cnf, )
         self.local_ca.cnf.create()
         self.local_ca.cnf.save()
 
@@ -197,7 +162,12 @@ class Controller:
             cnf.create()
             cnf.save()
             new_user.cnf = cnf.path
-
+            self.sssd_conf.set(
+                section=f"certmap/shadowutils/{new_user.username}",
+                key="matchrule",
+                value=f"<SUBJECT>.*CN={new_user.username}.*")
+            logger.debug(f"Match rule for user {new_user.username} is added "
+                         f"to /etc/sssd/sssd.conf")
         else:
             if self.ipa_ca is None:
                 msg = "Can't proceed in configuration of IPA user because no " \
@@ -213,7 +183,6 @@ class Controller:
 
         new_user.add_user()
         new_card = None
-
         if user_dict["card_type"] == "virtual":
             hsm_conf = file.SoftHSM2Conf(new_user.card_dir, new_user.card_dir)
             hsm_conf.create()
@@ -225,7 +194,6 @@ class Controller:
                                       "supported yet")
 
         new_user.card = new_card
-        self.users.append(new_user)
 
     def enroll_card(self, user_: user.User):
         """
@@ -243,7 +211,7 @@ class Controller:
             # doesn't exist yet
             if user_.key is None:
                 user_.key = user_.card_dir.joinpath("private.key")
-                self._gen_private_key(user_.key)
+                _gen_private_key(user_.key)
 
             csr = user_.gen_csr()
             if user_.cert is None:
@@ -260,45 +228,7 @@ class Controller:
     def cleanup(self):
         ...
 
-    def _general_steps_for_virtual_sc(self):
-        """
-        Prepare the system for virtual smart card
-        """
-        # TODO: Add configuration of SELinux module for smart cards
-        with open("/usr/lib/systemd/system/pcscd.service", "r+") as f:
-            data = f.read().replace("--auto-exit", "")
-            f.write(data)
-
-        with open("/usr/share/p11-kit/modules/opensc.module", "r+") as f:
-            data = f.read()
-            if "disable-in: virt_cacard" not in data:
-                f.write("disable-in: virt_cacard\n")
-                logger.debug("opensc.module is updated")
-
-        run(['systemctl', 'stop', 'pcscd.service', 'pcscd.socket', 'sssd'])
-        rmtree("/var/lib/sss/mc/*", ignore_errors=True)
-        rmtree("/var/lib/sss/db/*", ignore_errors=True)
-        logger.debug(
-            "Directories /var/lib/sss/mc/ and /var/lib/sss/db/ removed")
-
-        run("systemctl daemon-reload")
-        run("systemctl restart pcscd sssd")
-
-    def _gen_private_key(self, key_path: Path):
-        """
-        Generate RSA private key to specified location.
-
-        :param key_path: path to output certificate
-        """
-        key = rsa.generate_private_key(public_exponent=65537, key_size=4096)
-
-        with key_path.open("wb") as f:
-            f.write(key.private_bytes(
-                encoding=serialization.Encoding.PEM,
-                format=serialization.PrivateFormat.TraditionalOpenSSL,
-                encryption_algorithm=serialization.NoEncryption()))
-
-    def _validate_schema(self, params: {}):
+    def _validate_configuration(self, params: {}):
         """
         Validate schema of the configuration file. If some value doesn't present
         in the config file, this value would be looked in the CLI parameters
@@ -313,6 +243,8 @@ class Controller:
         # Specify validation schema for CAs
         schema_cas = Schema(And(
             Use(dict),
+            # Check that CA section contains at least one and maximum
+            # two entries
             lambda l: 1 <= len(l.keys()) <= 2,
             {Optional("local_ca"): {"dir": Use(Path)},
              Optional("ipa"): {
@@ -341,3 +273,57 @@ class Controller:
                          "users": [schema_user]})
 
         return schema.validate(self.lib_conf)
+
+    @staticmethod
+    def _general_steps_for_virtual_sc():
+        """
+        Prepare the system for virtual smart card. Preparation means to
+        configure pcscd service and opensc module to be able correctly working
+        with virtual smart card. Also, repository for installing virt_cacard
+        package is added in this method.
+        """
+
+        _check_selinux()
+
+        with open("/usr/lib/systemd/system/pcscd.service", "r+") as f:
+            data = f.read().replace("--auto-exit", "")
+            f.write(data)
+
+        with open("/usr/share/p11-kit/modules/opensc.module", "r+") as f:
+            data = f.read()
+            if "disable-in: virt_cacard" not in data:
+                f.write("disable-in: virt_cacard\n")
+                logger.debug("opensc.module is updated")
+
+        run(['systemctl', 'stop', 'pcscd.service', 'pcscd.socket', 'sssd'])
+        rmtree("/var/lib/sss/mc/*", ignore_errors=True)
+        rmtree("/var/lib/sss/db/*", ignore_errors=True)
+        logger.debug(
+            "Directories /var/lib/sss/mc/ and /var/lib/sss/db/ removed")
+
+        run("systemctl daemon-reload")
+        run("systemctl restart pcscd sssd")
+
+        run("dnf -y copr enable jjelen/vsmartcard")
+        logger.debug("Copr repo for virt_cacard is enabled")
+
+        return ["pcsc-lite-ccid", "pcsc-lite", "virt_cacard",
+                "vpcd", "softhsm"]
+
+    @staticmethod
+    def _general_steps_for_ipa():
+        """
+        General system preparation for installing IPA client on RHEL/Fedora
+
+        :return: name of the IPA client package for current Linux
+        """
+        os_version = _get_os_version()
+        if os_version != OSVersion.RHEL_9:
+            run("dnf module enable -y idm:DL1")
+            run("dnf install @idm:DL1 -y")
+            logger.debug("idm:DL1 module is installed")
+
+        if os_version == OSVersion.Fedora:
+            return ["freeipa-client"]
+        else:
+            return ["ipa-client"]
