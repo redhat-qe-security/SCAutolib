@@ -20,7 +20,7 @@ from typing import Union
 
 from SCAutolib import TEMPLATES_DIR, LIB_BACKUP
 from SCAutolib import logger
-
+import os
 
 class File:
     """
@@ -265,6 +265,7 @@ class SSSDConf(File):
                 # to empty parser object
                 self._changes = ConfigParser()
                 self._changes.optionxform = str
+        os.chmod(self._conf_file, 0o600)
 
     def clean(self):
         """

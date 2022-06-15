@@ -10,3 +10,4 @@ pytest
 SCAutolib
 setuptools
 schema
+python_freeipa

@@ -22,11 +22,11 @@ DIR_PATH = dirname(abspath(__file__))
 TEMPLATES_DIR = Path(DIR_PATH, "templates")
 
 SETUP_IPA_SERVER = f"{DIR_PATH}/env/ipa-install-server.sh"
-LIB_DIR = "/etc/SCAutolib"
+LIB_DIR = Path("/etc/SCAutolib")
 CONF = join(LIB_DIR, "user-conf.yaml")
 LIB_CONF = join(LIB_DIR, "lib-conf.yaml")
 LIB_CA = join(LIB_DIR, "ca")
-LIB_BACKUP = join(LIB_DIR, "backup")
+LIB_BACKUP = LIB_DIR.joinpath("backup")
 LIB_KEYS = join(LIB_DIR, "keys")
 LIB_CERTS = join(LIB_DIR, "certs")
 

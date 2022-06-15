@@ -4,7 +4,7 @@ from schema import Schema, Use, Or, And, Optional
 from shutil import rmtree
 from typing import Union
 
-from SCAutolib import logger, run
+from SCAutolib import logger, run, LIB_DIR, LIB_BACKUP
 from SCAutolib.exceptions import SCAutolibWrongConfig, SCAutolibException
 from SCAutolib.models import CA, file, user, card
 from SCAutolib.utils import OSVersion, _check_selinux, _gen_private_key, _get_os_version, _install_packages, \
@@ -75,13 +75,18 @@ class Controller:
         :type gdm: bool
         :return:
         """
+        LIB_DIR.mkdir()
+        LIB_BACKUP.mkdir()
+
         packages = ["opensc", "httpd", "sssd", "sssd-tools"]
         if gdm:
             packages.append("gdm")
 
         # Prepare for virtual cards
         if "virtual" in [u["card_type"] for u in self.lib_conf["users"]]:
-            packages += self._general_steps_for_virtual_sc()
+            packages += ["pcsc-lite-ccid", "pcsc-lite", "virt_cacard",
+                "vpcd", "softhsm"]
+            run("dnf -y copr enable jjelen/vsmartcard")
 
         # Add IPA packages if needed
         if not all([u["local"] for u in self.lib_conf["users"]]):
@@ -97,6 +102,7 @@ class Controller:
 
         self.sssd_conf.create()
         self.sssd_conf.save()
+        self._general_steps_for_virtual_sc()
 
     def setup_local_ca(self, force: bool = False):
         """
@@ -284,10 +290,13 @@ class Controller:
         """
 
         _check_selinux()
+        with open("/usr/lib/systemd/system/pcscd.service", "w+") as f:
 
-        with open("/usr/lib/systemd/system/pcscd.service", "r+") as f:
             data = f.read().replace("--auto-exit", "")
-            f.write(data)
+            if "--auto-exit" in data:
+                f.write(data.replace("--auto-exit", ""))
+            else:
+                f.write(data)
 
         with open("/usr/share/p11-kit/modules/opensc.module", "r+") as f:
             data = f.read()
@@ -306,9 +315,6 @@ class Controller:
 
         run("dnf -y copr enable jjelen/vsmartcard")
         logger.debug("Copr repo for virt_cacard is enabled")
-
-        return ["pcsc-lite-ccid", "pcsc-lite", "virt_cacard",
-                "vpcd", "softhsm"]
 
     @staticmethod
     def _general_steps_for_ipa():
