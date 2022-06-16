@@ -121,14 +121,19 @@ class Controller:
             msg = "Section for local CA is not found in the configuration file"
             raise SCAutolibWrongConfig(msg)
 
-        ca_dir = self.lib_conf["ca"]["local_ca"]["dir"]
+        ca_dir: Path = self.lib_conf["ca"]["local_ca"]["dir"]
+        cnf = file.OpensslCnf(ca_dir.joinpath("ca.cnf"), "CA", str(ca_dir))
+        self.local_ca = CA.LocalCA(dir=ca_dir, cnf=cnf)
+
+        if force:
+            logger.warning(f"Removing previous local CA in a directory "
+                           f"{ca_dir}")
+            self.local_ca.cleanup()
+
         ca_dir.mkdir(exist_ok=True)
-        cnf = file.OpensslCnf(ca_dir, "CA", str(ca_dir))
 
-        self.local_ca = CA.LocalCA(dir=ca_dir, cnf=cnf, )
-        self.local_ca.cnf.create()
-        self.local_ca.cnf.save()
-
+        cnf.create()
+        cnf.save()
         self.local_ca.setup(force)
         # Generate certificates
 

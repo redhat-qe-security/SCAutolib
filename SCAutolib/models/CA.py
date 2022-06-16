@@ -102,31 +102,19 @@ class LocalCA(CA):
                       otherwise, skip configuration.
         :type force: bool
         """
-        if self.root_dir.exists():
-            logger.warning(f"Directory {self.root_dir} already exists.")
-            if not force:
-                logger.warning("Skipping configuration.")
-                return
-
-            self.cleanup()
 
         self.root_dir.mkdir(parents=True, exist_ok=True)
-        self._ca_cnf.path.parent.mkdir()
         self._newcerts.mkdir()
         self._certs.mkdir()
         self._crl.parent.mkdir()
 
-        # Copy template and edit it with current root dir for CA
-        # copy(self.template, self._ca_cnf)
-        # with self._ca_cnf.open("r+") as f:
-        #     f.write(f.read().format(ROOT_DIR=self.root_dir))
         with self._serial.open("w") as f:
             f.write("01")
 
         self._index.touch()
 
         # Generate self-signed certificate
-        cmd = ['openssl', 'req', '-batch', '-config', self._ca_cnf,
+        cmd = ['openssl', 'req', '-batch', '-config', self._ca_cnf.path,
                '-x509', '-new', '-nodes', '-newkey', 'rsa:2048', '-keyout',
                self._ca_key, '-sha256', '-set_serial', '0',
                '-extensions', 'v3_ca', '-out', self._ca_cert]
@@ -136,7 +124,7 @@ class LocalCA(CA):
             f"CA self-signed certificate is generated into {self._ca_cert}")
 
         # Configuring CRL
-        run(['openssl', 'ca', '-config', self._ca_cnf, '-gencrl',
+        run(['openssl', 'ca', '-config', self._ca_cnf.path, '-gencrl',
              '-out', self._crl], check=True)
 
         with self._ca_cert.open("r") as f_cert:
@@ -186,7 +174,7 @@ class LocalCA(CA):
                 cert_out = cert_out.with_suffix(".pem")
         else:
             cert_out = self._certs.joinpath(f"{username}.pem")
-        cmd = ["openssl", "ca", "-config", self._ca_cnf,
+        cmd = ["openssl", "ca", "-config", self._ca_cnf.path,
                "-batch", "-keyfile", self._ca_key, "-in", csr,
                "-notext", "-days", "365", "-extensions", "usr_cert",
                "-out", cert_out]
@@ -200,9 +188,9 @@ class LocalCA(CA):
         :param cert: path to the certificate
         :type cert: pathlib.Path
         """
-        cmd = ['openssl', 'ca', '-config', self._ca_cnf, '-revoke', cert]
+        cmd = ['openssl', 'ca', '-config', self._ca_cnf.path, '-revoke', cert]
         run(cmd, check=True)
-        cmd = ['openssl', 'ca', '-config', self._ca_cnf, '-gencrl',
+        cmd = ['openssl', 'ca', '-config', self._ca_cnf.path, '-gencrl',
                '-out', self._crl]
         run(cmd, check=True)
         logger.info("Certificate is revoked")
