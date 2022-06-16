@@ -13,14 +13,15 @@ basic operations on config files defined in this module:
     clean:  remove config file; note that some child classes may also restore
             original config file if backup exists.
 """
+import os
 from configparser import ConfigParser
 from pathlib import Path
 from shutil import copy2
 from typing import Union
 
-from SCAutolib import TEMPLATES_DIR, LIB_BACKUP
-from SCAutolib import logger
-import os
+from SCAutolib import logger, TEMPLATES_DIR, LIB_BACKUP
+from SCAutolib.exceptions import SCAutolibException
+
 
 class File:
     """
@@ -72,7 +73,8 @@ class File:
             with self._template.open() as t:
                 self._default_parser.read_file(t)
 
-    def set(self, key: str, value: Union[int, str, bool], section: str = None):
+    def set(self, key: str, value: Union[int, str, bool], section: str = None,
+            separator: str = "="):
         """
         Modify value in config file.
 
@@ -82,6 +84,11 @@ class File:
         :type value: int or str or bool
         :param section: section of config file that will be modified
         :type section: str
+        :param separator: separator that would be used in files that is not
+            supported by configparser. It would be used to separate a key and a
+            value
+        :type separator: str
+
         """
         if section is None:
             # simple config files without sections
@@ -96,7 +103,7 @@ class File:
                     new_content.append(line)
                     continue
                 try:
-                    conf_key, conf_val = line.split("=", 1)
+                    conf_key, conf_val = line.split(separator, 1)
                 except ValueError:
                     raise ValueError(f"unexpected format of line: {line}")
                 if conf_key.strip() == key:
@@ -105,7 +112,7 @@ class File:
                 else:
                     new_content.append(line)
             if not modified:
-                new_content.append(f"\n{key}={value}")
+                new_content.append(f"\n{key}{separator}{value}")
             self._simple_content = new_content
         else:
             # configparser compatible config files (with sections)
@@ -127,6 +134,48 @@ class File:
             logger.debug(f"Old value in section [{section}] {key}={previous}")
             logger.debug(f"New value in section [{section}] {key}={value}")
 
+    def get(self, key, section: str = None, separator: str = "="):
+        """
+        Method would return the value of the key in section (if set). If the
+        file do not support sections (section for this method is not provided),
+        then file would be parsed in a simple way with `.readlines()` method and
+        using separator each line would be split into two parts: key and a
+        value. If key is matched, the value is striped and returned.
+
+        If file supports section (can be parsed via configparser), then section
+        (in this case has to be set) and key would be used for accessing the
+        value.
+
+        In both cases, if key is not found, an exception would be raised:
+        SCAutolib.SCAutolibException for no-configparser files, and for
+        configparser some of its exceptions.
+        :param key: required key
+        :param section: section where the key should be found
+        :param separator: applicable only for non-configparser file. Separator
+            that would be used to so split a line from the file. By default
+            separator is '='
+
+        :return: value of the key in section (if set)
+        """
+        if section is None:
+            # simple config files without sections
+            if self._simple_content is None:
+                with self._conf_file.open() as config:
+                    self._simple_content = config.readlines()
+            for line in self._simple_content:
+                key_from_file, value = line.split(separator, maxsplit=1)
+                if key_from_file == key:
+                    return value.strip()
+
+            raise SCAutolibException(f"Key '{key}' doesn't present in the "
+                                     f"file {self._conf_file}")
+        elif self._default_parser is None:
+            self._default_parser = ConfigParser()
+            self._default_parser.optionxform = str
+            with self._conf_file.open() as config:
+                self._default_parser.read_file(config)
+        return self._default_parser[section][key]
+
     def save(self):
         """
         Save content of config file stored in parser object to config file.
@@ -147,6 +196,12 @@ class File:
             logger.info(f"Removing {self._conf_file}.")
         except FileNotFoundError:
             logger.info(f"{self._conf_file} does not exist. Nothing to do.")
+
+    def backup(self):
+        new_name = f"{self._conf_file.name}.backup"
+        new_path = LIB_BACKUP.joinpath(new_name)
+        copy2(self._conf_file, new_path)
+        logger.debug(f"File {self._conf_file} is stored to {new_path}")
 
 
 class SSSDConf(File):
