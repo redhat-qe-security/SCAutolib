@@ -7,6 +7,7 @@ from typing import Union
 from SCAutolib import logger, run, LIB_DIR, LIB_BACKUP
 from SCAutolib.exceptions import SCAutolibWrongConfig, SCAutolibException
 from SCAutolib.models import CA, file, user, card
+from SCAutolib.models.file import File
 from SCAutolib.utils import OSVersion, _check_selinux, _gen_private_key, _get_os_version, _install_packages, \
     _check_packages
 
@@ -24,7 +25,7 @@ class Controller:
     def conf_path(self):
         return self._lib_conf_path
 
-    def __init__(self, config: Union[Path, str], params: {}):
+    def __init__(self, config: Union[Path, str], params: {} = None):
         """
         Constructor will parse and check input configuration file. If some
         required fields in the configuration are missing, CLI parameters
@@ -75,8 +76,8 @@ class Controller:
         :type gdm: bool
         :return:
         """
-        LIB_DIR.mkdir()
-        LIB_BACKUP.mkdir()
+        LIB_DIR.mkdir(exist_ok=True)
+        LIB_BACKUP.mkdir(exist_ok=True)
 
         packages = ["opensc", "httpd", "sssd", "sssd-tools"]
         if gdm:
@@ -234,7 +235,7 @@ class Controller:
     def cleanup(self):
         ...
 
-    def _validate_configuration(self, params: {}):
+    def _validate_configuration(self, params: {} = None):
         """
         Validate schema of the configuration file. If some value doesn't present
         in the config file, this value would be looked in the CLI parameters
@@ -256,7 +257,7 @@ class Controller:
              Optional("ipa"): {
                  'admin_passwd': Use(str),
                  'root_passwd': Use(str),
-                 Optional('ip_addr', default=params["ip_addr"]): Use(str),
+                 Optional('ip_addr', default=None): Use(str),
                  'server_hostname': Use(str),
                  'client_hostname': Use(str),
                  'domain': Use(str),
@@ -290,19 +291,26 @@ class Controller:
         """
 
         _check_selinux()
-        with open("/usr/lib/systemd/system/pcscd.service", "w+") as f:
 
-            data = f.read().replace("--auto-exit", "")
-            if "--auto-exit" in data:
-                f.write(data.replace("--auto-exit", ""))
-            else:
-                f.write(data)
+        pcscd_service = File("/usr/lib/systemd/system/pcscd.service")
+        pcscd_service.backup()
+        exec_start = pcscd_service.get(section="Service", key="ExecStart")
+        if "--auto-exit" in exec_start:
+            exec_start = exec_start.replace("--auto-exit", "")
+            pcscd_service.set(section="Service", key="ExecStart",
+                              value=exec_start)
+            pcscd_service.save()
 
-        with open("/usr/share/p11-kit/modules/opensc.module", "r+") as f:
-            data = f.read()
-            if "disable-in: virt_cacard" not in data:
-                f.write("disable-in: virt_cacard\n")
-                logger.debug("opensc.module is updated")
+        opensc_module = File("/usr/share/p11-kit/modules/opensc.module")
+        opensc_module.backup()
+        try:
+            opensc_module.get("disable-in", separator=":")
+        except SCAutolibException:
+            logger.warning("OpenSC module do not have option 'disabled-in: "
+                           "virt_cacard' set")
+            opensc_module.set(key="disabled-in", value="virt_cacard",
+                              separator=": ")
+            opensc_module.save()
 
         run(['systemctl', 'stop', 'pcscd.service', 'pcscd.socket', 'sssd'])
         rmtree("/var/lib/sss/mc/*", ignore_errors=True)

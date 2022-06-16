@@ -112,7 +112,7 @@ class File:
                 else:
                     new_content.append(line)
             if not modified:
-                new_content.append(f"\n{key}{separator}{value}")
+                new_content.append(f"\n{key}{separator}{value}\n")
             self._simple_content = new_content
         else:
             # configparser compatible config files (with sections)
@@ -163,8 +163,10 @@ class File:
                 with self._conf_file.open() as config:
                     self._simple_content = config.readlines()
             for line in self._simple_content:
+                if line.startswith("#") or line.startswith("\n"):
+                    continue
                 key_from_file, value = line.split(separator, maxsplit=1)
-                if key_from_file == key:
+                if key_from_file.strip() == key:
                     return value.strip()
 
             raise SCAutolibException(f"Key '{key}' doesn't present in the "
