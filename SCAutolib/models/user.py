@@ -62,7 +62,6 @@ class User:
         if self._card:
             logger.error("Delete the existing card before adding a new one.")
             raise ValueError("A card is already assigned to this user")
-        card.user = self
         self._card = card
 
     @card.deleter

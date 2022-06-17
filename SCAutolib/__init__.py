@@ -1,12 +1,15 @@
-import logging
-import subprocess
 from os import symlink
 from os.path import (dirname, abspath, join, exists)
-from pathlib import Path
 
 import coloredlogs
+import logging
+import subprocess
+import urllib3
 import yaml
+from pathlib import Path
 
+# To disable redundant warning in the log output
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 fmt = "%(name)s:%(module)s.%(funcName)s.%(lineno)d [%(levelname)s] %(message)s"
 date_fmt = "%H:%M:%S"
@@ -190,6 +193,7 @@ def run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True,
     """
     if type(cmd) == str:
         cmd = cmd.split(" ")
+    logger.debug(f"run: {' '.join([str(p) for p in cmd])}")
     out = subprocess.run(cmd, stdout=stdout, stderr=stderr, encoding="utf-8",
                          **kwargs)
     if print_:

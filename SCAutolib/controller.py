@@ -125,16 +125,17 @@ class Controller:
         cnf = file.OpensslCnf(ca_dir.joinpath("ca.cnf"), "CA", str(ca_dir))
         self.local_ca = CA.LocalCA(dir=ca_dir, cnf=cnf)
 
-        if force:
+        if force or not ca_dir.exists():
             logger.warning(f"Removing previous local CA in a directory "
                            f"{ca_dir}")
             self.local_ca.cleanup()
 
-        ca_dir.mkdir(exist_ok=True)
+            ca_dir.mkdir(exist_ok=True)
 
-        cnf.create()
-        cnf.save()
-        self.local_ca.setup(force)
+            cnf.create()
+            cnf.save()
+            self.local_ca.setup()
+        logger.info(f"Local CA is configured in {ca_dir}")
         # Generate certificates
 
     def setup_ipa_ca(self, force: bool = False):
@@ -152,7 +153,16 @@ class Controller:
             msg = "Section for IPA is not found in the configuration file"
             raise SCAutolibWrongConfig(msg)
         self.ipa_ca = CA.IPAServerCA(**self.lib_conf["ca"]["ipa"])
-        self.ipa_ca.setup(force=force)
+
+        if self.ipa_ca.is_installed:
+            logger.warning("IPA client is already configured on this system.")
+            if not force:
+                logger.info("Set force argument to True if you want to remove "
+                            "previous installation.")
+                return
+            self.ipa_ca.restore()
+
+        self.ipa_ca.setup()
 
     def setup_user(self, user_dict):
         """
@@ -162,17 +172,25 @@ class Controller:
         :param user_dict:
         :return:
         """
+        new_user = None
+        card_dir: Path = user_dict["card_dir"]
+        # Card dir is home dir of the user home directory
+        if ("/", "home", user_dict["name"]) != card_dir.parts[0:2]:
+            user_dict["card_dir"].mkdir(exist_ok=True)
+
         if user_dict["local"]:
             new_user = user.User(username=user_dict["name"],
                                  pin=user_dict["pin"],
                                  password=user_dict["passwd"],
-                                 card_dir=user_dict["card_dir"],
+                                 card_dir=card_dir,
                                  cert=user_dict["cert"], key=user_dict["key"])
             csr_path = new_user.card_dir.joinpath(f"csr-{new_user.username}.csr")
             cnf = file.OpensslCnf(filepath=csr_path, conf_type="user",
                                   replace=new_user.username)
+            new_user.add_user()
             cnf.create()
             cnf.save()
+
             new_user.cnf = cnf.path
             self.sssd_conf.set(
                 section=f"certmap/shadowutils/{new_user.username}",
@@ -189,23 +207,29 @@ class Controller:
                                     username=user_dict["name"],
                                     pin=user_dict["pin"],
                                     password=user_dict["passwd"],
-                                    card_dir=user_dict["card_dir"],
+                                    card_dir=card_dir,
                                     cert=user_dict["cert"],
                                     key=user_dict["key"])
 
-        new_user.add_user()
-        new_card = None
-        if user_dict["card_type"] == "virtual":
-            hsm_conf = file.SoftHSM2Conf(new_user.card_dir, new_user.card_dir)
-            hsm_conf.create()
+            new_user.add_user()
 
-            new_card = card.VirtualCard()
+        new_card = None
+
+        if user_dict["card_type"] == "virtual":
+            hsm_conf = file.SoftHSM2Conf(
+                new_user.card_dir.joinpath("sofhtsm2.conf"),
+                new_user.card_dir)
+            hsm_conf.create()
+            hsm_conf.save()
+
+            new_card = card.VirtualCard(new_user)
             new_card.softhsm2_conf = hsm_conf
         else:
             raise NotImplementedError("Other card type than 'virtual' does not "
                                       "supported yet")
 
         new_user.card = new_card
+        return new_user
 
     def enroll_card(self, user_: user.User):
         """

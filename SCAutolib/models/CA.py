@@ -15,7 +15,7 @@ from SCAutolib.exceptions import SCAutolibException
 from SCAutolib.models.file import OpensslCnf
 
 
-class CA:
+class BaseCA:
 
     def request_cert(self, csr, username: str, cert_out: Path):
         """
@@ -32,7 +32,7 @@ class CA:
         """
         ...
 
-    def setup(self, force: bool = False):
+    def setup(self):
         """
         Configure the CA
 
@@ -58,7 +58,7 @@ class CA:
         ...
 
 
-class LocalCA(CA):
+class LocalCA(BaseCA):
     template = Path(TEMPLATES_DIR, "ca.cnf")
 
     def __init__(self, dir: Path = None, cnf: OpensslCnf = None):
@@ -91,22 +91,18 @@ class LocalCA(CA):
     def cnf(self):
         return self._ca_cnf
 
-    def setup(self, force: bool = False):
+    def setup(self):
         """
         Creates directory and file structure needed by local CA. If directory
         already exists and force = True, directory would be recursively deleted
         and new local CA would be created. Otherwise, configuration would be
         skipped.
-
-        :param force: overwrite existing configuration with force if True,
-                      otherwise, skip configuration.
-        :type force: bool
         """
 
         self.root_dir.mkdir(parents=True, exist_ok=True)
-        self._newcerts.mkdir()
-        self._certs.mkdir()
-        self._crl.parent.mkdir()
+        self._newcerts.mkdir(exist_ok=True)
+        self._certs.mkdir(exist_ok=True)
+        self._crl.parent.mkdir(exist_ok=True)
 
         with self._serial.open("w") as f:
             f.write("01")
@@ -204,7 +200,7 @@ class LocalCA(CA):
         logger.info(f"Local CA from {self.root_dir} is removed")
 
 
-class IPAServerCA(CA):
+class IPAServerCA(BaseCA):
     """
     Class represents IPA server with integrated CA. Through this class
     communication with IPA server is made primarily using
@@ -261,35 +257,35 @@ class IPAServerCA(CA):
         self._ipa_server_realm = realm if realm is not None else domain.upper()
         self._ipa_client_hostname = client_hostname
         self._ipa_server_root_passwd = root_passwd
-        self.meta_client: ClientMeta = ClientMeta(self._ipa_server_hostname,
-                                                  verify_ssl=False)
-        self.meta_client.login("admin", self._ipa_server_admin_passwd)
 
-    def setup(self, force: bool = False):
+        if self.is_installed:
+            self.meta_client: ClientMeta = ClientMeta(self._ipa_server_hostname,
+                                                      verify_ssl=False)
+            self.meta_client.login("admin", self._ipa_server_admin_passwd)
+
+    @property
+    def is_installed(self):
+        """
+        :return: True, if IPA client is installed on the system (ipa command
+            returns zero return code), otherwise False
+        :rtype: bool
+        """
+        out = run(["ipa", "help"], print_=False, check=False)
+        return out.returncode == 0
+
+    def setup(self):
         """
         Setup IPA client for IPA server. After IPA client is installed, system
         would be configured for smart card login with IPA using script from
         IPA server obtained via SSH.
-
-        :param force: if True, previous installation of the IPA client would be
-            removed
-        :type force: bool
         """
-
-        if self.is_installed:
-            logger.warning("IPA client is already configured on this system.")
-            if not force:
-                logger.info("Set force argument to True if you want to remove "
-                            "previous installation.")
-                return
-            self.restore()
-
         logger.info(f"Start setup of IPA client on the system for "
                     f"{self._ipa_server_hostname} IPA server.")
 
         self._add_to_resolv()
         self._set_hostname()
 
+        logger.info("Installing IPA client")
         run(["ipa-client-install", "-p", "admin",
              "--password", self._ipa_server_admin_passwd,
              "--server", self._ipa_server_hostname,
@@ -301,6 +297,9 @@ class IPAServerCA(CA):
         logger.debug("IPA client is installed")
 
         ipa_client_script = self._get_sc_setup_script()
+        cmd = ["kinit", "admin"]
+        run(cmd, input="SECret.123")
+
         run(f'bash {ipa_client_script} /etc/ipa/ca.crt', check=True)
         logger.debug("Setup of IPA client for smart card is finished")
 
@@ -316,16 +315,10 @@ class IPAServerCA(CA):
 
         # TODO: add to restore client host name
         logger.info("IPA client is configured on the system.")
-
-    @property
-    def is_installed(self):
-        """
-        :return: True, if IPA client is installed on the system (ipa command
-            returns zero return code), otherwise False
-        :rtype: bool
-        """
-        out = run(["ipa", "help"], print_=False, check=False)
-        return out.returncode == 0
+        if self.meta_client is None:
+            self.meta_client: ClientMeta = ClientMeta(self._ipa_server_hostname,
+                                                      verify_ssl=False)
+            self.meta_client.login("admin", self._ipa_server_admin_passwd)
 
     def _set_hostname(self):
         """
@@ -340,17 +333,18 @@ class IPAServerCA(CA):
         editing
         """
         nameserver = f"nameserver {self._ipa_server_ip}"
-        with open("/etc/resolv.conf", "w+") as f:
+        with open("/etc/resolv.conf", "r") as f:
             cnt = f.read()
-            if nameserver not in cnt:
-                logger.warning(f"Nameserver {self._ipa_server_ip} is not "
-                               "present in /etc/resolve.conf. Adding...")
-                f.write(nameserver + "\n" + cnt)
-                logger.info(
-                    "IPA server is added to /etc/resolv.conf "
-                    "as first nameserver")
-                run("chattr -i /etc/resolv.conf")
-                logger.info("File /etc/resolv.conf is blocked for editing")
+        if nameserver not in cnt:
+            logger.warning(f"Nameserver {self._ipa_server_ip} is not "
+                           "present in /etc/resolve.conf. Adding...")
+            cnt = (nameserver + "\n" + cnt)
+            with open("/etc/resolv.conf", "w") as f:
+                f.write(cnt)
+            logger.info(
+                "IPA server is added to /etc/resolv.conf as first nameserver")
+            run("chattr -i /etc/resolv.conf")
+            logger.info("File /etc/resolv.conf is blocked for editing")
 
     def _add_to_hosts(self):
         """
@@ -360,7 +354,7 @@ class IPAServerCA(CA):
         with open("/etc/hosts", "r+") as f:
             cnt = f.read()
             if entry not in cnt:
-                f.write(entry)
+                f.write(f"\n{entry}\n")
                 logger.warning(
                     f"New entry {entry} for IPA server is added to /etc/hosts")
             logger.info(
@@ -375,7 +369,8 @@ class IPAServerCA(CA):
         :rtype: patlib.Path
         """
         ipa_client_script = Path(LIB_DIR, "ipa-client-sc.sh")
-        kinitpass = Responder(pattern="Password for admin@SC.TEST.COM: ",
+        kinitpass = Responder(pattern=
+                              f"Password for admin@{self._ipa_server_realm}: ",
                               response=f"{self._ipa_server_admin_passwd}\n")
         with Connection(self._ipa_server_ip, user="root",
                         connect_kwargs={"password":

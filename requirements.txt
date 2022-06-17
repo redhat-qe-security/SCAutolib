@@ -1,13 +1,9 @@
-click
+click>=8
 coloredlogs
-cryptography
 paramiko
 fabric
 PyYAML
 invoke
-
-pytest
-SCAutolib
-setuptools
+pytest>=7
 schema
 python_freeipa
