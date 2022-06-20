@@ -166,14 +166,14 @@ class VirtualCard(Card):
                "-d", "0"]
         run(cmd, env={"SOFTHSM2_CONF": self._softhsm2_conf.path})
         logger.debug(
-            f"User key {self._private_key} is added to virtual smart card")
+            f"User key {self._user.key} is added to virtual smart card")
 
         cmd = ['pkcs11-tool', '--module', 'libsofthsm2.so', '--slot-index', "0",
                '-w', self._user.cert, '-y', 'cert', '-p', self._user.pin,
                '--label', f"'{self._user.username}'", '--set-id', "0", '-d', "0"]
         run(cmd, env={"SOFTHSM2_CONF": self._softhsm2_conf.path})
         logger.debug(
-            f"User certificate {self._cert} is added to virtual smart card")
+            f"User certificate {self._user.cert} is added to virtual smart card")
 
         # To get URI of the card, the card has to be inserted
         # Virtual smart card can't be started without a cert and a key uploaded
@@ -191,7 +191,8 @@ class VirtualCard(Card):
 
         assert self._softhsm2_conf.path.exists(), \
             "Can't proceed, SoftHSM2 conf doesn't exist"
-        Path(f"{self.user.card_dir}/tokens").mkdir()
+
+        self.user.card_dir.joinpath("tokens").mkdir(exist_ok=True)
 
         p11lib = "/usr/lib64/pkcs11/libsofthsm2.so"
         # Initialize SoftHSM2 token. An error would be raised if token with same
@@ -204,6 +205,7 @@ class VirtualCard(Card):
             f"SoftHSM token is initialized with label '{self.user.username}'")
 
         # Initialize NSS db
+        self._nssdb = self.user.card_dir.joinpath("db")
         self._nssdb.mkdir(exist_ok=True)
         run(f"modutil -create -dbdir sql:{self._nssdb} -force", check=True)
         logger.debug(f"NSS database is initialized in {self._nssdb}")
@@ -218,7 +220,7 @@ class VirtualCard(Card):
         with self._template.open() as tmp:
             with self._service_location.open("w") as f:
                 f.write(tmp.read().format(username=self.user.username,
-                                          softhsm2_conf=self._softhsm2_conf,
+                                          softhsm2_conf=self._softhsm2_conf.path,
                                           card_dir=self.user.card_dir))
 
         logger.debug(f"Service is created in {self._service_location}")

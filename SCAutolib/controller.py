@@ -79,7 +79,7 @@ class Controller:
         LIB_DIR.mkdir(exist_ok=True)
         LIB_BACKUP.mkdir(exist_ok=True)
 
-        packages = ["opensc", "httpd", "sssd", "sssd-tools"]
+        packages = ["opensc", "httpd", "sssd", "sssd-tools", "gnutls-utils"]
         if gdm:
             packages.append("gdm")
 
@@ -138,7 +138,7 @@ class Controller:
         logger.info(f"Local CA is configured in {ca_dir}")
         # Generate certificates
 
-    def setup_ipa_ca(self, force: bool = False):
+    def setup_ipa_client(self, force: bool = False):
         """
         Configure IPA client for given IPA server on current host. IPA server
         should be already up and running for correct configuration of the IPA
@@ -161,7 +161,8 @@ class Controller:
                             "previous installation.")
                 return
             self.ipa_ca.restore()
-
+        else:
+            logger.info("IPA client does not configured on the system")
         self.ipa_ca.setup()
 
     def setup_user(self, user_dict):
@@ -196,6 +197,7 @@ class Controller:
                 section=f"certmap/shadowutils/{new_user.username}",
                 key="matchrule",
                 value=f"<SUBJECT>.*CN={new_user.username}.*")
+            self.sssd_conf.save()
             logger.debug(f"Match rule for user {new_user.username} is added "
                          f"to /etc/sssd/sssd.conf")
         else:
@@ -227,7 +229,7 @@ class Controller:
         else:
             raise NotImplementedError("Other card type than 'virtual' does not "
                                       "supported yet")
-
+        new_card.create()
         new_user.card = new_card
         return new_user
 
@@ -239,6 +241,7 @@ class Controller:
 
         :param user_: User with a card to be enrolled.
         """
+        logger.debug(f"Starting enrollment of the card for user {user_.username}")
         if not user_.card:
             raise SCAutolibException(f"Card for the user {user_.username} does "
                                      f"not initialized")

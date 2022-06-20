@@ -8,6 +8,8 @@ password, smart card pin, etc.
 The classes implement add_user and delete_user methods which can be used to
 create or remove a specified user in the system or in the specified IPA server.
 """
+import pwd
+
 from pathlib import Path
 
 from SCAutolib.exceptions import SCAutolibException
@@ -115,12 +117,24 @@ class User:
         self._cnf = None
 
     def delete_user(self):
-        logger.info(f"Deleting the user {self.username}")
-        run(['userdel', '-f', self.username], check=True)
+        try:
+            pwd.getpwnam(self.username)
+            logger.info(f"Deleting the user {self.username}")
+            run(['userdel', '-f', self.username], check=True)
+        except KeyError:
+            pass
+        logger.info(f"User {self.username} does not present on the system")
 
-    def add_user(self):
-        run(['useradd', '-m', '-p', self.password, self.username], check=True)
-        logger.info(f"Creating new user {self.username}")
+    def add_user(self, force=False):
+        try:
+            pwd.getpwnam(self.username)
+        except KeyError:
+            logger.debug(f"Creating new user {self.username}")
+            cmd = ['useradd', '-m', self.username]
+            run(cmd, check=True)
+            cmd = ["passwd", self.username, "--stdin"]
+            run(cmd, input=self.password)
+        logger.info(f"User {self.username} presents ons the system")
 
     def gen_csr(self):
         csr_path = self.card_dir.joinpath(f"csr-{self.username}.csr")
