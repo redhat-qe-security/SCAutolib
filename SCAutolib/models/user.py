@@ -33,7 +33,7 @@ class User:
         :type Card
         :param cnf: CNF file to be associated with the user
         :type Path
-        :param key: Key to be assoicated with the user
+        :param key: Key to be associated with the user
         :type Path
         :param cert: Certificate to be associated with the user.
         :type Path
@@ -141,7 +141,7 @@ class IPAUser(User):
         :type Card
         :param cnf: CNF file to be associated with the user
         :type Path
-        :param key: Key to be assoicated with the user
+        :param key: Key to be associated with the user
         :type Path
         :param cert: Certificate to be associated with the user.
         :type Path
