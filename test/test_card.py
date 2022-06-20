@@ -40,7 +40,7 @@ def local_user_with_smart_card(local_user, gen_key_and_cert):
 
     local_user.key, local_user.cert = gen_key_and_cert
     local_user.card = card.VirtualCard(user=local_user,
-                                       softhsm2_conf=hsm_conf.conf_path)
+                                       softhsm2_conf=hsm_conf._conf_file)
     return local_user
 
 
