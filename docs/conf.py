@@ -35,7 +35,7 @@ extensions = [
     'sphinx_autodoc_typehints',  # Automatically document param types (less noise in class signature)
     'sphinx_rtd_theme',  # Read The Docs theme
     'sphinx.ext.autosectionlabel',  # For adding reference based on heading
-    'sphinx.ext.todo',  # Enable TODOs in teh output
+    'sphinx.ext.todo',  # Enable TODOs in the output
 ]
 
 intersphinx_mapping = {

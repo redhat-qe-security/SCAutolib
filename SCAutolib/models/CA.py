@@ -455,7 +455,7 @@ class IPAServerCA(CA):
         """
         Add given user to IPA server. It is a wrapper on the
         python_freeipa.client_meta.ClientMeta.user_add method. Just extracts
-        necessary fields from IPAUser objet and pass them to the method. As a
+        necessary fields from IPAUser object and pass them to the method. As a
         result, o_givenname == o_uid == o_sn == o_cn for simplicity.
 
         :param user: User to be added to the IPA server.
@@ -515,7 +515,7 @@ class IPAServerCA(CA):
         logger.info("IPA client is removed.")
 
     class __PKeyChild(paramiko.PKey):
-        """This child class is need to fix SSH connection with MD5 algorith
+        """This child class is need to fix SSH connection with MD5 algorithm
         in FIPS mode
 
         This is just workaround until PR in paramiko would be accepted

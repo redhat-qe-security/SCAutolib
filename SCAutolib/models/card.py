@@ -82,7 +82,7 @@ class VirtualCard(Card):
         :param user: User of this card
         :type user: User
         :param insert: If True, the card would be inserted on entering the
-            context manger. Default False.
+            context manager. Default False.
         :type insert: bool
         :param softhsm2_conf: path to SoftHSM2 configuration file
         :type softhsm2_conf: pathlib.Path
@@ -108,7 +108,7 @@ class VirtualCard(Card):
 
     def __enter__(self):
         """
-        Start of context manger for virtual smart card. The card would be
+        Start of context manager for virtual smart card. The card would be
         inserted if ``insert`` parameter in constructor is specified.
 
         :return: self

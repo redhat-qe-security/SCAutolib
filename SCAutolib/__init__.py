@@ -137,7 +137,7 @@ def set_config(path, value, action="replace", type_=str):
         if value is not None:
             value = type_(value)
     except ValueError:
-        logger.error(f"Cant convert value {value} of type "
+        logger.error(f"Can't convert value {value} of type "
                      f"{str(type(value))} to type {str(type_)}")
 
     if action == "replace":
