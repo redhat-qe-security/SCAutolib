@@ -225,7 +225,8 @@ def test_ipa_cert_request_and_revoke(installed_ipa, ipa_meta_client,
         ipa_ca = CA.IPAServerCA(ip_addr=dummy_ipa_vals["server_ip"],
                                 client_hostname=dummy_ipa_vals[
                                     "client_hostname"],
-                                server_hostname=dummy_ipa_vals["server_hostname"],
+                                server_hostname=dummy_ipa_vals[
+                                    "server_hostname"],
                                 root_passwd=dummy_ipa_vals[
                                     "server_root_passwd"],
                                 admin_passwd=dummy_ipa_vals[
@@ -256,7 +257,8 @@ def test_ipa_user_add(installed_ipa, ipa_meta_client, dummy_ipa_vals,
         ipa_ca = CA.IPAServerCA(ip_addr=dummy_ipa_vals["server_ip"],
                                 client_hostname=dummy_ipa_vals[
                                     "client_hostname"],
-                                server_hostname=dummy_ipa_vals["server_hostname"],
+                                server_hostname=dummy_ipa_vals[
+                                    "server_hostname"],
                                 root_passwd=dummy_ipa_vals[
                                     "server_root_passwd"],
                                 admin_passwd=dummy_ipa_vals[

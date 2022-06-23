@@ -2,7 +2,6 @@ import pytest
 from shutil import copy
 from SCAutolib.controller import Controller
 from conftest import FILES_DIR
-import yaml
 import json
 
 
@@ -18,13 +17,15 @@ def dummy_config(tmp_path):
     return config_path
 
 
-@pytest.mark.ipa
+@pytest.fixture()
+def wrong_dummy_config(dummy_config):
+    with open(dummy_config, "r") as f:
+        conf = json.load(f)
+
+
 def test_parse_config(dummy_config):
-    cnt = Controller(dummy_config, {"ip_addr": None})
+    """Test that configuration is parsed and validated properly."""
+    cnt = Controller(dummy_config)
 
     assert cnt.conf_path.is_absolute()
     assert isinstance(cnt.lib_conf, dict)
-
-    assert cnt.local_ca is not None
-    assert cnt.ipa_ca._ipa_server_ip is None
-    assert cnt.ipa_ca is not None
