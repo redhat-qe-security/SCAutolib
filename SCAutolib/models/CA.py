@@ -13,6 +13,7 @@ from socket import gethostname
 from SCAutolib import TEMPLATES_DIR, logger, run, LIB_DIR
 from SCAutolib.exceptions import SCAutolibException
 from SCAutolib.models.file import OpensslCnf
+from ipalib.facts import is_ipa_client_configured
 
 
 class BaseCA:
@@ -270,8 +271,7 @@ class IPAServerCA(BaseCA):
             returns zero return code), otherwise False
         :rtype: bool
         """
-        out = run(["ipa", "help"], print_=False, check=False)
-        return out.returncode == 0
+        return is_ipa_client_configured()
 
     def setup(self):
         """
