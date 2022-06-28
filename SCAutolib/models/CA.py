@@ -484,7 +484,7 @@ class IPAServerCA(BaseCA):
         logger.info(f"Certificate {cert.serial_number} is revoked")
         return cert.serial_number
 
-    def restore(self):
+    def cleanup(self):
         """
         Remove IPA client from the system and from the IPA server
 
