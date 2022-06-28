@@ -72,8 +72,10 @@ def _get_os_version():
         return OSVersion.RHEL_9
     elif "Red Hat Enterprise Linux release 8" in cnt:
         return OSVersion.RHEL_8
-    else:
+    elif "Fedora" in cnt:
         return OSVersion.Fedora
+    else:
+        raise SCAutolibException("OS is not detected.")
 
 
 def _install_packages(packages):
