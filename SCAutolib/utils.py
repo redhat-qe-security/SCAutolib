@@ -1,3 +1,8 @@
+"""
+This module provides different additional helping functions that are used
+across the library. These functions are made based on library demands and are
+not attended to cover some general use-cases or specific corner cases.
+"""
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from pathlib import Path
@@ -5,6 +10,7 @@ from pathlib import Path
 from enum import Enum
 
 from SCAutolib import run, logger, TEMPLATES_DIR
+from SCAutolib.exceptions import SCAutolibException
 
 
 class OSVersion(Enum):
@@ -77,8 +83,6 @@ def _install_packages(packages):
     :param packages: list of packages to be installed
     """
     for pkg in packages:
-        logger.warning(f"Package {pkg} is not installed on the "
-                       f"system. Installing...")
         run(f"dnf install {pkg} -y")
         pkg = run(["rpm", "-qa", pkg]).stdout
         logger.debug(f"Package {pkg} is installed")
@@ -97,7 +101,7 @@ def _check_packages(packages):
         out = run(["rpm", "-qa", pkg])
         if pkg not in out.stdout:
             logger.warning(f"Package {pkg} is required for the testing, "
-                           f"but doesn't present in the system")
+                           f"but is not present in the system")
             missing.append(pkg)
         else:
             logger.debug(f"Package {out.stdout.strip()} is present")

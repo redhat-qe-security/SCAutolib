@@ -200,6 +200,10 @@ class File:
             logger.info(f"{self._conf_file} does not exist. Nothing to do.")
 
     def backup(self):
+        """
+        Backup current file to library directory for backups <lib-dir>/backup to
+        file called <original-file-name>.backup
+        """
         new_name = f"{self._conf_file.name}.backup"
         new_path = LIB_BACKUP.joinpath(new_name)
         copy2(self._conf_file, new_path)
@@ -309,7 +313,8 @@ class SSSDConf(File):
 
     def save(self):
         """
-        Save content of config file stored in parser object to config file.
+        Save content of config file stored in parser object to config file. File
+        would have permission 0600 as it is required by SSSD.
         """
         with self._conf_file.open("w") as config:
             if len(self._changes.sections()) == 0:
@@ -476,7 +481,3 @@ class OpensslCnf(File):
             else:
                 # in case set method was used
                 self._default_parser.write(config)
-
-    @property
-    def path(self):
-        return self._conf_file

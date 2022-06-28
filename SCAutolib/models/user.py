@@ -123,7 +123,7 @@ class User:
             run(['userdel', '-f', self.username], check=True)
         except KeyError:
             pass
-        logger.info(f"User {self.username} does not present on the system")
+        logger.info(f"User {self.username} is not present on the system")
 
     def add_user(self, force=False):
         try:
@@ -134,7 +134,7 @@ class User:
             run(cmd, check=True)
             cmd = ["passwd", self.username, "--stdin"]
             run(cmd, input=self.password)
-        logger.info(f"User {self.username} presents ons the system")
+        logger.info(f"User {self.username} is present ons the system")
 
     def gen_csr(self):
         csr_path = self.card_dir.joinpath(f"csr-{self.username}.csr")
@@ -191,6 +191,11 @@ class IPAUser(User):
         logger.debug(r)
 
     def gen_csr(self):
+        """
+        Method for generating IPA user specific CSR file that would be sent to
+        the IPA server for generating the certificate. CSR is generated using
+        `openssl` command.
+        """
         if not self._key:
             raise SCAutolibException("Can't generate CSR because private key "
                                      "is not set")
