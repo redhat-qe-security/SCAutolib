@@ -12,7 +12,6 @@ from python_freeipa.client_meta import ClientMeta
 from shutil import rmtree, copy
 from socket import gethostname
 
-# from SCAutolib.models.user import IPAUser
 from SCAutolib import TEMPLATES_DIR, logger, run, LIB_DIR
 from SCAutolib.exceptions import SCAutolibException
 
@@ -177,11 +176,11 @@ class LocalCA(CA):
         if cert_out is not None:
             if cert_out.is_dir():
                 cert_out = cert_out.joinpath(f"{username}.pem")
-            elif cert_out.is_file():
+            elif cert_out.is_file() and cert_out.suffixes[-1] != ".pem":
                 cert_out = cert_out.with_suffix(".pem")
         else:
             cert_out = self._certs.joinpath(f"{username}.pem")
-        cmd = ["openssl", "ca", "-config", str(self._ca_cnf),
+        cmd = ["openssl", "ca", "-config", self._ca_cnf.path,
                "-batch", "-keyfile", str(self._ca_key), "-in", str(csr),
                "-notext", "-days", "365", "-extensions", "usr_cert",
                "-out", str(cert_out)]
@@ -195,9 +194,9 @@ class LocalCA(CA):
         :param cert: path to the certificate
         :type cert: pathlib.Path
         """
-        cmd = ['openssl', 'ca', '-config', self._ca_cnf, '-revoke', cert]
+        cmd = ['openssl', 'ca', '-config', self._ca_cnf.path, '-revoke', cert]
         run(cmd, check=True)
-        cmd = ['openssl', 'ca', '-config', self._ca_cnf, '-gencrl',
+        cmd = ['openssl', 'ca', '-config', self._ca_cnf.path, '-gencrl',
                '-out', self._crl]
         run(cmd, check=True)
         logger.info("Certificate is revoked")
@@ -268,9 +267,15 @@ class IPAServerCA(CA):
         self._ipa_server_realm = realm if realm is not None else domain.upper()
         self._ipa_client_hostname = client_hostname
         self._ipa_server_root_passwd = root_passwd
-        self.meta_client: ClientMeta = ClientMeta(self._ipa_server_hostname,
-                                                  verify_ssl=False)
-        self.meta_client.login("admin", self._ipa_server_admin_passwd)
+
+        try:
+            self.meta_client: ClientMeta = ClientMeta(self._ipa_server_hostname,
+                                                      verify_ssl=False)
+            self.meta_client.login("admin", self._ipa_server_admin_passwd)
+            logger.info("Connected to IPA via meta client")
+        except python_freeipa.exceptions.BadRequest:
+            logger.warning("Can't login to the IPA server. "
+                           "Client might be not configured")
 
     def setup(self, force: bool = False):
         """
@@ -297,6 +302,7 @@ class IPAServerCA(CA):
         self._add_to_resolv()
         self._set_hostname()
 
+        logger.info("Installing IPA client")
         run(["ipa-client-install", "-p", "admin",
              "--password", self._ipa_server_admin_passwd,
              "--server", self._ipa_server_hostname,
@@ -311,6 +317,10 @@ class IPAServerCA(CA):
         run("kinit admin", input=self._ipa_server_admin_passwd)
         run(f'bash {ipa_client_script} /etc/ipa/ca.crt', check=True)
         logger.debug("Setup of IPA client for smart card is finished")
+
+        self.meta_client: ClientMeta = ClientMeta(self._ipa_server_hostname,
+                                                  verify_ssl=False)
+        self.meta_client.login("admin", self._ipa_server_admin_passwd)
 
         policy = self.meta_client.pwpolicy_show(a_cn="global_policy")["result"]
         if ["0"] != policy["krbminpwdlife"]:
@@ -373,7 +383,7 @@ class IPAServerCA(CA):
         with open("/etc/hosts", "r+") as f:
             cnt = f.read()
             if entry not in cnt:
-                f.write(entry)
+                f.write(f"\n{entry}\n")
                 logger.warning(
                     f"New entry {entry} for IPA server is added to /etc/hosts")
             logger.info(
@@ -507,7 +517,7 @@ class IPAServerCA(CA):
         logger.info(f"Certificate {cert.serial_number} is revoked")
         return cert.serial_number
 
-    def restore(self):
+    def cleanup(self):
         """
         Remove IPA client from the system and from the IPA server
 
