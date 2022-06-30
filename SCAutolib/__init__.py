@@ -24,14 +24,19 @@ logging.getLogger("fabric").setLevel(logging.WARNING)
 DIR_PATH = dirname(abspath(__file__))
 TEMPLATES_DIR = Path(DIR_PATH, "templates")
 
-SETUP_IPA_SERVER = f"{DIR_PATH}/env/ipa-install-server.sh"
 LIB_DIR = Path("/etc/SCAutolib")
+SETUP_IPA_SERVER = LIB_DIR.joinpath("ipa-install-server.sh")
 CONF = join(LIB_DIR, "user-conf.yaml")
 LIB_CONF = join(LIB_DIR, "lib-conf.yaml")
 LIB_CA = join(LIB_DIR, "ca")
 LIB_BACKUP = LIB_DIR.joinpath("backup")
 LIB_KEYS = join(LIB_DIR, "keys")
 LIB_CERTS = join(LIB_DIR, "certs")
+LIB_DUMP = LIB_DIR.joinpath("dump")
+LIB_DUMP_USERS = LIB_DUMP.joinpath("users")
+LIB_DUMP_CAS = LIB_DUMP.joinpath("cas")
+LIB_DUMP_LOCAL_CA = LIB_DUMP_CAS.joinpath("local-ca.pickle")
+LIB_DUMP_IPA_CA = LIB_DUMP_CAS.joinpath("ipa-ca.pickle")
 
 
 def init_config(user_config=None, config_content: dict = None):

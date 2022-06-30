@@ -1,5 +1,6 @@
 import os
 import paramiko
+import python_freeipa
 from cryptography import x509
 from fabric.connection import Connection
 from hashlib import md5
@@ -258,10 +259,14 @@ class IPAServerCA(BaseCA):
         self._ipa_client_hostname = client_hostname
         self._ipa_server_root_passwd = root_passwd
 
-        if self.is_installed:
+        try:
             self.meta_client: ClientMeta = ClientMeta(self._ipa_server_hostname,
                                                       verify_ssl=False)
             self.meta_client.login("admin", self._ipa_server_admin_passwd)
+            logger.info("Connected to IPA via meta client")
+        except python_freeipa.exceptions.BadRequest:
+            logger.warning("Can't login to the IPA server. "
+                           "Client might be not configured")
 
     @property
     def is_installed(self):

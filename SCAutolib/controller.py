@@ -4,13 +4,15 @@ from schema import Schema, Use, Or, And, Optional
 from shutil import rmtree
 from typing import Union
 
-from SCAutolib import logger, run, LIB_DIR, LIB_BACKUP
+from SCAutolib import logger, run, LIB_DIR, LIB_BACKUP, LIB_DUMP, LIB_DUMP_USERS, LIB_DUMP_CAS, LIB_DUMP_LOCAL_CA, \
+    LIB_DUMP_IPA_CA
 from SCAutolib.exceptions import SCAutolibWrongConfig, SCAutolibException
 from SCAutolib.models import CA, file, user, card
 from SCAutolib.models.file import File
 from SCAutolib.utils import (OSVersion, _check_selinux, _gen_private_key,
                              _get_os_version, _install_packages,
                              _check_packages)
+import pickle
 
 
 class Controller:
@@ -54,6 +56,26 @@ class Controller:
             self.lib_conf = json.load(f)
             assert self.lib_conf, "Data are not loaded correctly."
         self.lib_conf = self._validate_configuration(params)
+        self.users = []
+
+    def __del__(self):
+        """
+        Before the object is deleted, all its internal objects would be dumped
+        to Pickle format to use them in test run time.
+        """
+        for usr in self.users:
+            logger.debug(str(LIB_DUMP_USERS.joinpath(f"{usr.username}.pickle")))
+            with LIB_DUMP_USERS.joinpath(f"{usr.username}.pickle").open("wb") \
+                    as f:
+                pickle.dump(usr, f)
+
+        if self.local_ca:
+            with LIB_DUMP_LOCAL_CA.open("wb") as f:
+                pickle.dump(self.local_ca, f)
+
+        if self.ipa_ca:
+            with LIB_DUMP_IPA_CA.open("wb") as f:
+                pickle.dump(self.ipa_ca, f)
 
     def prepare(self, force, gdm, install_missing):
         """
@@ -84,6 +106,9 @@ class Controller:
         """
         LIB_DIR.mkdir(exist_ok=True)
         LIB_BACKUP.mkdir(exist_ok=True)
+        LIB_DUMP.mkdir(exist_ok=True)
+        LIB_DUMP_USERS.mkdir(exist_ok=True)
+        LIB_DUMP_CAS.mkdir(exist_ok=True)
 
         packages = ["opensc", "httpd", "sssd", "sssd-tools", "gnutls-utils"]
         if gdm:
@@ -237,6 +262,7 @@ class Controller:
                                       "supported yet")
         new_card.create()
         new_user.card = new_card
+        self.users.append(new_user)
         return new_user
 
     def enroll_card(self, user_: user.User):

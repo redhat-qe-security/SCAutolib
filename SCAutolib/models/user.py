@@ -9,6 +9,7 @@ The classes implement add_user and delete_user methods which can be used to
 create or remove a specified user in the system or in the specified IPA server.
 """
 import pwd
+import python_freeipa
 
 from pathlib import Path
 
@@ -128,13 +129,18 @@ class User:
     def add_user(self, force=False):
         try:
             pwd.getpwnam(self.username)
+            msg = f"User {self.username} already exists on this " \
+                  f"machine. Username should be unique to avoid " \
+                  f"future problems with collisions"
+            logger.critical(msg)
+            # raise SCAutolibException(msg)
         except KeyError:
             logger.debug(f"Creating new user {self.username}")
             cmd = ['useradd', '-m', self.username]
             run(cmd, check=True)
             cmd = ["passwd", self.username, "--stdin"]
             run(cmd, input=self.password)
-        logger.info(f"User {self.username} is present ons the system")
+            logger.info(f"User {self.username} is present ons the system")
 
     def gen_csr(self):
         csr_path = self.card_dir.joinpath(f"csr-{self.username}.csr")
@@ -176,12 +182,19 @@ class IPAUser(User):
         self._meta_client = ipa_server.meta_client
 
     def add_user(self):
-        r = self._meta_client.user_add(self.username, self.username,
-                                       self.username, self.username,
-                                       o_userpassword=self.password,
-                                       o_homedirectory=str(self.card_dir))
-        logger.debug(r)
-        logger.info(f"User {self.username} is added to the IPA server")
+        try:
+            r = self._meta_client.user_add(self.username, self.username,
+                                           self.username, self.username,
+                                           o_userpassword=self.password,
+                                           o_homedirectory=str(self.card_dir))
+            logger.debug(r)
+            logger.info(f"User {self.username} is added to the IPA server")
+        except python_freeipa.exceptions.DuplicateEntry:
+            msg = f"User {self.username} already exists on the " \
+                  f"IPA server. Username should be unique to avoid " \
+                  f"future problems with collisions"
+            logger.critical(msg)
+            # raise SCAutolibException(msg)
 
     def delete_user(self):
         r = self._meta_client.user_del(self.username)["result"]

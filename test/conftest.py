@@ -9,7 +9,8 @@ FILES_DIR = os.path.join(DIR_PATH, "files")
 
 def pytest_addoption(parser):
     """
-    Define CLI parameters
+    Define CLI parameters. Parameters for IPA would be serialised to ipa_config
+    fixture.
     """
     parser.addoption(
         "--ipa-ip", action="store", help="IP address of IPA server",
@@ -38,6 +39,13 @@ def pytest_generate_tests(metafunc):
     ipa_hostname = metafunc.config.option.ipa_hostname
     ipa_admin_passwd = metafunc.config.option.ipa_admin_passwd
     ipa_root_passwd = metafunc.config.option.ipa_root_passwd
+
+    if 'ipa_config' in metafunc.fixturenames \
+            and all([ipa_ip, ipa_hostname, ipa_admin_passwd, ipa_root_passwd]):
+        ipa_config = {"ip": ipa_ip, "hostname": ipa_hostname,
+                      "admin_passwd": ipa_admin_passwd,
+                      "root_passwd": ipa_root_passwd}
+        metafunc.parametrize("ipa_config", [ipa_config])
 
     if 'ipa_ip' in metafunc.fixturenames and ipa_ip is not None:
         metafunc.parametrize("ipa_ip", [ipa_ip])
