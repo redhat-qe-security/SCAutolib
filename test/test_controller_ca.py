@@ -1,3 +1,6 @@
 import pytest
 
-# def test_pa
+
+@pytest.mark.skip
+def test():
+    pass

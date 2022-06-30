@@ -8,8 +8,9 @@ from SCAutolib import logger, run, LIB_DIR, LIB_BACKUP
 from SCAutolib.exceptions import SCAutolibWrongConfig, SCAutolibException
 from SCAutolib.models import CA, file, user, card
 from SCAutolib.models.file import File
-from SCAutolib.utils import OSVersion, _check_selinux, _gen_private_key, _get_os_version, _install_packages, \
-    _check_packages
+from SCAutolib.utils import (OSVersion, _check_selinux, _gen_private_key,
+                             _get_os_version, _install_packages,
+                             _check_packages)
 
 
 class Controller:
@@ -54,14 +55,19 @@ class Controller:
             assert self.lib_conf, "Data are not loaded correctly."
         self.lib_conf = self._validate_configuration(params)
 
-    def prepare(self):
+    def prepare(self, force, gdm, install_missing):
         """
         Method for setting up whole system based on configuration file and
         CLI commands
 
         :return:
         """
-        ...
+        self.setup_system(install_missing, gdm)
+        self.setup_local_ca(force=force)
+        self.setup_ipa_client(force=force)
+        for usr in self.lib_conf["users"]:
+            u = self.setup_user(usr)
+            self.enroll_card(u)
 
     def setup_system(self, install_missing: bool, gdm: bool):
         """
@@ -86,7 +92,7 @@ class Controller:
         # Prepare for virtual cards
         if "virtual" in [u["card_type"] for u in self.lib_conf["users"]]:
             packages += ["pcsc-lite-ccid", "pcsc-lite", "virt_cacard",
-                "vpcd", "softhsm"]
+                         "vpcd", "softhsm"]
             run("dnf -y copr enable jjelen/vsmartcard")
 
         # Add IPA packages if needed
@@ -241,7 +247,8 @@ class Controller:
 
         :param user_: User with a card to be enrolled.
         """
-        logger.debug(f"Starting enrollment of the card for user {user_.username}")
+        logger.debug(f"Starting enrollment of the card for user "
+                     f"{user_.username}")
         if not user_.card:
             raise SCAutolibException(f"Card for the user {user_.username} does "
                                      f"not initialized")
@@ -265,7 +272,10 @@ class Controller:
         user_.card.enroll()
 
     def cleanup(self):
-        ...
+        if self.local_ca:
+            self.local_ca.cleanup()
+        if self.ipa_ca:
+            self.ipa_ca.cleanup()
 
     def _validate_configuration(self, params: {} = None):
         """
@@ -353,7 +363,6 @@ class Controller:
         run("systemctl daemon-reload")
         run("systemctl restart pcscd sssd")
 
-        run("dnf -y copr enable jjelen/vsmartcard")
         logger.debug("Copr repo for virt_cacard is enabled")
 
     @staticmethod

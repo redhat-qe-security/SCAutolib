@@ -13,7 +13,6 @@ from socket import gethostname
 from SCAutolib import TEMPLATES_DIR, logger, run, LIB_DIR
 from SCAutolib.exceptions import SCAutolibException
 from SCAutolib.models.file import OpensslCnf
-from ipalib.facts import is_ipa_client_configured
 
 
 class BaseCA:
@@ -271,7 +270,7 @@ class IPAServerCA(BaseCA):
             returns zero return code), otherwise False
         :rtype: bool
         """
-        return is_ipa_client_configured()
+        return False
 
     def setup(self):
         """
@@ -303,6 +302,10 @@ class IPAServerCA(BaseCA):
         run(f'bash {ipa_client_script} /etc/ipa/ca.crt', check=True)
         logger.debug("Setup of IPA client for smart card is finished")
 
+        self.meta_client: ClientMeta = ClientMeta(self._ipa_server_hostname,
+                                                  verify_ssl=False)
+        self.meta_client.login("admin", self._ipa_server_admin_passwd)
+
         policy = self.meta_client.pwpolicy_show(a_cn="global_policy")["result"]
         if ["0"] != policy["krbminpwdlife"]:
             self.meta_client.pwpolicy_mod(a_cn="global_policy",
@@ -315,10 +318,6 @@ class IPAServerCA(BaseCA):
 
         # TODO: add to restore client host name
         logger.info("IPA client is configured on the system.")
-        if self.meta_client is None:
-            self.meta_client: ClientMeta = ClientMeta(self._ipa_server_hostname,
-                                                      verify_ssl=False)
-            self.meta_client.login("admin", self._ipa_server_admin_passwd)
 
     def _set_hostname(self):
         """
@@ -369,8 +368,8 @@ class IPAServerCA(BaseCA):
         :rtype: patlib.Path
         """
         ipa_client_script = Path(LIB_DIR, "ipa-client-sc.sh")
-        kinitpass = Responder(pattern=
-                              f"Password for admin@{self._ipa_server_realm}: ",
+        kinitpass = Responder(pattern=f"Password for "
+                                      f"admin@{self._ipa_server_realm}: ",
                               response=f"{self._ipa_server_admin_passwd}\n")
         with Connection(self._ipa_server_ip, user="root",
                         connect_kwargs={"password":

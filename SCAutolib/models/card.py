@@ -72,7 +72,7 @@ class VirtualCard(Card):
     _pattern = r"(pkcs11:model=PKCS%2315%20emulated;" \
                r"manufacturer=Common%20Access%20Card;serial=.*)"
 
-    def __init__(self, user, insert: bool = False, ):
+    def __init__(self, user, insert: bool = False):
         """
         Initialise virtual smart card. Constructor of the base class is also
         used.
