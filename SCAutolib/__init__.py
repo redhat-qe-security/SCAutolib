@@ -37,6 +37,7 @@ LIB_DUMP_USERS = LIB_DUMP.joinpath("users")
 LIB_DUMP_CAS = LIB_DUMP.joinpath("cas")
 LIB_DUMP_LOCAL_CA = LIB_DUMP_CAS.joinpath("local-ca.pickle")
 LIB_DUMP_IPA_CA = LIB_DUMP_CAS.joinpath("ipa-ca.pickle")
+LIB_DUMP_CARD = LIB_DUMP.joinpath("cards")
 
 
 def init_config(user_config=None, config_content: dict = None):

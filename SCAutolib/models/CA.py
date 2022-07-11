@@ -1,3 +1,4 @@
+import json
 import os
 import paramiko
 import python_freeipa
@@ -5,18 +6,19 @@ from cryptography import x509
 from fabric.connection import Connection
 from hashlib import md5
 from invoke import Responder
-from pathlib import Path
+from pathlib import Path, PosixPath
 from python_freeipa import exceptions
 from python_freeipa.client_meta import ClientMeta
 from shutil import rmtree
 from socket import gethostname
 
-from SCAutolib import TEMPLATES_DIR, logger, run, LIB_DIR
+from SCAutolib import TEMPLATES_DIR, logger, run, LIB_DIR, LIB_DUMP_CAS
 from SCAutolib.exceptions import SCAutolibException
 from SCAutolib.models.file import OpensslCnf
 
 
 class BaseCA:
+    dump_file: Path = None
 
     def request_cert(self, csr, username: str, cert_out: Path):
         """
@@ -61,36 +63,52 @@ class BaseCA:
 
 class LocalCA(BaseCA):
     template = Path(TEMPLATES_DIR, "ca.cnf")
+    dump_file = LIB_DUMP_CAS.joinpath("local-ca.json")
 
-    def __init__(self, dir: Path = None, cnf: OpensslCnf = None):
+    def __init__(self, root_dir: Path = None, cnf: OpensslCnf = None):
         """
         Class for local CA. Initialize required attributes, real setup is made
         by LocalCA.setup() method
 
-        :param dir: Path to root directory of the CA. By default, is in
+        :param root_dir: Path to root directory of the CA. By default, is in
             /etc/SCAutolib/ca
         :type: Path
         """
-        self.root_dir: Path = dir if dir is not None \
-            else Path("/etc/SCAutolib/ca")
-        self._conf_dir: Path = Path(dir, "conf")
-        self._newcerts: Path = Path(dir, "newcerts")
-        self._certs: Path = Path(dir, "certs")
-        self._crl: Path = Path(dir, "crl", "root.pem")
+        self.root_dir: Path = Path("/etc/SCAutolib/ca") if root_dir is None else root_dir
+        assert self.root_dir is not None
+        self._conf_dir: Path = self.root_dir.joinpath("conf")
+        self._newcerts: Path = self.root_dir.joinpath("newcerts")
+        self._certs: Path = self.root_dir.joinpath("certs")
+        self._crl: Path = self.root_dir.joinpath("crl", "root.pem")
         self._ca_pki_db: Path = Path("/etc/sssd/pki/sssd_auth_ca_db.pem")
 
         self._ca_cnf: OpensslCnf = cnf
         # self._ca_cnf: Path = cnf_path if cnf_path is not None \
         #     else self.root_dir.joinpath("ca.cnf")
-        self._ca_cert: Path = Path(dir, "rootCA.pem")
-        self._ca_key: Path = Path(dir, "rootCA.key")
+        self._ca_cert: Path = self.root_dir.joinpath("rootCA.pem")
+        self._ca_key: Path = self.root_dir.joinpath("rootCA.key")
 
-        self._serial: Path = Path(dir, "serial")
-        self._index: Path = Path(dir, "index.txt")
+        self._serial: Path = self.root_dir.joinpath("serial")
+        self._index: Path = self.root_dir.joinpath("index.txt")
 
     @property
     def cnf(self):
         return self._ca_cnf
+
+    @property
+    def __dict__(self):
+        """
+        Customising default property for better serialisation for storing to
+        JSON format.
+
+        :return: dictionary with all values. Path objects are typed to string.
+        :rtype: dict
+        """
+        dict_ = {k: str(v) if type(v) is PosixPath else v
+                 for k, v in super().__dict__.items()}
+        if self._ca_cnf:
+            dict_["_ca_cnf"] = str(self._ca_cnf.path)
+        return dict_
 
     def setup(self):
         """
@@ -200,6 +218,29 @@ class LocalCA(BaseCA):
         rmtree(self.root_dir, ignore_errors=True)
         logger.info(f"Local CA from {self.root_dir} is removed")
 
+    def load(self):
+        """
+        Load values of object from JSON file. Method set required type of
+        attributes.
+
+        :return: self
+        """
+        to_path = ['root_dir', '_conf_dir', '_newcerts', '_certs', '_crl',
+                   '_ca_pki_db', '_ca_cert', '_ca_key', '_serial', '_index']
+
+        with self.dump_file.open("r") as f:
+            cnt = json.load(f)
+        for k in to_path:
+            cnt[k] = Path(cnt[k])
+        # After CA is created, there is no need in CNF file. So, to simplify
+        # the loading, this attribute is set to None
+        cnt["_ca_cnf"] = None
+
+        for k, v in cnt.items():
+            setattr(self, k, v)
+
+        return self
+
 
 class IPAServerCA(BaseCA):
     """
@@ -222,6 +263,7 @@ class IPAServerCA(BaseCA):
     _ipa_client_hostname: str = None
     _ipa_server_root_passwd: str = None
     meta_client: ClientMeta = None
+    dump_file = LIB_DUMP_CAS.joinpath("ipa-server.json")
 
     def __init__(self, ip_addr: str, server_hostname: str, domain: str,
                  admin_passwd: str, root_passwd: str, client_hostname: str,
@@ -259,14 +301,7 @@ class IPAServerCA(BaseCA):
         self._ipa_client_hostname = client_hostname
         self._ipa_server_root_passwd = root_passwd
 
-        try:
-            self.meta_client: ClientMeta = ClientMeta(self._ipa_server_hostname,
-                                                      verify_ssl=False)
-            self.meta_client.login("admin", self._ipa_server_admin_passwd)
-            logger.info("Connected to IPA via meta client")
-        except python_freeipa.exceptions.BadRequest:
-            logger.warning("Can't login to the IPA server. "
-                           "Client might be not configured")
+        self._meta_client_login()
 
     @property
     def is_installed(self):
@@ -276,6 +311,19 @@ class IPAServerCA(BaseCA):
         :rtype: bool
         """
         return False
+
+    @property
+    def __dict__(self):
+        """
+        Customising default property for better serialisation for storing to
+        JSON format.
+
+        :return: dictionary with all values. Path objects are typed to string.
+        :rtype: dict
+        """
+        dict_: dict = super().__dict__.copy()
+        dict_.pop("meta_client")
+        return dict_
 
     def setup(self):
         """
@@ -307,9 +355,7 @@ class IPAServerCA(BaseCA):
         run(f'bash {ipa_client_script} /etc/ipa/ca.crt', check=True)
         logger.debug("Setup of IPA client for smart card is finished")
 
-        self.meta_client: ClientMeta = ClientMeta(self._ipa_server_hostname,
-                                                  verify_ssl=False)
-        self.meta_client.login("admin", self._ipa_server_admin_passwd)
+        self._meta_client_login()
 
         policy = self.meta_client.pwpolicy_show(a_cn="global_policy")["result"]
         if ["0"] != policy["krbminpwdlife"]:
@@ -323,6 +369,19 @@ class IPAServerCA(BaseCA):
 
         # TODO: add to restore client host name
         logger.info("IPA client is configured on the system.")
+
+    def _meta_client_login(self):
+        """
+        Login to admin user via IPA meta client.
+        """
+        try:
+            self.meta_client: ClientMeta = ClientMeta(self._ipa_server_hostname,
+                                                      verify_ssl=False)
+            self.meta_client.login("admin", self._ipa_server_admin_passwd)
+            logger.info("Connected to IPA via meta client")
+        except python_freeipa.exceptions.BadRequest:
+            logger.warning("Can't login to the IPA server. "
+                           "Client might be not configured")
 
     def _set_hostname(self):
         """
@@ -507,6 +566,20 @@ class IPAServerCA(BaseCA):
                          f"on the IPA server")
         run(["ipa-client-install", "--uninstall", "-U"], check=True)
         logger.info("IPA client is removed.")
+
+    def load(self):
+        """
+        Load IPA from JSON file. Meta client will be connected. In case of any
+        error on client login, warning would
+        :return:
+        """
+        with self.dump_file.open("r") as f:
+            cnt = json.load(f)
+
+        for k, v in cnt.items():
+            setattr(self, k, v)
+
+        self._meta_client_login()
 
     class __PKeyChild(paramiko.PKey):
         """This child class is need to fix SSH connection with MD5 algorithm

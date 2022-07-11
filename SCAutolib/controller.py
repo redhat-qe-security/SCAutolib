@@ -4,15 +4,14 @@ from schema import Schema, Use, Or, And, Optional
 from shutil import rmtree
 from typing import Union
 
-from SCAutolib import logger, run, LIB_DIR, LIB_BACKUP, LIB_DUMP, LIB_DUMP_USERS, LIB_DUMP_CAS, LIB_DUMP_LOCAL_CA, \
-    LIB_DUMP_IPA_CA
+from SCAutolib import (logger, run, LIB_DIR, LIB_BACKUP, LIB_DUMP,
+                       LIB_DUMP_USERS, LIB_DUMP_CAS, LIB_DUMP_CARD)
 from SCAutolib.exceptions import SCAutolibWrongConfig, SCAutolibException
 from SCAutolib.models import CA, file, user, card
 from SCAutolib.models.file import File
 from SCAutolib.utils import (OSVersion, _check_selinux, _gen_private_key,
                              _get_os_version, _install_packages,
-                             _check_packages)
-import pickle
+                             _check_packages, dump_to_json)
 
 
 class Controller:
@@ -58,25 +57,6 @@ class Controller:
         self.lib_conf = self._validate_configuration(params)
         self.users = []
 
-    def __del__(self):
-        """
-        Before the object is deleted, all its internal objects would be dumped
-        to Pickle format to use them in test run time.
-        """
-        for usr in self.users:
-            logger.debug(str(LIB_DUMP_USERS.joinpath(f"{usr.username}.pickle")))
-            with LIB_DUMP_USERS.joinpath(f"{usr.username}.pickle").open("wb") \
-                    as f:
-                pickle.dump(usr, f)
-
-        if self.local_ca:
-            with LIB_DUMP_LOCAL_CA.open("wb") as f:
-                pickle.dump(self.local_ca, f)
-
-        if self.ipa_ca:
-            with LIB_DUMP_IPA_CA.open("wb") as f:
-                pickle.dump(self.ipa_ca, f)
-
     def prepare(self, force, gdm, install_missing):
         """
         Method for setting up whole system based on configuration file and
@@ -84,7 +64,7 @@ class Controller:
 
         :return:
         """
-        self.setup_system(install_missing, gdm)
+        # self.setup_system(install_missing, gdm)
         self.setup_local_ca(force=force)
         self.setup_ipa_client(force=force)
         for usr in self.lib_conf["users"]:
@@ -109,6 +89,7 @@ class Controller:
         LIB_DUMP.mkdir(exist_ok=True)
         LIB_DUMP_USERS.mkdir(exist_ok=True)
         LIB_DUMP_CAS.mkdir(exist_ok=True)
+        LIB_DUMP_CARD.mkdir(exist_ok=True)
 
         packages = ["opensc", "httpd", "sssd", "sssd-tools", "gnutls-utils"]
         if gdm:
@@ -154,7 +135,8 @@ class Controller:
 
         ca_dir: Path = self.lib_conf["ca"]["local_ca"]["dir"]
         cnf = file.OpensslCnf(ca_dir.joinpath("ca.cnf"), "CA", str(ca_dir))
-        self.local_ca = CA.LocalCA(dir=ca_dir, cnf=cnf)
+        self.local_ca = CA.LocalCA(root_dir=ca_dir, cnf=cnf)
+        self.local_ca = CA.LocalCA(root_dir=ca_dir, cnf=cnf)
 
         if force or not ca_dir.exists():
             logger.warning(f"Removing previous local CA in a directory "
@@ -167,7 +149,8 @@ class Controller:
             cnf.save()
             self.local_ca.setup()
         logger.info(f"Local CA is configured in {ca_dir}")
-        # Generate certificates
+
+        dump_to_json(self.local_ca)
 
     def setup_ipa_client(self, force: bool = False):
         """
@@ -194,7 +177,9 @@ class Controller:
             self.ipa_ca.cleanup()
         else:
             logger.info("IPA client does not configured on the system")
-        self.ipa_ca.setup()
+        # self.ipa_ca.setup()
+
+        dump_to_json(self.ipa_ca)
 
     def setup_user(self, user_dict):
         """
@@ -263,6 +248,9 @@ class Controller:
         new_card.create()
         new_user.card = new_card
         self.users.append(new_user)
+
+        dump_to_json(new_user)
+
         return new_user
 
     def enroll_card(self, user_: user.User):
@@ -296,6 +284,10 @@ class Controller:
                 self.local_ca.request_cert(csr, user_.username, user_.cert)
 
         user_.card.enroll()
+
+        dump_to_json(user_.card)
+        # Update the dump for current user to link it with the card
+        dump_to_json(user_)
 
     def cleanup(self):
         if self.local_ca:

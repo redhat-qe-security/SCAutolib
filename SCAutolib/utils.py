@@ -3,11 +3,11 @@ This module provides different additional helping functions that are used
 across the library. These functions are made based on library demands and are
 not attended to cover some general use-cases or specific corner cases.
 """
+import json
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
-from pathlib import Path
-
 from enum import Enum
+from pathlib import Path
 
 from SCAutolib import run, logger, TEMPLATES_DIR
 from SCAutolib.exceptions import SCAutolibException
@@ -108,3 +108,12 @@ def _check_packages(packages):
         else:
             logger.debug(f"Package {out.stdout.strip()} is present")
     return missing
+
+
+def dump_to_json(obj):
+    """
+    Store serialised object to the JSON file.
+    """
+    with obj.dump_file.open("w") as f:
+        json.dump(obj.__dict__, f)
+    logger.debug(f"Object {type(obj)} is stored to the {obj.dump_file} file")

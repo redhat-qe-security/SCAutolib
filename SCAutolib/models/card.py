@@ -5,10 +5,10 @@ that we are using in the library. Those types are: virtual smart card, real
 """
 import re
 import time
-from pathlib import Path
+from pathlib import Path, PosixPath
 from traceback import format_exc
 
-from SCAutolib import run, logger, TEMPLATES_DIR
+from SCAutolib import run, logger, TEMPLATES_DIR, LIB_DUMP_CARD
 from SCAutolib.models.file import SoftHSM2Conf
 
 
@@ -18,6 +18,7 @@ class Card:
     based on the type of the card.
     """
     uri: str = None
+    dump_file: Path = None
     _user = None
     _pattern: str = None
 
@@ -89,6 +90,8 @@ class VirtualCard(Card):
         self._service_location = Path(
             f"/etc/systemd/system/{self._service_name}.service")
         self._insert = insert
+        self.dump_file = LIB_DUMP_CARD.joinpath(
+            f"card-{self._user.username}.json")
 
     def __enter__(self):
         """
@@ -116,6 +119,18 @@ class VirtualCard(Card):
             logger.error("Exception in virtual smart card context")
             logger.error(format_exc())
         self.remove()
+
+    @property
+    def __dict__(self):
+        # Need to copy to not referencing the same object what leads to
+        # changing it on retyping
+        dict_ = super().__dict__.copy()
+        for k, v in dict_.items():
+            if type(v) in (PosixPath, Path):
+                dict_[k] = str(v)
+        dict_["_softhsm2_conf"] = str(self._softhsm2_conf.path)
+        dict_.pop("_user")
+        return dict_
 
     @property
     def softhsm2_conf(self):

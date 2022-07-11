@@ -8,21 +8,34 @@ password, smart card pin, etc.
 The classes implement add_user and delete_user methods which can be used to
 create or remove a specified user in the system or in the specified IPA server.
 """
+import json
 import pwd
 import python_freeipa
+from pathlib import Path, PosixPath
 
-from pathlib import Path
-
+from SCAutolib import run, logger, LIB_DUMP_USERS, LIB_DUMP_CARD
 from SCAutolib.exceptions import SCAutolibException
-from SCAutolib.models.CA import IPAServerCA
 from SCAutolib.models import card as card_model
-from SCAutolib import run, logger
+from SCAutolib.models.CA import IPAServerCA
 
 
-class User:
+class BaseUser:
+    username = None
+    password = None
+    pin = None
+    dump_file = None
+    _cnf = None
+    _key = None
+    _cert = None
+    card_dir = None
+
+
+class User(BaseUser):
     """
     Generic class to represent system users.
     """
+    _card = None
+    dump_file: Path = None
 
     def __init__(self, username: str, password: str, pin: str,
                  cnf: Path = None, key: Path = None, cert: Path = None,
@@ -49,7 +62,7 @@ class User:
         self.username = username
         self.password = password
         self.pin = pin
-        self._card = card
+        self.dump_file = LIB_DUMP_USERS.joinpath(f"{self.username}.json")
         self._cnf = cnf
         self._key = key
         self._cert = cert
@@ -117,6 +130,25 @@ class User:
         logger.info("Removing current CNF file.")
         self._cnf = None
 
+    @property
+    def __dict__(self):
+        """
+        Customising default property for better serialisation for storing to
+        JSON format.
+
+        :return: dictionary with all values. Path objects are typed to string.
+        :rtype: dict
+        """
+        dict_ = super().__dict__.copy()
+        for k, v in dict_.items():
+            if type(v) in (PosixPath, Path):
+                dict_[k] = str(v)
+
+        if self._card:
+            dict_["_card"] = str(
+                LIB_DUMP_CARD.joinpath(f"card-{self.username}.json"))
+        return dict_
+
     def delete_user(self):
         try:
             pwd.getpwnam(self.username)
@@ -149,6 +181,15 @@ class User:
         run(cmd)
         return csr_path
 
+    def load(self):
+        with self.dump_file.open("r") as f:
+            cnt = json.load(f)
+        cnt["card_dir"] = Path(cnt["card_dir"])
+
+        for k, v in cnt.__dict__.items():
+            setattr(self, k, v)
+        return self
+
 
 class IPAUser(User):
     """
@@ -180,6 +221,19 @@ class IPAUser(User):
 
         super().__init__(username, password, pin, cnf, key, cert, card_dir)
         self._meta_client = ipa_server.meta_client
+
+    @property
+    def __dict__(self):
+        """
+        Customising default property for better serialisation for storing to
+        JSON format.
+
+        :return: dictionary with all values. Path objects are typed to string.
+        :rtype: dict
+        """
+        dict_ = super().__dict__
+        dict_.pop("_meta_client")
+        return dict_
 
     def add_user(self):
         try:
@@ -218,3 +272,8 @@ class IPAUser(User):
                str(csr_path), "-subj", f"/CN={self.username}"]
         run(cmd)
         return csr_path
+
+    def load(self, ipa_server: IPAServerCA):
+        super(IPAUser, self).load()
+        self._meta_client = ipa_server.meta_client
+        return self
