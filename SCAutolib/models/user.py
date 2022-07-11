@@ -14,7 +14,7 @@ import python_freeipa
 from pathlib import Path, PosixPath
 from shutil import rmtree
 
-from SCAutolib import run, logger, LIB_DUMP_USERS
+from SCAutolib import run, logger, LIB_DUMP_USERS, LIB_DUMP_CARD
 from SCAutolib.exceptions import SCAutolibException
 from SCAutolib.models import card as card_model
 from SCAutolib.models.CA import IPAServerCA
@@ -77,6 +77,8 @@ class User(BaseUser):
     """
     Generic class to represent system users.
     """
+    _card = None
+    dump_file: Path = None
 
     def __init__(self, username: str, password: str, pin: str,
                  cnf: Path = None, key: Path = None, cert: Path = None,
@@ -241,6 +243,15 @@ class User(BaseUser):
         run(cmd)
         return csr_path
 
+    def load(self):
+        with self.dump_file.open("r") as f:
+            cnt = json.load(f)
+        cnt["card_dir"] = Path(cnt["card_dir"])
+
+        for k, v in cnt.__dict__.items():
+            setattr(self, k, v)
+        return self
+
 
 class IPAUser(User):
     """
@@ -272,6 +283,19 @@ class IPAUser(User):
         super().__init__(*args, **kwargs)
         self._meta_client = ipa_server.meta_client
         self._ipa_hostname = ipa_server.ipa_server_hostname
+
+    @property
+    def __dict__(self):
+        """
+        Customising default property for better serialisation for storing to
+        JSON format.
+
+        :return: dictionary with all values. Path objects are typed to string.
+        :rtype: dict
+        """
+        dict_ = super().__dict__
+        dict_.pop("_meta_client")
+        return dict_
 
     def add_user(self):
         """
@@ -329,3 +353,8 @@ class IPAUser(User):
                str(csr_path), "-subj", f"/CN={self.username}"]
         run(cmd)
         return csr_path
+
+    def load(self, ipa_server: IPAServerCA):
+        super(IPAUser, self).load()
+        self._meta_client = ipa_server.meta_client
+        return self

@@ -5,7 +5,7 @@ from shutil import rmtree
 from typing import Union
 
 from SCAutolib import (logger, run, LIB_DIR, LIB_BACKUP, LIB_DUMP,
-                       LIB_DUMP_USERS, LIB_DUMP_CAS, LIB_DUMP_CARDS)
+                       LIB_DUMP_USERS, LIB_DUMP_CAS, LIB_DUMP_CARD)
 from SCAutolib.exceptions import SCAutolibWrongConfig, SCAutolibException
 from SCAutolib.models import CA, file, user, card, authselect as auth
 from SCAutolib.models.file import File
