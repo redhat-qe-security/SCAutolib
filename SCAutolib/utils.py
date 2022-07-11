@@ -1,10 +1,14 @@
+"""
+This module provides different additional helping functions that are used
+across the library. These functions are made based on library demands and are
+not attended to cover some general use-cases or specific corner cases.
+"""
 import json
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
-from pathlib import Path
-
 from enum import Enum
+from pathlib import Path
 
 from SCAutolib import run, logger, TEMPLATES_DIR
 from SCAutolib.exceptions import SCAutolibException

@@ -17,9 +17,9 @@ class Card:
     based on the type of the card.
     """
     uri: str = None
-    user = None
-    _pattern: str = None
     dump_file: Path = None
+    _user = None
+    _pattern: str = None
 
     def _set_uri(self):
         """
@@ -99,7 +99,8 @@ class VirtualCard(Card):
         self._service_location = Path(
             f"/etc/systemd/system/{self._service_name}.service")
         self._insert = insert
-        self._nssdb = self.user.card_dir.joinpath("db")
+        self.dump_file = LIB_DUMP_CARDS.joinpath(
+            f"card-{self._user.username}.json")
         self._softhsm2_conf = softhsm2_conf if softhsm2_conf \
             else Path("/home", self.user.username, "softhsm2.conf")
 
@@ -135,6 +136,18 @@ class VirtualCard(Card):
         self.remove()
 
     @property
+    def __dict__(self):
+        # Need to copy to not referencing the same object what leads to
+        # changing it on retyping
+        dict_ = super().__dict__.copy()
+        for k, v in dict_.items():
+            if type(v) in (PosixPath, Path):
+                dict_[k] = str(v)
+        dict_["_softhsm2_conf"] = str(self._softhsm2_conf.path)
+        dict_.pop("_user")
+        return dict_
+
+    @property
     def softhsm2_conf(self):
         return self._softhsm2_conf
 
@@ -142,6 +155,15 @@ class VirtualCard(Card):
     def softhsm2_conf(self, conf: Path):
         assert conf.exists(), "File doesn't exist"
         self._softhsm2_conf = conf
+
+    @property
+    def user(self):
+        return self._user
+
+    @user.setter
+    def user(self, system_user):
+        self._user = system_user
+        self._nssdb = self.user.card_dir.joinpath("db")
 
     def insert(self):
         """
@@ -169,19 +191,19 @@ class VirtualCard(Card):
         NSS database) with pkcs11-tool.
         """
         cmd = ["pkcs11-tool", "--module", "libsofthsm2.so", "--slot-index",
-               '0', "-w", str(self._private_key), "-y", "privkey", "--label",
-               f"'{self.user.username}'", "-p", self.user.pin, "--set-id", "0",
+               '0', "-w", self._user.key, "-y", "privkey", "--label",
+               f"'{self._user.username}'", "-p", self._user.pin, "--set-id", "0",
                "-d", "0"]
-        run(cmd, env={"SOFTHSM2_CONF": str(self._softhsm2_conf)})
+        run(cmd, env={"SOFTHSM2_CONF": self._softhsm2_conf.path})
         logger.debug(
-            f"User key {self._private_key} is added to virtual smart card")
+            f"User key {self._user.key} is added to virtual smart card")
 
         cmd = ['pkcs11-tool', '--module', 'libsofthsm2.so', '--slot-index', "0",
-               '-w', str(self._cert), '-y', 'cert', '-p', self.user.pin,
-               '--label', f"'{self.user.username}'", '--set-id', "0", '-d', "0"]
-        run(cmd, env={"SOFTHSM2_CONF": str(self._softhsm2_conf)})
+               '-w', self._user.cert, '-y', 'cert', '-p', self._user.pin,
+               '--label', f"'{self._user.username}'", '--set-id', "0", '-d', "0"]
+        run(cmd, env={"SOFTHSM2_CONF": self._softhsm2_conf.path})
         logger.debug(
-            f"User certificate {self._cert} is added to virtual smart card")
+            f"User certificate {self._user.cert} is added to virtual smart card")
 
         # To get URI of the card, the card has to be inserted
         # Virtual smart card can't be started without a cert and a key uploaded
@@ -197,9 +219,10 @@ class VirtualCard(Card):
         required for each virtual card.
         """
 
-        assert self._softhsm2_conf.exists(),\
+        assert self._softhsm2_conf.path.exists(), \
             "Can't proceed, SoftHSM2 conf doesn't exist"
-        Path(f"{self.user.card_dir}/tokens").mkdir()
+
+        self.user.card_dir.joinpath("tokens").mkdir(exist_ok=True)
 
         p11lib = "/usr/lib64/pkcs11/libsofthsm2.so"
         # Initialize SoftHSM2 token. An error would be raised if token with same
@@ -207,11 +230,12 @@ class VirtualCard(Card):
         cmd = ["softhsm2-util", "--init-token", "--free", "--label",
                self.user.username, "--so-pin", "12345678",
                "--pin", self.user.pin]
-        run(cmd, env={"SOFTHSM2_CONF": self._softhsm2_conf}, check=True)
+        run(cmd, env={"SOFTHSM2_CONF": self._softhsm2_conf.path}, check=True)
         logger.debug(
             f"SoftHSM token is initialized with label '{self.user.username}'")
 
         # Initialize NSS db
+        self._nssdb = self.user.card_dir.joinpath("db")
         self._nssdb.mkdir(exist_ok=True)
         run(f"modutil -create -dbdir sql:{self._nssdb} -force", check=True)
         logger.debug(f"NSS database is initialized in {self._nssdb}")
@@ -226,7 +250,7 @@ class VirtualCard(Card):
         with self._template.open() as tmp:
             with self._service_location.open("w") as f:
                 f.write(tmp.read().format(username=self.user.username,
-                                          softhsm2_conf=self._softhsm2_conf,
+                                          softhsm2_conf=self._softhsm2_conf.path,
                                           card_dir=self.user.card_dir))
 
         logger.debug(f"Service is created in {self._service_location}")
