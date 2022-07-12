@@ -76,7 +76,8 @@ class LocalCA(BaseCA):
             /etc/SCAutolib/ca
         :type: Path
         """
-        self.root_dir: Path = Path("/etc/SCAutolib/ca") if root_dir is None else root_dir
+        self.root_dir: Path = Path("/etc/SCAutolib/ca") if root_dir is None \
+            else root_dir
         assert self.root_dir is not None
         self._conf_dir: Path = self.root_dir.joinpath("conf")
         self._newcerts: Path = self.root_dir.joinpath("newcerts")

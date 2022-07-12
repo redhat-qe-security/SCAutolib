@@ -12,7 +12,6 @@ import json
 import pwd
 import python_freeipa
 from pathlib import Path, PosixPath
-from shutil import rmtree
 
 from SCAutolib import run, logger, LIB_DUMP_USERS, LIB_DUMP_CARD
 from SCAutolib.exceptions import SCAutolibException
@@ -77,8 +76,6 @@ class User(BaseUser):
     """
     Generic class to represent system users.
     """
-    _card = None
-    dump_file: Path = None
 
     def __init__(self, username: str, password: str, pin: str,
                  cnf: Path = None, key: Path = None, cert: Path = None,
@@ -242,15 +239,6 @@ class User(BaseUser):
                "-reqexts", "req_exts", "-config", self._cnf, "-out", csr_path]
         run(cmd)
         return csr_path
-
-    def load(self):
-        with self.dump_file.open("r") as f:
-            cnt = json.load(f)
-        cnt["card_dir"] = Path(cnt["card_dir"])
-
-        for k, v in cnt.__dict__.items():
-            setattr(self, k, v)
-        return self
 
 
 class IPAUser(User):
