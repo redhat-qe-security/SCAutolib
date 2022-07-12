@@ -35,9 +35,7 @@ LIB_CERTS = join(LIB_DIR, "certs")
 LIB_DUMP = LIB_DIR.joinpath("dump")
 LIB_DUMP_USERS = LIB_DUMP.joinpath("users")
 LIB_DUMP_CAS = LIB_DUMP.joinpath("cas")
-LIB_DUMP_LOCAL_CA = LIB_DUMP_CAS.joinpath("local-ca.pickle")
-LIB_DUMP_IPA_CA = LIB_DUMP_CAS.joinpath("ipa-ca.pickle")
-LIB_DUMP_CARD = LIB_DUMP.joinpath("cards")
+LIB_DUMP_CARDS = LIB_DUMP.joinpath("cards")
 
 
 def init_config(user_config=None, config_content: dict = None):
@@ -165,7 +163,8 @@ def set_config(path, value, action="replace", type_=str):
 
 
 def run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True,
-        print_=True, **kwargs) -> subprocess.CompletedProcess:
+        print_=True, return_code: list = None, **kwargs) \
+        -> subprocess.CompletedProcess:
     """
     Wrapper for subrpocess.run function. This function explicitly set several
     parameter of original function and also provides similar thing as
@@ -175,6 +174,10 @@ def run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True,
     subprocess.run function needed to be passed to this wrapper, you can do
     it by adding same parameters names in key=value format.
 
+    :param return_code: acceptable return codes from given commands.
+        If check=True, and the return code of the cmd is not in the return_code
+        list an subprocess.CalledProcessError exception would be raised.
+    :type return_code: list
     :param cmd: Command to be executed
     :type cmd: list or str
     :param stdout: Redirection of stdout. Default is subprocess.PIPE
@@ -197,6 +200,8 @@ def run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True,
     :return: Completed process from subprocess.run
     :rtype: subprocess.CompletedProcess
     """
+    if return_code is None:
+        return_code = [0]
     if type(cmd) == str:
         cmd = cmd.split(" ")
     logger.debug(f"run: {' '.join([str(p) for p in cmd])}")
@@ -208,6 +213,9 @@ def run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True,
         if out.stderr != "":
             logger.warning(out.stderr)
 
-    if check and out.returncode != 0:
-        raise subprocess.CalledProcessError(out.returncode, cmd)
+    if check:
+        if out.returncode not in return_code:
+            logger.error(f"Unexpected return code {out.returncode}. "
+                         f"Expected: {return_code}")
+            raise subprocess.CalledProcessError(out.returncode, cmd)
     return out

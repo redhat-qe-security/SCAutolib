@@ -3,12 +3,14 @@ This module implements classes for communication with different types of cards
 that we are using in the library. Those types are: virtual smart card, real
 (physical) smart card in standard reader, cards in the removinator.
 """
+import json
+
 import re
 import time
 from pathlib import Path, PosixPath
 from traceback import format_exc
 
-from SCAutolib import run, logger, TEMPLATES_DIR, LIB_DUMP_CARD
+from SCAutolib import run, logger, TEMPLATES_DIR, LIB_DUMP_CARDS
 from SCAutolib.models.file import SoftHSM2Conf
 
 
@@ -19,6 +21,7 @@ class Card:
     """
     uri: str = None
     dump_file: Path = None
+    type: str = None
     _user = None
     _pattern: str = None
 
@@ -54,6 +57,19 @@ class Card:
         """
         ...
 
+    @staticmethod
+    def load(json_file, **kwars):
+        with json_file.open("r") as f:
+            cnt = json.load(f)
+
+        card = None
+        if cnt["type"] == "virtual":
+            assert "user" in kwars.keys(),\
+                "No user is provided to load the card."
+            card = VirtualCard(user=kwars["user"], insert=cnt["_insert"])
+            card.uri = cnt["uri"]
+        return card
+
 
 class VirtualCard(Card):
     """
@@ -72,6 +88,8 @@ class VirtualCard(Card):
     _template: Path = Path(TEMPLATES_DIR, "virt_cacard.service")
     _pattern = r"(pkcs11:model=PKCS%2315%20emulated;" \
                r"manufacturer=Common%20Access%20Card;serial=.*)"
+    _insert: bool = None
+    type = "virtual"
 
     def __init__(self, user, insert: bool = False):
         """
@@ -90,7 +108,7 @@ class VirtualCard(Card):
         self._service_location = Path(
             f"/etc/systemd/system/{self._service_name}.service")
         self._insert = insert
-        self.dump_file = LIB_DUMP_CARD.joinpath(
+        self.dump_file = LIB_DUMP_CARDS.joinpath(
             f"card-{self._user.username}.json")
 
     def __enter__(self):

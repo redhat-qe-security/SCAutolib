@@ -13,33 +13,62 @@ import pwd
 import python_freeipa
 from pathlib import Path, PosixPath
 
-from SCAutolib import run, logger, LIB_DUMP_USERS, LIB_DUMP_CARD
+from SCAutolib import run, logger, LIB_DUMP_USERS, LIB_DUMP_CARDS
 from SCAutolib.exceptions import SCAutolibException
 from SCAutolib.models import card as card_model
 from SCAutolib.models.CA import IPAServerCA
+from SCAutolib.models.file import OpensslCnf
 
 
 class BaseUser:
-    username = None
-    password = None
-    pin = None
-    dump_file = None
-    _cnf = None
-    _key = None
-    _cert = None
-    card_dir = None
+    username: str = None
+    password: str = None
+    pin: str = None
+    dump_file: Path = None
+    _cnf: OpensslCnf = None
+    _key: Path = None
+    _cert: Path = None
+    card_dir: Path = None
+    _card: card_model.Card = None
+    local: bool = None
+
+    @staticmethod
+    def load(json_file, *args, **kwargs):
+        with json_file.open("r") as f:
+            cnt = json.load(f)
+
+        if cnt["local"]:
+            user = User(local=cnt["local"],
+                        username=cnt["username"],
+                        card_dir=Path(cnt["card_dir"]),
+                        password=cnt["password"],
+                        pin=cnt["pin"],
+                        key=cnt["_key"],
+                        cert=cnt["_cert"])
+        else:
+            assert "ipa_server" in kwargs.keys(), \
+                "IPA Server object does not provided. Can't load IPA user."
+
+            user = IPAUser(ipa_server=kwargs["ipa_server"],
+                           local=cnt["local"],
+                           username=cnt["username"],
+                           card_dir=Path(cnt["card_dir"]),
+                           password=cnt["password"],
+                           pin=cnt["pin"],
+                           key=cnt["_key"],
+                           cert=cnt["_cert"])
+        logger.debug(f"User {user.__class__} is loaded: {user.__dict__}")
+        return user
 
 
 class User(BaseUser):
     """
     Generic class to represent system users.
     """
-    _card = None
-    dump_file: Path = None
 
     def __init__(self, username: str, password: str, pin: str,
                  cnf: Path = None, key: Path = None, cert: Path = None,
-                 card_dir: Path = None):
+                 card_dir: Path = None, local: bool = True):
 
         """
         :param username: Username for the system user
@@ -68,6 +97,7 @@ class User(BaseUser):
         self._cert = cert
         self.card_dir = card_dir if card_dir is not None \
             else Path("/home", self.username)
+        self.local = local
 
     @property
     def card(self):
@@ -146,7 +176,7 @@ class User(BaseUser):
 
         if self._card:
             dict_["_card"] = str(
-                LIB_DUMP_CARD.joinpath(f"card-{self.username}.json"))
+                LIB_DUMP_CARDS.joinpath(f"card-{self.username}.json"))
         return dict_
 
     def delete_user(self):
@@ -181,24 +211,13 @@ class User(BaseUser):
         run(cmd)
         return csr_path
 
-    def load(self):
-        with self.dump_file.open("r") as f:
-            cnt = json.load(f)
-        cnt["card_dir"] = Path(cnt["card_dir"])
-
-        for k, v in cnt.__dict__.items():
-            setattr(self, k, v)
-        return self
-
 
 class IPAUser(User):
     """
     This class is used to represent an IPA user.
     """
 
-    def __init__(self, ipa_server: IPAServerCA, username: str, password: str,
-                 pin: str, cnf: Path = None, key: Path = None,
-                 cert: Path = None, card_dir: Path = None):
+    def __init__(self, ipa_server: IPAServerCA, *args, **kwargs):
         """
         Class for IPA user. IPA client should be configured first before
         creating an IPA user through this class.
@@ -219,7 +238,7 @@ class IPAUser(User):
         :type cert: Path
         """
 
-        super().__init__(username, password, pin, cnf, key, cert, card_dir)
+        super().__init__(*args, **kwargs)
         self._meta_client = ipa_server.meta_client
 
     @property

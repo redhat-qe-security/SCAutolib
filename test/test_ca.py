@@ -14,7 +14,7 @@ from SCAutolib.models import CA
 @pytest.fixture(scope="session")
 def local_ca_fixture(tmp_path_factory, backup_sssd_ca_db):
     ca = CA.LocalCA(tmp_path_factory.mktemp("local-ca"))
-    ca.setup(force=True)
+    ca.setup()
     return ca
 
 
@@ -95,24 +95,6 @@ def test_local_ca_setup(backup_sssd_ca_db, tmpdir, caplog):
     assert "Local CA is configured" in caplog.messages
 
 
-@pytest.mark.parametrize("force", (False, True))
-def test_local_ca_setup_force(backup_sssd_ca_db, tmpdir, caplog, force):
-    ca_dir = Path(tmpdir, "ca")
-    tmp_file = ca_dir.joinpath("some-file")
-    ca_dir.mkdir()
-    tmp_file.touch()
-
-    ca = CA.LocalCA(ca_dir)
-    ca.setup(force=force)
-
-    if force:
-        assert not tmp_file.exists()
-        assert f"Removing local CA {ca_dir}" in caplog.messages
-    else:
-        assert tmp_file.exists()
-        assert "Skipping configuration." in caplog.messages
-
-
 def test_request_cert(local_ca_fixture, tmpdir):
     csr = Path(tmpdir, "username.csr")
     cnf = Path(tmpdir, "user.cnf")
@@ -156,9 +138,8 @@ def test_revoke_cert(local_ca_fixture, tmpdir):
 
 
 @pytest.mark.ipa
-@pytest.mark.parametrize("force", (False, True))
-def test_ipa_server_setup_force(installed_ipa, force, dummy_ipa_vals,
-                                ipa_meta_client, caplog):
+def test_ipa_server_setup(installed_ipa, dummy_ipa_vals,
+                          ipa_meta_client, caplog):
     ipa_ca = CA.IPAServerCA(ip_addr=dummy_ipa_vals["server_ip"],
                             client_hostname=dummy_ipa_vals[
                                 "client_hostname"],
@@ -168,7 +149,7 @@ def test_ipa_server_setup_force(installed_ipa, force, dummy_ipa_vals,
                             admin_passwd=dummy_ipa_vals[
                                 "server_admin_passwd"],
                             domain=dummy_ipa_vals["server_domain"])
-    ipa_ca.setup(force)
+    ipa_ca.setup()
 
     # Test if meta client can get info about freshly configured host
     ipa_meta_client.host_show(a_fqdn=dummy_ipa_vals["client_hostname"])
@@ -178,10 +159,6 @@ def test_ipa_server_setup_force(installed_ipa, force, dummy_ipa_vals,
 
     msg = "IPA client is already configured on this system."
     assert msg in caplog.messages
-    if not force:
-        msg = "Set force argument to True if you want to remove " \
-              "previous installation."
-        assert msg in caplog.messages
 
 
 @pytest.mark.ipa

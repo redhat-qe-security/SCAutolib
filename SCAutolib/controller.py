@@ -5,9 +5,9 @@ from shutil import rmtree
 from typing import Union
 
 from SCAutolib import (logger, run, LIB_DIR, LIB_BACKUP, LIB_DUMP,
-                       LIB_DUMP_USERS, LIB_DUMP_CAS, LIB_DUMP_CARD)
+                       LIB_DUMP_USERS, LIB_DUMP_CAS, LIB_DUMP_CARDS)
 from SCAutolib.exceptions import SCAutolibWrongConfig, SCAutolibException
-from SCAutolib.models import CA, file, user, card
+from SCAutolib.models import CA, file, user, card, authselect as auth
 from SCAutolib.models.file import File
 from SCAutolib.utils import (OSVersion, _check_selinux, _gen_private_key,
                              _get_os_version, _install_packages,
@@ -15,7 +15,7 @@ from SCAutolib.utils import (OSVersion, _check_selinux, _gen_private_key,
 
 
 class Controller:
-    # authselect: authselect.Authselect = authselect.Authselect()
+    authselect: auth.Authselect = auth.Authselect()
     sssd_conf: file.SSSDConf = file.SSSDConf()
     lib_conf: dict = None
     _lib_conf_path: Path = None
@@ -57,14 +57,14 @@ class Controller:
         self.lib_conf = self._validate_configuration(params)
         self.users = []
 
-    def prepare(self, force, gdm, install_missing):
+    def prepare(self, force: bool, gdm: bool, install_missing: bool):
         """
         Method for setting up whole system based on configuration file and
         CLI commands
 
         :return:
         """
-        # self.setup_system(install_missing, gdm)
+        self.setup_system(install_missing, gdm)
         self.setup_local_ca(force=force)
         self.setup_ipa_client(force=force)
         for usr in self.lib_conf["users"]:
@@ -89,7 +89,7 @@ class Controller:
         LIB_DUMP.mkdir(exist_ok=True)
         LIB_DUMP_USERS.mkdir(exist_ok=True)
         LIB_DUMP_CAS.mkdir(exist_ok=True)
-        LIB_DUMP_CARD.mkdir(exist_ok=True)
+        LIB_DUMP_CARDS.mkdir(exist_ok=True)
 
         packages = ["opensc", "httpd", "sssd", "sssd-tools", "gnutls-utils"]
         if gdm:
@@ -200,7 +200,8 @@ class Controller:
                                  pin=user_dict["pin"],
                                  password=user_dict["passwd"],
                                  card_dir=card_dir,
-                                 cert=user_dict["cert"], key=user_dict["key"])
+                                 cert=user_dict["cert"], key=user_dict["key"],
+                                 local=True)
             csr_path = new_user.card_dir.joinpath(f"csr-{new_user.username}.csr")
             cnf = file.OpensslCnf(filepath=csr_path, conf_type="user",
                                   replace=new_user.username)
@@ -227,7 +228,8 @@ class Controller:
                                     password=user_dict["passwd"],
                                     card_dir=card_dir,
                                     cert=user_dict["cert"],
-                                    key=user_dict["key"])
+                                    key=user_dict["key"],
+                                    local=False)
 
             new_user.add_user()
 
