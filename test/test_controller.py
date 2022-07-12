@@ -1,13 +1,11 @@
-from subprocess import check_output
-
 import pytest
+from configparser import ConfigParser
 from shutil import copy
+from subprocess import check_output
 
 from SCAutolib.controller import Controller
 from SCAutolib.models.CA import IPAServerCA
 from conftest import FILES_DIR
-import json
-from configparser import ConfigParser
 
 
 @pytest.fixture()
@@ -20,12 +18,6 @@ def dummy_config(tmp_path):
         f.write(cnt.replace("{path}", str(tmp_path)))
 
     return config_path
-
-
-@pytest.fixture()
-def wrong_dummy_config(dummy_config):
-    with open(dummy_config, "r") as f:
-        conf = json.load(f)
 
 
 @pytest.fixture()
@@ -60,10 +52,11 @@ def test_parse_config(dummy_config):
     assert cnt.conf_path.is_absolute()
     assert isinstance(cnt.lib_conf, dict)
 
-
-def test_prepare(controller):
-    """Test for overall setup including dumps."""
-    cnt: Controller = controller
+#
+# def test_prepare(controller):
+#     """Test for overall setup including dumps."""
+#     cnt: Controller = controller
+#     cnt.prepare(False, False, False)
 
 
 def test_setup_system(controller):
@@ -101,13 +94,13 @@ def test_users_create(controller, tmp_path, ready_ipa):
         assert p.joinpath("sofhtsm2.conf").exists()
 
 
-def test_cas_create(controller):
-    cnt: Controller = controller
-
-
-def test_enroll_card(controller):
-    cnt: Controller = controller
-
-
-def test_cleanup(controller):
-    cnt: Controller = controller
+# def test_cas_create(controller):
+#     cnt: Controller = controller
+#
+#
+# def test_enroll_card(controller):
+#     cnt: Controller = controller
+#
+#
+# def test_cleanup(controller):
+#     cnt: Controller = controller
