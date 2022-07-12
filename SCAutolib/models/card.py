@@ -3,9 +3,11 @@ This module implements classes for communication with different types of cards
 that we are using in the library. Those types are: virtual smart card, real
 (physical) smart card in standard reader, cards in the removinator.
 """
+import json
+
 import re
 import time
-from pathlib import Path
+from pathlib import Path, PosixPath
 from traceback import format_exc
 
 from SCAutolib import run, logger, TEMPLATES_DIR, LIB_DUMP_CARDS
@@ -18,6 +20,7 @@ class Card:
     """
     uri: str = None
     dump_file: Path = None
+    type: str = None
     _user = None
     _pattern: str = None
 
@@ -53,6 +56,19 @@ class Card:
         """
         ...
 
+    @staticmethod
+    def load(json_file, **kwars):
+        with json_file.open("r") as f:
+            cnt = json.load(f)
+
+        card = None
+        if cnt["type"] == "virtual":
+            assert "user" in kwars.keys(),\
+                "No user is provided to load the card."
+            card = VirtualCard(user=kwars["user"], insert=cnt["_insert"])
+            card.uri = cnt["uri"]
+        return card
+
 
 class VirtualCard(Card):
     """
@@ -71,6 +87,8 @@ class VirtualCard(Card):
     _template: Path = Path(TEMPLATES_DIR, "virt_cacard.service")
     _pattern = r"(pkcs11:model=PKCS%2315%20emulated;" \
                r"manufacturer=Common%20Access%20Card;serial=.*)"
+    _insert: bool = None
+    type = "virtual"
 
     def __init__(self, user, insert: bool = False,
                  softhsm2_conf: Path = None):
@@ -219,7 +237,7 @@ class VirtualCard(Card):
         required for each virtual card.
         """
 
-        assert self._softhsm2_conf.path.exists(), \
+        assert self._softhsm2_conf.exists(), \
             "Can't proceed, SoftHSM2 conf doesn't exist"
 
         self.user.card_dir.joinpath("tokens").mkdir(exist_ok=True)
@@ -230,7 +248,7 @@ class VirtualCard(Card):
         cmd = ["softhsm2-util", "--init-token", "--free", "--label",
                self.user.username, "--so-pin", "12345678",
                "--pin", self.user.pin]
-        run(cmd, env={"SOFTHSM2_CONF": self._softhsm2_conf.path}, check=True)
+        run(cmd, env={"SOFTHSM2_CONF": self._softhsm2_conf}, check=True)
         logger.debug(
             f"SoftHSM token is initialized with label '{self.user.username}'")
 
@@ -250,7 +268,7 @@ class VirtualCard(Card):
         with self._template.open() as tmp:
             with self._service_location.open("w") as f:
                 f.write(tmp.read().format(username=self.user.username,
-                                          softhsm2_conf=self._softhsm2_conf.path,
+                                          softhsm2_conf=self._softhsm2_conf,
                                           card_dir=self.user.card_dir))
 
         logger.debug(f"Service is created in {self._service_location}")
