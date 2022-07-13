@@ -8,6 +8,8 @@ password, smart card pin, etc.
 The classes implement add_user and delete_user methods which can be used to
 create or remove a specified user in the system or in the specified IPA server.
 """
+from shutil import rmtree
+
 import json
 import pwd
 import python_freeipa
@@ -180,10 +182,16 @@ class User(BaseUser):
         return dict_
 
     def delete_user(self):
+        """
+        Deletes the user and the content of user's card directory
+        """
         try:
             pwd.getpwnam(self.username)
             logger.info(f"Deleting the user {self.username}")
             run(['userdel', '-f', self.username], check=True)
+            rmtree(self.card_dir)
+            logger.debug("User's card directory "
+                         f"{str(self.card_dir)} is removed")
         except KeyError:
             pass
         logger.info(f"User {self.username} is not present on the system")
@@ -195,7 +203,7 @@ class User(BaseUser):
                   f"machine. Username should be unique to avoid " \
                   f"future problems with collisions"
             logger.critical(msg)
-            # raise SCAutolibException(msg)
+            raise SCAutolibException(msg)
         except KeyError:
             logger.debug(f"Creating new user {self.username}")
             cmd = ['useradd', '-m', self.username]
@@ -216,6 +224,7 @@ class IPAUser(User):
     """
     This class is used to represent an IPA user.
     """
+    default_password = "redhat"
 
     def __init__(self, ipa_server: IPAServerCA, *args, **kwargs):
         """
@@ -240,6 +249,7 @@ class IPAUser(User):
 
         super().__init__(*args, **kwargs)
         self._meta_client = ipa_server.meta_client
+        self._ipa_hostname = ipa_server._ipa_server_hostname
 
     @property
     def __dict__(self):
@@ -258,9 +268,21 @@ class IPAUser(User):
         try:
             r = self._meta_client.user_add(self.username, self.username,
                                            self.username, self.username,
-                                           o_userpassword=self.password,
-                                           o_homedirectory=str(self.card_dir))
+                                           o_userpassword=self.password)
             logger.debug(r)
+
+            # To avoid forcing IPA server to change the password on first login
+            # we changing it through the client
+            try:
+                client = python_freeipa.client.Client(self._ipa_hostname,
+                                                      verify_ssl=False)
+                client.change_password(self.username, self.password,
+                                       self.default_passwd)
+            except Exception as e:
+                logger.error(e)
+                logger.error("Error while updating the kerberos password "
+                             f"for user {self.username} from "
+                             f"IPA server {self._ipa_hostname}")
             logger.info(f"User {self.username} is added to the IPA server")
         except python_freeipa.exceptions.DuplicateEntry:
             msg = f"User {self.username} already exists on the " \
@@ -270,11 +292,18 @@ class IPAUser(User):
             # raise SCAutolibException(msg)
 
     def delete_user(self):
-        r = self._meta_client.user_del(self.username)["result"]
-        logger.info(f"User {self.username} is removed from the IPA server")
-        run(['rm', '-r', '-f', f"/home/{self.username}"], check=True)
-        logger.info(f"User {self.username} directory is removed.")
-        logger.debug(r)
+        """
+        Deletes the user and user's card directory
+        """
+        try:
+            r = self._meta_client.user_del(self.username)["result"]
+            logger.info(f"User {self.username} is removed from the IPA server")
+            logger.debug(r)
+        except python_freeipa.exceptions.NotFound:
+            pass
+        if list(self.card_dir.iterdir()):
+            rmtree(self.card_dir)
+            logger.info(f"User  {self.username} directory is removed.")
 
     def gen_csr(self):
         """

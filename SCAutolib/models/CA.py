@@ -307,11 +307,19 @@ class IPAServerCA(BaseCA):
     @property
     def is_installed(self):
         """
-        :return: True, if IPA client is installed on the system (ipa command
-            returns zero return code), otherwise False
+        :return: True, if IPA client is installed on the system (/etc/ipa
+            directory contains ca.crt file from IPA server), otherwise False
         :rtype: bool
         """
-        return False
+        d = Path("/etc/ipa")
+        result = d.exists()
+        if result:
+            result = d.joinpath("ca.crt")
+        return result
+
+    @property
+    def domain(self):
+        return self._ipa_server_domain
 
     @property
     def __dict__(self):
@@ -339,14 +347,21 @@ class IPAServerCA(BaseCA):
         self._set_hostname()
 
         logger.info("Installing IPA client")
-        run(["ipa-client-install", "-p", "admin",
-             "--password", self._ipa_server_admin_passwd,
-             "--server", self._ipa_server_hostname,
-             "--domain", self._ipa_server_domain,
-             "--realm", self._ipa_server_realm,
-             "--hostname", self._ipa_client_hostname,
-             "--all-ip-addresses", "--force", "--force-join", "--no-ntp", "-U"],
-            input="yes")
+        try:
+            run(["ipa-client-install", "-p", "admin",
+                 "--password", self._ipa_server_admin_passwd,
+                 "--server", self._ipa_server_hostname,
+                 "--domain", self._ipa_server_domain,
+                 "--realm", self._ipa_server_realm,
+                 "--hostname", self._ipa_client_hostname,
+                 "--force", "--force-join", "--no-ntp",
+                 "--no-dns-sshfp", "--unattended"],
+                input="yes")
+        except:
+            logger.critical("Installation of IPA client is failed")
+            rmtree("/etc/ipa")
+            logger.debug("Directory /etc/ipa is removed")
+            raise
         logger.debug("IPA client is installed")
 
         ipa_client_script = self._get_sc_setup_script()
@@ -565,7 +580,7 @@ class IPAServerCA(BaseCA):
         except exceptions.NotFound:
             logger.error(f"Current hostname ({gethostname()}) is not found "
                          f"on the IPA server")
-        run(["ipa-client-install", "--uninstall", "-U"], check=True)
+        run(["ipa-client-install", "--uninstall", "-U"], return_code=[0, 2])
         logger.info("IPA client is removed.")
 
     def load(self):

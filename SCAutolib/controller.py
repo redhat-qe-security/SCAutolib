@@ -66,7 +66,7 @@ class Controller:
         self.setup_local_ca(force=force)
         self.setup_ipa_client(force=force)
         for usr in self.lib_conf["users"]:
-            u = self.setup_user(usr)
+            u = self.setup_user(usr, force=force)
             self.enroll_card(u)
 
     def setup_system(self, install_missing: bool, gdm: bool):
@@ -114,7 +114,8 @@ class Controller:
         self.sssd_conf.create()
         self.sssd_conf.save()
         self._general_steps_for_virtual_sc()
-        run(["useradd", "base-user"])  # FIXME: think how to do this better
+        # FIXME: think how to do this better
+        run(["useradd", "base-user"], return_code=[0, 9])
 
     def setup_local_ca(self, force: bool = False):
         """
@@ -173,26 +174,34 @@ class Controller:
                 logger.info("Set force argument to True if you want to remove "
                             "previous installation.")
                 return
-            self.ipa_ca.cleanup()
+            # self.ipa_ca.cleanup()
         else:
             logger.info("IPA client does not configured on the system")
-        # self.ipa_ca.setup()
-
+        self.ipa_ca.setup()
+        self.sssd_conf.set(key="domains",
+                           value=f"shadowutils, {self.ipa_ca.domain}",
+                           section="sssd")
         dump_to_json(self.ipa_ca)
 
-    def setup_user(self, user_dict):
+    def setup_user(self, user_dict: dict, force: bool = False):
         """
         Configure the user on the specified system (local machine/CA). The user
         would be configured along with the card based on configurations.
 
-        :param user_dict:
-        :return:
+        :param force: specify if the user should be re-created with its
+            card directory
+        :type force: bool
+        :param user_dict: set of values to initialise the user
+        :type user_dict: dict
+        :return: the user object
         """
         new_user = None
         card_dir: Path = user_dict["card_dir"]
         # Card dir is home dir of the user home directory
-        if ("/", "home", user_dict["name"]) != card_dir.parts[0:2]:
-            user_dict["card_dir"].mkdir(exist_ok=True)
+        if force and card_dir.exists():
+            rmtree(card_dir)
+
+        user_dict["card_dir"].mkdir(exist_ok=True, parents=True)
 
         if user_dict["local"]:
             new_user = user.User(username=user_dict["name"],
@@ -201,6 +210,10 @@ class Controller:
                                  card_dir=card_dir,
                                  cert=user_dict["cert"], key=user_dict["key"],
                                  local=True)
+            if force:
+                new_user.delete_user()
+                user_dict["card_dir"].mkdir(exist_ok=True)
+
             csr_path = new_user.card_dir.joinpath(f"csr-{new_user.username}.csr")
             cnf = file.OpensslCnf(filepath=csr_path, conf_type="user",
                                   replace=new_user.username)
@@ -229,6 +242,9 @@ class Controller:
                                     cert=user_dict["cert"],
                                     key=user_dict["key"],
                                     local=False)
+            if force:
+                new_user.delete_user()
+                user_dict["card_dir"].mkdir(exist_ok=True)
 
             new_user.add_user()
 
@@ -314,15 +330,16 @@ class Controller:
             # Check that CA section contains at least one and maximum
             # two entries
             lambda l: 1 <= len(l.keys()) <= 2,
-            {Optional("local_ca"): {"dir": Use(Path)},
-             Optional("ipa"): {
-                 'admin_passwd': Use(str),
-                 'root_passwd': Use(str),
-                 Optional('ip_addr', default=None): Use(str),
-                 'server_hostname': Use(str),
-                 'client_hostname': Use(str),
-                 'domain': Use(str),
-                 'realm': Use(str.upper)}}),
+            {Optional("local_ca"): {
+                Optional("dir", default=Path("/etc/SCAutolib/ca")): Use(Path)},
+                Optional("ipa"): {
+                    'admin_passwd': Use(str),
+                    'root_passwd': Use(str),
+                    Optional('ip_addr', default=None): Use(str),
+                    'server_hostname': Use(str),
+                    'client_hostname': Use(str),
+                    'domain': Use(str),
+                    'realm': Use(str.upper)}}),
             ignore_extra_keys=True)
 
         # Specify validation schema for all users
@@ -367,9 +384,9 @@ class Controller:
         try:
             opensc_module.get("disable-in", separator=":")
         except SCAutolibException:
-            logger.warning("OpenSC module do not have option 'disabled-in: "
+            logger.warning("OpenSC module do not have option 'disable-in: "
                            "virt_cacard' set")
-            opensc_module.set(key="disabled-in", value="virt_cacard",
+            opensc_module.set(key="disable-in", value="virt_cacard",
                               separator=": ")
             opensc_module.save()
 
