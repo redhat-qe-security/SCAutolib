@@ -61,8 +61,6 @@ class Controller:
         """
         Method for setting up whole system based on configuration file and
         CLI commands
-
-        :return:
         """
         self.setup_system(install_missing, gdm)
         self.setup_local_ca(force=force)
@@ -116,6 +114,7 @@ class Controller:
         self.sssd_conf.create()
         self.sssd_conf.save()
         self._general_steps_for_virtual_sc()
+        run(["useradd", "base-user"])  # FIXME: think how to do this better
 
     def setup_local_ca(self, force: bool = False):
         """

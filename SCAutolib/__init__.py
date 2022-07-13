@@ -1,11 +1,9 @@
-from os import symlink
-from os.path import (dirname, abspath, join, exists)
+from os.path import (dirname, abspath, join)
 
 import coloredlogs
 import logging
 import subprocess
 import urllib3
-import yaml
 from pathlib import Path
 
 # To disable redundant warning in the log output

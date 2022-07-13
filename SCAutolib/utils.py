@@ -4,13 +4,18 @@ across the library. These functions are made based on library demands and are
 not attended to cover some general use-cases or specific corner cases.
 """
 import json
+import pexpect
+import re
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from enum import Enum
 from pathlib import Path
+import sys
 
 from SCAutolib import run, logger, TEMPLATES_DIR
-from SCAutolib.exceptions import SCAutolibException
+from SCAutolib.exceptions import (SCAutolibException, PatternNotFound,
+                                  UnknownOption, DisallowedPatternFound,
+                                  NonZeroReturnCode)
 
 
 class OSVersion(Enum):
@@ -117,3 +122,97 @@ def dump_to_json(obj):
     with obj.dump_file.open("w") as f:
         json.dump(obj.__dict__, f)
     logger.debug(f"Object {type(obj)} is stored to the {obj.dump_file} file")
+
+
+def restart_service(service_name):
+    logger.debug(f"Restarting {service_name} service")
+    run(["systemctl", "restart", service_name])
+    logger.debug(f"Service {service_name} successfully restarted")
+
+
+def run_cmd(cmd: str = None, pin: bool = True, passwd: str = None, shell=None,
+            return_val: str = "stdout"):
+    """
+    Run to create a child from current shell to run cmd. Try to assert
+    expect pattern in the output of the cmd. If cmd require, provide
+    login wth given PIN or password. Hitting reject pattern during cmd
+    execution cause fail.
+    Args:
+        cmd: shell command to be executed
+        pin: specify if passwd is a smart card PIN or a password for the
+             user. Base on this, corresponding pattern would be matched
+             in login output.
+        passwd: smart card PIN or user password if login is needed
+        shell: shell child where command need to be execute.
+        return_val: return shell (shell) or stdout (stdout - default) or
+                    both (all)
+    Returns:
+        stdout of executed command (cmd; see above)
+    """
+    try:
+        if shell is None and cmd is not None:
+            cmd = ["-c", f'{cmd} ; echo "RC:$?"']
+            shell = pexpect.spawn("/bin/bash", cmd, encoding='utf-8')
+        shell.logfile = sys.stdout
+
+        if passwd is not None:
+            pattern = "PIN for " if pin else "Password"
+            out = shell.expect([pexpect.TIMEOUT, pattern], timeout=10)
+
+            if out != 1:
+                if out == 0:
+                    logger.error("Timed out on password / PIN waiting")
+                raise PatternNotFound(f"Pattern '{pattern}' is not "
+                                      f"found in the output.")
+            shell.sendline(passwd)
+
+    except PatternNotFound:
+        logger.error(f"Command: {cmd}")
+        logger.error(f"Output:\n{str(shell.before)}\n")
+        raise
+
+    if return_val == "stdout":
+        return shell.read()
+    elif return_val == "shell":
+        return shell
+    elif return_val == "all":
+        return shell, shell.read()
+    else:
+        raise UnknownOption(option_val=return_val, option_name="return_val")
+
+
+def check_output(output: str, expect=None, reject=None,
+                 zero_rc: bool = False, check_rc: bool = False):
+    if reject is None:
+        reject = []
+    elif type(reject) == str:
+        reject = [reject]
+
+    if expect is None:
+        expect = []
+    elif type(expect) == str:
+        expect = [expect]
+
+    for pattern in reject:
+        compiled = re.compile(pattern)
+        if compiled.search(output) is not None:
+            raise DisallowedPatternFound(f"Disallowed pattern '{pattern}' "
+                                         f"was found in the output")
+
+    for pattern in expect:
+        compiled = re.compile(pattern)
+        if compiled.search(output) is None:
+            logger.error(f"Pattern: {pattern} not found in output")
+            logger.error(f"Output:\n{output}\n")
+            raise PatternNotFound(f"Pattern '{expect}' is not "
+                                  f"found in the output.")
+
+    if check_rc:
+        if "RC:0" not in output:
+            msg = "Non zero return code indicated"
+            if zero_rc:
+                raise NonZeroReturnCode(msg)
+            else:
+                logger.warning(msg)
+
+    return True
