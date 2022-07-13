@@ -21,6 +21,7 @@ from typing import Union
 
 from SCAutolib import logger, TEMPLATES_DIR, LIB_BACKUP
 from SCAutolib.exceptions import SCAutolibException
+from SCAutolib.utils import restart_service
 
 
 class File:
@@ -245,6 +246,7 @@ class SSSDConf(File):
 
     def __init__(self):
         if self.__initialized:
+            logger.debug("Singleton instance is returned")
             return
         self.__initialized = True
 
@@ -260,6 +262,41 @@ class SSSDConf(File):
         # _changes parser object reflects modifications imposed by set method
         self._changes = ConfigParser()
         self._changes.optionxform = str
+
+    def __call__(self, key: str, value: Union[int, str, bool],
+                 section: str = None):
+        """
+        Make the object callable for context manager.
+        :param key: key to be set
+        :param value: value for key
+        :param section: section where key should be checked. Default None
+        :return: self
+        """
+        self._section = section
+        self._key = key
+        self._value = value
+        return self
+
+    def __enter__(self):
+        """
+        Provide context manager for editing the file. Values are set by
+        calling the object
+        :return: self
+        """
+        if all([self._key, self._value]):
+            self.set(section=self._section, key=self._key, value=self._value)
+            self.save()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """
+        Restoring the file after changes
+        """
+        copy2(self._backup_original, self._conf_file)
+        restart_service("sssd")
+        if isinstance(exc_val, IndexError):
+            logger.error(f"An exception occurred in SSSD with block: {exc_type}")
+            logger.error(f"Exception message: {exc_val}")
 
     def create(self):
         """
@@ -328,6 +365,7 @@ class SSSDConf(File):
                 self._changes = ConfigParser()
                 self._changes.optionxform = str
         os.chmod(self._conf_file, 0o600)
+        restart_service("sssd")
 
     def clean(self):
         """
