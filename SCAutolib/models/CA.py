@@ -60,6 +60,28 @@ class BaseCA:
         """
         ...
 
+    @staticmethod
+    def load(json_file):
+        """
+        Load CA from JSON file.
+        :return: CA object
+        """
+        with json_file.dump_file.open("r") as f:
+            cnt = json.load(f)
+
+        if "_ipa_server_ip" in cnt.keys():
+            ca = IPAServerCA(ip_addr=cnt["_ipa_server_ip"],
+                             server_hostname=cnt["_ipa_server_hostname"],
+                             root_passwd=cnt["_ipa_server_root_password"],
+                             admin_passwd=cnt["_ipa_server_admin_password"],
+                             client_hostname=cnt["_ipa_client_hostname"],
+                             domain=cnt["_ipa_server_domain"],
+                             realm=cnt["_ipa_server_realm"])
+        else:
+            ca = LocalCA(root_dir=cnt["root_dir"])
+        logger.debug(f"CA {type(ca)} is restored from file {json_file}")
+        return ca
+
 
 class LocalCA(BaseCA):
     template = Path(TEMPLATES_DIR, "ca.cnf")
@@ -219,29 +241,6 @@ class LocalCA(BaseCA):
         rmtree(self.root_dir, ignore_errors=True)
         logger.info(f"Local CA from {self.root_dir} is removed")
 
-    def load(self):
-        """
-        Load values of object from JSON file. Method set required type of
-        attributes.
-
-        :return: self
-        """
-        to_path = ['root_dir', '_conf_dir', '_newcerts', '_certs', '_crl',
-                   '_ca_pki_db', '_ca_cert', '_ca_key', '_serial', '_index']
-
-        with self.dump_file.open("r") as f:
-            cnt = json.load(f)
-        for k in to_path:
-            cnt[k] = Path(cnt[k])
-        # After CA is created, there is no need in CNF file. So, to simplify
-        # the loading, this attribute is set to None
-        cnt["_ca_cnf"] = None
-
-        for k, v in cnt.items():
-            setattr(self, k, v)
-
-        return self
-
 
 class IPAServerCA(BaseCA):
     """
@@ -355,11 +354,11 @@ class IPAServerCA(BaseCA):
                  "--realm", self._ipa_server_realm,
                  "--hostname", self._ipa_client_hostname,
                  "--force", "--force-join", "--no-ntp",
-                 "--no-dns-sshfp", "--unattended"],
+                 "--no-dns-sshfp", "--mkhomedir", "--unattended"],
                 input="yes")
         except:
             logger.critical("Installation of IPA client is failed")
-            rmtree("/etc/ipa")
+            rmtree("/etc/ipa/*")
             logger.debug("Directory /etc/ipa is removed")
             raise
         logger.debug("IPA client is installed")
@@ -582,20 +581,6 @@ class IPAServerCA(BaseCA):
                          f"on the IPA server")
         run(["ipa-client-install", "--uninstall", "-U"], return_code=[0, 2])
         logger.info("IPA client is removed.")
-
-    def load(self):
-        """
-        Load IPA from JSON file. Meta client will be connected. In case of any
-        error on client login, warning would
-        :return:
-        """
-        with self.dump_file.open("r") as f:
-            cnt = json.load(f)
-
-        for k, v in cnt.items():
-            setattr(self, k, v)
-
-        self._meta_client_login()
 
     class __PKeyChild(paramiko.PKey):
         """This child class is need to fix SSH connection with MD5 algorithm
