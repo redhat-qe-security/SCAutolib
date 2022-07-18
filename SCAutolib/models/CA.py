@@ -11,7 +11,7 @@ from invoke import Responder
 from pathlib import Path, PosixPath
 from python_freeipa import exceptions
 from python_freeipa.client_meta import ClientMeta
-from shutil import rmtree, copy
+from shutil import rmtree
 from socket import gethostname
 
 from SCAutolib import TEMPLATES_DIR, logger, run, LIB_DIR, LIB_DUMP_CAS
@@ -61,6 +61,28 @@ class BaseCA:
         :type cert: pathlib.Path
         """
         ...
+
+    @staticmethod
+    def load(json_file):
+        """
+        Load CA from JSON file.
+        :return: CA object
+        """
+        with json_file.dump_file.open("r") as f:
+            cnt = json.load(f)
+
+        if "_ipa_server_ip" in cnt.keys():
+            ca = IPAServerCA(ip_addr=cnt["_ipa_server_ip"],
+                             server_hostname=cnt["_ipa_server_hostname"],
+                             root_passwd=cnt["_ipa_server_root_password"],
+                             admin_passwd=cnt["_ipa_server_admin_password"],
+                             client_hostname=cnt["_ipa_client_hostname"],
+                             domain=cnt["_ipa_server_domain"],
+                             realm=cnt["_ipa_server_realm"])
+        else:
+            ca = LocalCA(root_dir=cnt["root_dir"])
+        logger.debug(f"CA {type(ca)} is restored from file {json_file}")
+        return ca
 
 
 class LocalCA(BaseCA):
@@ -284,11 +306,19 @@ class IPAServerCA(BaseCA):
     @property
     def is_installed(self):
         """
-        :return: True, if IPA client is installed on the system (ipa command
-            returns zero return code), otherwise False
+        :return: True, if IPA client is installed on the system (/etc/ipa
+            directory contains ca.crt file from IPA server), otherwise False
         :rtype: bool
         """
-        return False
+        d = Path("/etc/ipa")
+        result = d.exists()
+        if result:
+            result = d.joinpath("ca.crt")
+        return result
+
+    @property
+    def domain(self):
+        return self._ipa_server_domain
 
     @property
     def __dict__(self):
@@ -316,14 +346,21 @@ class IPAServerCA(BaseCA):
         self._set_hostname()
 
         logger.info("Installing IPA client")
-        run(["ipa-client-install", "-p", "admin",
-             "--password", self._ipa_server_admin_passwd,
-             "--server", self._ipa_server_hostname,
-             "--domain", self._ipa_server_domain,
-             "--realm", self._ipa_server_realm,
-             "--hostname", self._ipa_client_hostname,
-             "--all-ip-addresses", "--force", "--force-join", "--no-ntp", "-U"],
-            input="yes")
+        try:
+            run(["ipa-client-install", "-p", "admin",
+                 "--password", self._ipa_server_admin_passwd,
+                 "--server", self._ipa_server_hostname,
+                 "--domain", self._ipa_server_domain,
+                 "--realm", self._ipa_server_realm,
+                 "--hostname", self._ipa_client_hostname,
+                 "--force", "--force-join", "--no-ntp",
+                 "--no-dns-sshfp", "--mkhomedir", "--unattended"],
+                input="yes")
+        except:
+            logger.critical("Installation of IPA client is failed")
+            rmtree("/etc/ipa/*")
+            logger.debug("Directory /etc/ipa is removed")
+            raise
         logger.debug("IPA client is installed")
 
         ipa_client_script = self._get_sc_setup_script()
@@ -549,7 +586,7 @@ class IPAServerCA(BaseCA):
         except exceptions.NotFound:
             logger.error(f"Current hostname ({gethostname()}) is not found "
                          f"on the IPA server")
-        run(["ipa-client-install", "--uninstall", "-U"], check=True)
+        run(["ipa-client-install", "--uninstall", "-U"], return_code=[0, 2])
         logger.info("IPA client is removed.")
 
     class __PKeyChild(paramiko.PKey):
