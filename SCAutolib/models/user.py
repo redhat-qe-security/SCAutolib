@@ -265,31 +265,28 @@ class IPAUser(User):
         return dict_
 
     def add_user(self):
+        """
+        Adds IPA user to IPA server.
+        """
         try:
             r = self._meta_client.user_add(self.username, self.username,
                                            self.username, self.username,
-                                           o_userpassword=self.password)
+                                           o_userpassword=self.default_password)
             logger.debug(r)
 
             # To avoid forcing IPA server to change the password on first login
             # we changing it through the client
-            try:
-                client = python_freeipa.client.Client(self._ipa_hostname,
-                                                      verify_ssl=False)
-                client.change_password(self.username, self.password,
-                                       self.default_passwd)
-            except Exception as e:
-                logger.error(e)
-                logger.error("Error while updating the kerberos password "
-                             f"for user {self.username} from "
-                             f"IPA server {self._ipa_hostname}")
+            client = python_freeipa.client.Client(self._ipa_hostname,
+                                                  verify_ssl=False)
+            client.change_password(self.username, self.password,
+                                   self.default_password)
             logger.info(f"User {self.username} is added to the IPA server")
         except python_freeipa.exceptions.DuplicateEntry:
             msg = f"User {self.username} already exists on the " \
                   f"IPA server. Username should be unique to avoid " \
                   f"future problems with collisions"
             logger.critical(msg)
-            # raise SCAutolibException(msg)
+            raise SCAutolibException(msg)
 
     def delete_user(self):
         """
@@ -320,8 +317,3 @@ class IPAUser(User):
                str(csr_path), "-subj", f"/CN={self.username}"]
         run(cmd)
         return csr_path
-
-    def load(self, ipa_server: IPAServerCA):
-        super(IPAUser, self).load()
-        self._meta_client = ipa_server.meta_client
-        return self

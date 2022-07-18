@@ -52,12 +52,6 @@ def test_parse_config(dummy_config):
     assert cnt.conf_path.is_absolute()
     assert isinstance(cnt.lib_conf, dict)
 
-#
-# def test_prepare(controller):
-#     """Test for overall setup including dumps."""
-#     cnt: Controller = controller
-#     cnt.prepare(False, False, False)
-
 
 def test_setup_system(controller):
     cnt: Controller = controller
@@ -92,15 +86,3 @@ def test_users_create(controller, tmp_path, ready_ipa):
 
     for p in [t["card_dir"] for t in cnt.lib_conf["users"]]:
         assert p.joinpath("sofhtsm2.conf").exists()
-
-
-# def test_cas_create(controller):
-#     cnt: Controller = controller
-#
-#
-# def test_enroll_card(controller):
-#     cnt: Controller = controller
-#
-#
-# def test_cleanup(controller):
-#     cnt: Controller = controller

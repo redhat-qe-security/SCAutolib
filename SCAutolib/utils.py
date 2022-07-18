@@ -3,6 +3,8 @@ This module provides different additional helping functions that are used
 across the library. These functions are made based on library demands and are
 not attended to cover some general use-cases or specific corner cases.
 """
+from typing import Union
+
 import json
 import pexpect
 import re
@@ -125,29 +127,40 @@ def dump_to_json(obj):
 
 
 def restart_service(service_name):
+    """
+    Restarts the given service. If restart is failed (return code of systemctl
+    restart command is not 0), a subprocess exception is raised
+
+    :param service_name: name of service to be restarted
+    :return:
+    """
     logger.debug(f"Restarting {service_name} service")
     run(["systemctl", "restart", service_name])
     logger.debug(f"Service {service_name} successfully restarted")
 
 
-def run_cmd(cmd: str = None, pin: bool = True, passwd: str = None, shell=None,
-            return_val: str = "stdout"):
+def run_cmd(cmd: Union[str, list] = None, pin: bool = True, passwd: str = None,
+            shell=None, return_val: str = "stdout"):
     """
     Run to create a child from current shell to run cmd. Try to assert
     expect pattern in the output of the cmd. If cmd require, provide
     login wth given PIN or password. Hitting reject pattern during cmd
     execution cause fail.
-    Args:
-        cmd: shell command to be executed
-        pin: specify if passwd is a smart card PIN or a password for the
-             user. Base on this, corresponding pattern would be matched
-             in login output.
-        passwd: smart card PIN or user password if login is needed
-        shell: shell child where command need to be execute.
-        return_val: return shell (shell) or stdout (stdout - default) or
-                    both (all)
-    Returns:
-        stdout of executed command (cmd; see above)
+
+    :param cmd: shell command to be executed
+    :type cmd: str or list
+    :param pin: specify if passwd is a smart card PIN or a password for the
+        user. Base on this, corresponding pattern would be matched
+        in login output.
+    :type pin: bool
+    :param passwd: smart card PIN or user password if login is needed
+    :type passwd: str
+    :param shell: shell child where command need to be execute.
+    :type shell:
+    :param return_val: return shell (shell) or stdout (stdout - default) or
+        both (all)
+    :type return_val: str
+    :return: stdout of executed command (cmd; see above)
     """
     try:
         if shell is None and cmd is not None:

@@ -174,7 +174,7 @@ class Controller:
                 logger.info("Set force argument to True if you want to remove "
                             "previous installation.")
                 return
-            # self.ipa_ca.cleanup()
+            self.ipa_ca.cleanup()
         else:
             logger.info("IPA client does not configured on the system")
         self.ipa_ca.setup()
