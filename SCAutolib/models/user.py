@@ -13,7 +13,7 @@ import pwd
 import python_freeipa
 from pathlib import Path, PosixPath
 
-from SCAutolib import run, logger, LIB_DUMP_USERS, LIB_DUMP_CARD
+from SCAutolib import run, logger, LIB_DUMP_USERS, LIB_DUMP_CARDS
 from SCAutolib.exceptions import SCAutolibException
 from SCAutolib.models import card as card_model
 from SCAutolib.models.CA import IPAServerCA
@@ -123,7 +123,7 @@ class User(BaseUser):
 
     @card.deleter
     def card(self):
-        logger.info("Deleting the existing card from {self.username}")
+        logger.info(f"Deleting the existing card from {self.username}")
         self._card = None
 
     @property
@@ -213,6 +213,15 @@ class User(BaseUser):
         logger.info(f"User {self.username} is not present on the system")
 
     def add_user(self, force=False):
+        """
+        Add user to the local system with `useradd` bash command and set
+        password for created user.
+
+        :param force: specifies if the user should be recreated if the
+            collision appears.
+        :type force: bool
+        :return:
+        """
         try:
             pwd.getpwnam(self.username)
             msg = f"User {self.username} already exists on this " \
@@ -341,8 +350,3 @@ class IPAUser(User):
                str(csr_path), "-subj", f"/CN={self.username}"]
         run(cmd)
         return csr_path
-
-    def load(self, ipa_server: IPAServerCA):
-        super(IPAUser, self).load()
-        self._meta_client = ipa_server.meta_client
-        return self
