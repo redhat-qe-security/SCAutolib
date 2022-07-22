@@ -1,4 +1,4 @@
-import yaml
+import json
 from pathlib import Path
 from schema import Schema, Use, Or, And, Optional
 from shutil import rmtree
@@ -82,12 +82,9 @@ class Controller:
         :type gdm: bool
         :return:
         """
-        LIB_DIR.mkdir(exist_ok=True)
-        LIB_BACKUP.mkdir(exist_ok=True)
-        LIB_DUMP.mkdir(exist_ok=True)
-        LIB_DUMP_USERS.mkdir(exist_ok=True)
-        LIB_DUMP_CAS.mkdir(exist_ok=True)
-        LIB_DUMP_CARDS.mkdir(exist_ok=True)
+        for d in (LIB_DIR, LIB_BACKUP, LIB_DUMP, LIB_DUMP_USERS, LIB_DUMP_CAS,
+                  LIB_DUMP_CARDS):
+            d.mkdir(exist_ok=True)
 
         packages = ["opensc", "httpd", "sssd", "sssd-tools", "gnutls-utils"]
         if gdm:
@@ -129,7 +126,7 @@ class Controller:
         :raises: SCAutolib.exceptions.SCAutolibWrongConfig
         """
 
-        if "local_ca" not in self.lib_conf["ca"].keys():
+        if "local_ca" not in self.lib_conf["ca"]:
             msg = "Section for local CA is not found in the configuration file"
             raise SCAutolibWrongConfig(msg)
 
@@ -162,7 +159,7 @@ class Controller:
         :type force: bool
         :raises: SCAutolib.exceptions.SCAutolibWrongConfig
         """
-        if "ipa" not in self.lib_conf["ca"].keys():
+        if "ipa" not in self.lib_conf["ca"]:
             msg = "Section for IPA is not found in the configuration file"
             raise SCAutolibWrongConfig(msg)
         self.ipa_ca = CA.IPAServerCA(**self.lib_conf["ca"]["ipa"])
