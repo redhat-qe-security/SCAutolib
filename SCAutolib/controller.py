@@ -304,10 +304,25 @@ class Controller:
         dump_to_json(user_)
 
     def cleanup(self):
+        """
+        Clean the system after setup. This method restores the SSSD config file,
+        deletes created users with cards, remove CA's (local and/or IPA Client)
+        """
+        self.sssd_conf.clean()
+
+        for user_file in LIB_DUMP_USERS.iterdir():
+            usr = user.BaseUser.load(user_file)
+            usr.delete()
+            card_file = LIB_DUMP_CARDS.joinpath(f"card-{usr.username}.json")
+            if card_file.exists():
+                card.Card.load(card_file, user=user).delete()
+
         if self.local_ca:
             self.local_ca.cleanup()
         if self.ipa_ca:
             self.ipa_ca.cleanup()
+
+        self.authselect.cleanup()
 
     def _validate_configuration(self, params: {} = None):
         """
