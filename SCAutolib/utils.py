@@ -5,6 +5,7 @@ from pathlib import Path
 from enum import Enum
 
 from SCAutolib import run, logger, TEMPLATES_DIR
+from SCAutolib.exceptions import SCAutolibException
 
 
 class OSVersion(Enum):
@@ -66,8 +67,10 @@ def _get_os_version():
         return OSVersion.RHEL_9
     elif "Red Hat Enterprise Linux release 8" in cnt:
         return OSVersion.RHEL_8
-    else:
+    elif "Fedora" in cnt:
         return OSVersion.Fedora
+    else:
+        raise SCAutolibException("OS is not detected.")
 
 
 def _install_packages(packages):
@@ -76,11 +79,9 @@ def _install_packages(packages):
 
     :param packages: list of packages to be installed
     """
+    run(f"dnf install -y {' '.join(packages)}")
     for pkg in packages:
-        logger.warning(f"Package {pkg} is not installed on the "
-                       f"system. Installing...")
-        run(f"dnf install {pkg} -y")
-        pkg = run(["rpm", "-qa", pkg]).stdout
+        pkg = run(["rpm", "-q", pkg]).stdout
         logger.debug(f"Package {pkg} is installed")
 
 
