@@ -134,11 +134,11 @@ class Controller:
         cnf = file.OpensslCnf(ca_dir.joinpath("ca.cnf"), "CA", str(ca_dir))
         self.local_ca = CA.LocalCA(root_dir=ca_dir)
 
-        if force or not ca_dir.exists():
+        if force:
             logger.warning(f"Removing previous local CA in a directory "
                            f"{ca_dir}")
             self.local_ca.cleanup()
-
+        if not ca_dir.exists():
             ca_dir.mkdir(exist_ok=True)
 
             cnf.create()
