@@ -177,6 +177,7 @@ class Controller:
         else:
             logger.info("IPA client does not configured on the system")
         self.ipa_ca.setup()
+        self.sssd_conf.update_default_content()
         self.sssd_conf.set(key="domains",
                            value=f"shadowutils, {self.ipa_ca.domain}",
                            section="sssd")
