@@ -272,7 +272,7 @@ class SSSDConf(File):
         else:
             self._conf_file.unlink()
 
-    def _update_default_content(self):
+    def update_default_content(self):
         """
         Populate internal parser object with content from current config file.
         """
