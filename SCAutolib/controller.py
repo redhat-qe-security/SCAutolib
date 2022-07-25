@@ -78,7 +78,7 @@ class Controller:
 
         :param install_missing: If True, all missing packages would be
             installed
-        :type install_missing:
+        :type install_missing: bool
         :param gdm: If True, GDM package would be installed
         :type gdm: bool
         :return:
@@ -173,7 +173,7 @@ class Controller:
                 return
             self.ipa_ca.cleanup()
         else:
-            logger.info("IPA client does not configured on the system")
+            logger.info("IPA client is not configured on the system")
         self.ipa_ca.setup()
         self.sssd_conf.update_default_content()
         self.sssd_conf.set(key="domains",
@@ -271,7 +271,7 @@ class Controller:
     def enroll_card(self, user_: user.User):
         """
         Enroll the card of a given user with configured CA. If private key
-        and/or the certificate are not exists, new one's would be requested
+        and/or the certificate do not exists, new one's would be requested
         from corresponding CA.
 
         :param user_: User with a card to be enrolled.
@@ -279,7 +279,7 @@ class Controller:
         logger.debug(f"Starting enrollment of the card for user "
                      f"{user_.username}")
         if not user_.card:
-            raise SCAutolibException(f"Card for the user {user_.username} does "
+            raise SCAutolibException(f"Card for the user {user_.username} is "
                                      f"not initialized")
         if user_.cert is None:
             # Creating a new private key makes sense only if the certificate
@@ -328,7 +328,7 @@ class Controller:
     @staticmethod
     def _validate_configuration(conf: dict, params: {} = None) -> dict:
         """
-        Validate schema of the configuration file. If some value doesn't present
+        Validate schema of the configuration file. If some value is not present
         in the config file, this value would be looked in the CLI parameters
 
         :param conf: Configuration to be parsed (e.g. data loaded from
@@ -383,7 +383,7 @@ class Controller:
     def _general_steps_for_virtual_sc():
         """
         Prepare the system for virtual smart card. Preparation means to
-        configure pcscd service and opensc module to be able correctly working
+        configure pcscd service and opensc module to work correctly
         with virtual smart card. Also, repository for installing virt_cacard
         package is added in this method.
         """
@@ -404,7 +404,7 @@ class Controller:
         try:
             opensc_module.get("disable-in", separator=":")
         except SCAutolibException:
-            logger.warning("OpenSC module do not have option 'disable-in: "
+            logger.warning("OpenSC module does not have option 'disable-in: "
                            "virt_cacard' set")
             opensc_module.set(key="disable-in", value="virt_cacard",
                               separator=": ")
