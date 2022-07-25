@@ -76,7 +76,11 @@ class File:
     def set(self, key: str, value: Union[int, str, bool], section: str = None,
             separator: str = "="):
         """
-        Modify value in config file.
+        Modify value in config file. Modification is made through the
+        ConfigParser object if it is defined. If not, then key value pair
+        would be written to the file through normal `write()` method with
+        composed string in the following form `<key><separator><value>` (spaces
+        around key has to be specified as a part of the `separator` parameter).
 
         :param key: value for this key will be updated
         :type key: str
@@ -84,9 +88,8 @@ class File:
         :type value: int or str or bool
         :param section: section of config file that will be modified
         :type section: str
-        :param separator: separator that would be used in files that is not
-            supported by configparser. It would be used to separate a key and a
-            value
+        :param separator: Character to be used as a separator between key and
+            value in files that are not supported by ConfigParser object.
         :type separator: str
 
         """
@@ -136,25 +139,28 @@ class File:
 
     def get(self, key, section: str = None, separator: str = "="):
         """
-        Method would return the value of the key in section (if set). If the
-        file do not support sections (section for this method is not provided),
-        then file would be parsed in a simple way with `.readlines()` method and
-        using separator each line would be split into two parts: key and a
-        value. If key is matched, the value is striped and returned.
+        Method processes and return the value of the key in section. If the
+        section is not provided (section=None), then file would parsed line by
+        line splitting the line on separator. First match wins and returned.
 
-        If file supports section (can be parsed via configparser), then section
-        (in this case has to be set) and key would be used for accessing the
-        value.
+        If section is provided and the file can be parsed by the ConfigParser,
+        then this object would be used to look for the key.
 
-        In both cases, if key is not found, an exception would be raised:
-        SCAutolib.SCAutolibException for no-configparser files, and for
+        The exception is raised if the key is not found.
+
+         for no-configparser files, and for
         configparser some of its exceptions.
         :param key: required key
         :param section: section where the key should be found
         :param separator: applicable only for non-configparser file. Separator
             that would be used to so split a line from the file. By default
             separator is '='
-
+        :raise SCAutolib.SCAutolibException: if the key is not found the
+            non-ConfigParser file
+        :raise configparser.NoSectionError: if the section is not found in
+            ConfigParser-supported file
+        :raise KeyError: if the key is not present in ConfigParser-supported
+            file
         :return: value of the key in section (if set)
         """
         if section is None:
