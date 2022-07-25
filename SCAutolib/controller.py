@@ -52,9 +52,10 @@ class Controller:
             else Path(config).absolute()
 
         with self._lib_conf_path.open("r") as f:
-            self.lib_conf = json.load(f)
-            assert self.lib_conf, "Data are not loaded correctly."
-        self.lib_conf = self._validate_configuration(params)
+            tmp_conf = json.load(f)
+            if tmp_conf is None:
+                raise SCAutolibException("Data are not loaded correctly.")
+        self.lib_conf = self._validate_configuration(tmp_conf, params)
         self.users = []
 
     def prepare(self, force: bool, gdm: bool, install_missing: bool):
@@ -324,13 +325,20 @@ class Controller:
 
         self.authselect.cleanup()
 
-    def _validate_configuration(self, params: {} = None):
+    @staticmethod
+    def _validate_configuration(conf: dict, params: {} = None) -> dict:
         """
         Validate schema of the configuration file. If some value doesn't present
         in the config file, this value would be looked in the CLI parameters
 
+        :param conf: Configuration to be parsed (e.g. data loaded from
+            JSON file)
+        :type conf: dict
         :param params: CLI arguments
-        :return:
+        :type params: dict
+        :return: dictionary with parsed values from conf and params attributes.
+            All values are retyped to specified type.
+        :rtype: dict
         """
         # FIXME: any schema requires all values to be in the config file, and
         #  only IP address of IPA server is accepted from CLI arguments.
@@ -369,7 +377,7 @@ class Controller:
                          "ca": schema_cas,
                          "users": [schema_user]})
 
-        return schema.validate(self.lib_conf)
+        return schema.validate(conf)
 
     @staticmethod
     def _general_steps_for_virtual_sc():
