@@ -98,7 +98,7 @@ def _check_packages(packages):
         out = run(["rpm", "-q", pkg])
         if pkg not in out.stdout:
             logger.warning(f"Package {pkg} is required for the testing, "
-                           f"but doesn't present in the system")
+                           f"but is not present in the system")
             missing.append(pkg)
         else:
             logger.debug(f"Package {out.stdout.strip()} is present")
