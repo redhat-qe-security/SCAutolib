@@ -198,10 +198,21 @@ class File:
             logger.info(f"{self._conf_file} does not exist. Nothing to do.")
 
     def backup(self):
+        """
+        Save original file to the backup directory with
+        """
         new_name = f"{self._conf_file.name}.backup"
         new_path = LIB_BACKUP.joinpath(new_name)
         copy2(self._conf_file, new_path)
         logger.debug(f"File {self._conf_file} is stored to {new_path}")
+
+    def restore(self):
+        """
+        Copies backup file to original file location.
+        """
+        backup_path = LIB_BACKUP.joinpath(f"{self._conf_file.name}.backup")
+        copy2(backup_path, self._conf_file)
+        logger.debug(f"File {backup_path} is restored to {self._conf_file}")
 
 
 class SSSDConf(File):
