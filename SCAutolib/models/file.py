@@ -40,6 +40,7 @@ class File:
     _template = None
     _default_parser = None
     _simple_content = None
+    _backup: dict = dict()
 
     def __init__(self, filepath: Union[str, Path], template: str = None):
         """
@@ -203,22 +204,31 @@ class File:
         except FileNotFoundError:
             logger.info(f"{self._conf_file} does not exist. Nothing to do.")
 
-    def backup(self):
+    def backup(self, name: str = None):
         """
-        Save original file to the backup directory with
+        Save original file to the backup directory with given name. If name is
+        None, default name is <filename>.<extension>.backup
+
+        :param name: custom file name to be set for the file
+        :type name: str
+        :return: path where the file is stored
         """
-        new_name = f"{self._conf_file.name}.backup"
-        new_path = LIB_BACKUP.joinpath(new_name)
+
+        new_path = LIB_BACKUP.joinpath(
+            f"{name if name else self._conf_file.name}.backup")
         copy2(self._conf_file, new_path)
         logger.debug(f"File {self._conf_file} is stored to {new_path}")
+        self._backup = {"original": str(self._conf_file),
+                        "backup": str(new_path)}
+        return new_path
 
     def restore(self):
         """
         Copies backup file to original file location.
         """
-        backup_path = LIB_BACKUP.joinpath(f"{self._conf_file.name}.backup")
-        copy2(backup_path, self._conf_file)
-        logger.debug(f"File {backup_path} is restored to {self._conf_file}")
+        copy2(self._backup["backup"], self._backup["original"])
+        logger.debug(f"File {self._backup['backup']} "
+                     f"is restored to {self._backup['original']}")
 
 
 class SSSDConf(File):
@@ -245,8 +255,8 @@ class SSSDConf(File):
     __instance = None
     _template = Path(TEMPLATES_DIR, "sssd.conf")
     _conf_file = Path("/etc/sssd/sssd.conf")
-    _backup_original = Path(LIB_BACKUP, 'original_sssd.conf')
-    _backup_default = Path(LIB_BACKUP, 'default_sssd.conf')
+    _backup_original = None
+    _backup_default = LIB_BACKUP.joinpath('default-sssd.conf')
 
     def __new__(cls):
         if cls.__instance is None:
@@ -283,7 +293,8 @@ class SSSDConf(File):
             logger.info(f"{self._conf_file} file exists, loading values")
             logger.info(f"Backing up {self._conf_file}"
                         f"as {self._backup_original}")
-            copy2(self._conf_file, self._backup_original)
+            self._backup_original = self.backup("original")
+
         except FileNotFoundError:
             logger.warning(f"{self._conf_file} not present")
             logger.warning("Creating sssd.conf based on the template")
@@ -344,7 +355,15 @@ class SSSDConf(File):
         Removes sssd.conf file in case it was created by this package or
         restore original sssd.conf in case the file was modified.
         """
-        if self._backup_original.exists():
+
+        # FIXME: this implementation would not work in real usage. When setup
+        #  runtime would be finished and in test/cleanup runtime this method
+        #  would be called self._backup_original field would not be set. This
+        #  should be fixed by implementing dump() method that would store all
+        #  required attributes in JSON format load() method that would be used
+        #  in other then setup runtimes to restore (load from JSON) all
+        #  attributes of this object
+        if self._backup_original:
             copy2(self._backup_original, self._conf_file)
         else:
             self._conf_file.unlink()
