@@ -15,7 +15,7 @@ import pwd
 import python_freeipa
 from pathlib import Path, PosixPath
 
-from SCAutolib import run, logger, LIB_DUMP_USERS
+from SCAutolib import run, logger, LIB_DUMP_USERS, LIB_DUMP_CARDS
 from SCAutolib.exceptions import SCAutolibException
 from SCAutolib.models import card as card_model
 from SCAutolib.models.CA import IPAServerCA
