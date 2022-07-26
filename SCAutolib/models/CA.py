@@ -525,3 +525,7 @@ class IPAServerCA(CA):
 
         def get_fingerprint_improved(self):
             return md5(self.asbytes(), usedforsecurity=False).digest()
+
+    @property
+    def ipa_server_hostname(self):
+        return self._ipa_server_hostname
