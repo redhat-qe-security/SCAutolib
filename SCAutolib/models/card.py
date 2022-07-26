@@ -8,9 +8,8 @@ import time
 from pathlib import Path
 from traceback import format_exc
 
-from SCAutolib import run, logger, TEMPLATES_DIR
+from SCAutolib import run, logger, TEMPLATES_DIR, LIB_DUMP_CARDS
 from SCAutolib.models.file import SoftHSM2Conf
-from SCAutolib.models.user import User
 
 
 class Card:
@@ -19,8 +18,9 @@ class Card:
     based on the type of the card.
     """
     uri: str = None
-    user: User = None
+    user = None
     _pattern: str = None
+    dump_file: Path = None
 
     def _set_uri(self):
         """
@@ -73,7 +73,7 @@ class VirtualCard(Card):
     _pattern = r"(pkcs11:model=PKCS%2315%20emulated;" \
                r"manufacturer=Common%20Access%20Card;serial=.*)"
 
-    def __init__(self, user: User, insert: bool = False,
+    def __init__(self, user, insert: bool = False,
                  softhsm2_conf: Path = None):
         """
         Initialise virtual smart card. Constructor of the base class is also
@@ -90,6 +90,8 @@ class VirtualCard(Card):
 
         self.user = user
         assert self.user.card_dir.exists(), "Card root directory doesn't exists"
+
+        self.dump_file = LIB_DUMP_CARDS.joinpath(f"card-{user.username}.json")
 
         self._private_key = self.user.key
         self._cert = self.user.cert

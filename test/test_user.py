@@ -4,6 +4,8 @@ import os
 from pathlib import Path
 
 from SCAutolib.models.CA import LocalCA
+from SCAutolib.utils import dump_to_json
+from SCAutolib.models.user import BaseUser
 
 
 @pytest.mark.skipif(os.getuid() != 0, reason="Requires root privileges!")
@@ -42,3 +44,14 @@ def test_add_and_remove_cnf(local_user):
 
     del local_user.cnf
     assert local_user.cnf is None
+
+
+def test_dump_and_load_user(local_user):
+    dump_to_json(local_user)
+
+    user = BaseUser.load(local_user.dump_file)
+
+    assert user.username == local_user.username
+    assert user.pin == local_user.pin
+    assert user.password == local_user.password
+    assert user.card_dir == local_user.card_dir

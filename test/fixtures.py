@@ -2,6 +2,7 @@ import pytest
 from pathlib import Path
 from shutil import copyfile
 
+from SCAutolib.models.card import VirtualCard
 from SCAutolib.models.file import SSSDConf, File
 from SCAutolib.models.user import User
 
@@ -10,6 +11,8 @@ from SCAutolib.models.user import User
 def local_user(tmp_path):
     user = User("testuser", "testpassword", "123456")
     user.card_dir = tmp_path
+    user.dump_file = tmp_path.joinpath("test-user-dump-file.json")
+    user.card = VirtualCard(user=user)
     return user
 
 
