@@ -140,6 +140,18 @@ class User:
             run(cmd, input=self.password)
             logger.info(f"User {self.username} is present ons the system")
 
+    def gen_csr(self):
+        """
+        Method for generating local user specific CSR file that would be sent to
+        the local CA for generating the certificate. CSR is generated using
+        `openssl` command based on template CNF file.
+        """
+        csr_path = self.card_dir.joinpath(f"csr-{self.username}.csr")
+        cmd = ["openssl", "req", "-new", "-nodes", "-key", self._key,
+               "-reqexts", "req_exts", "-config", self._cnf, "-out", csr_path]
+        run(cmd)
+        return csr_path
+
 
 class IPAUser(User):
     """
@@ -207,3 +219,19 @@ class IPAUser(User):
         if list(self.card_dir.iterdir()):
             rmtree(self.card_dir)
             logger.info(f"User  {self.username} directory is removed.")
+
+    def gen_csr(self):
+        """
+        Method for generating IPA user specific CSR file that would be sent to
+        the IPA server for generating the certificate. CSR is generated using
+        `openssl` command.
+        """
+        if not self._key:
+            raise SCAutolibException("Can't generate CSR because private key "
+                                     "is not set")
+        csr_path = self.card_dir.joinpath(f"csr-{self.username}.csr")
+        cmd = ["openssl", "req", "-new", "-days", "365",
+               "-nodes", "-key", self._key, "-out",
+               str(csr_path), "-subj", f"/CN={self.username}"]
+        run(cmd)
+        return csr_path
