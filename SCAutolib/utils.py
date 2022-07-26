@@ -1,3 +1,5 @@
+import json
+
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from pathlib import Path
@@ -103,3 +105,12 @@ def _check_packages(packages):
         else:
             logger.debug(f"Package {out.stdout.strip()} is present")
     return missing
+
+
+def dump_to_json(obj):
+    """
+    Store serialised object to the JSON file.
+    """
+    with obj.dump_file.open("w") as f:
+        json.dump(obj.__dict__, f)
+    logger.debug(f"Object {type(obj)} is stored to the {obj.dump_file} file")
