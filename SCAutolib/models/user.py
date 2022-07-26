@@ -110,23 +110,42 @@ class User:
         self._cnf = None
 
     def delete_user(self):
-        logger.info(f"Deleting the user {self.username}")
-        run(['userdel', '-f', self.username], check=True)
+        """
+        Deletes the user and the content of user's card directory
+        """
+        try:
+            pwd.getpwnam(self.username)
+            logger.info(f"Deleting the user {self.username}")
+            run(['userdel', '-f', self.username], check=True)
+            rmtree(self.card_dir)
+            logger.debug("User's card directory "
+                         f"{str(self.card_dir)} is removed")
+        except KeyError:
+            pass
+        logger.info(f"User {self.username} is not present on the system")
 
-    def add_user(self):
-        run(['useradd', '-m', '-p', self.password, self.username], check=True)
-        self.card_dir = f"/home/{self.username}"
-        logger.info(f"Creating new user {self.username}")
+    def add_user(self, force=False):
+        try:
+            pwd.getpwnam(self.username)
+            msg = f"User {self.username} already exists on this " \
+                  f"machine. Username should be unique to avoid " \
+                  f"future problems with collisions"
+            logger.critical(msg)
+            raise SCAutolibException(msg)
+        except KeyError:
+            logger.debug(f"Creating new user {self.username}")
+            cmd = ['useradd', '-m', self.username]
+            run(cmd, check=True)
+            cmd = ["passwd", self.username, "--stdin"]
+            run(cmd, input=self.password)
+            logger.info(f"User {self.username} is present ons the system")
 
 
 class IPAUser(User):
     """
     This class is used to represent an IPA user.
     """
-
-    def __init__(self, ipa_server: IPAServerCA, username: str, password: str,
-                 pin: str, card=None, cnf: Path = None, key: Path = None,
-                 cert: Path = None):
+    default_password = "redhat"
 
         """
         :param ipa_server: IPAServerCA object which provides the ipa hostname
@@ -147,23 +166,44 @@ class IPAUser(User):
         :type Path
         """
 
-        super().__init__(username, password, pin, card, cnf, key, cert)
+        super().__init__(*args, **kwargs)
         self._meta_client = ipa_server.meta_client
-
-        self._meta_client.login("admin", ipa_server._ipa_server_admin_passwd)
+        self._ipa_hostname = ipa_server.ipa_server_hostname
 
     def add_user(self):
-        r = self._meta_client.user_add(self.username, self.username,
-                                       self.username, self.username,
-                                       o_userpassword=self.password,
-                                       o_homedirectory=f"/home/{self.username}")
-        self.card_dir = f"/home/{self.username}"
-        logger.debug(r)
-        logger.info(f"User {self.username} is added to the IPA server")
+        """
+        Adds IPA user to IPA server.
+        """
+        try:
+            r = self._meta_client.user_add(self.username, self.username,
+                                           self.username, self.username,
+                                           o_userpassword=self.default_password)
+            logger.debug(r)
+
+            # To avoid forcing IPA server to change the password on first login
+            # we changing it through the client
+            client = python_freeipa.client.Client(self._ipa_hostname,
+                                                  verify_ssl=False)
+            client.change_password(self.username, self.password,
+                                   self.default_password)
+            logger.info(f"User {self.username} is added to the IPA server")
+        except python_freeipa.exceptions.DuplicateEntry:
+            msg = f"User {self.username} already exists on the " \
+                  f"IPA server. Username should be unique to avoid " \
+                  f"future problems with collisions"
+            logger.critical(msg)
+            raise SCAutolibException(msg)
 
     def delete_user(self):
-        r = self._meta_client.user_del(self.username)["result"]
-        logger.info(f"User {self.username} is removed from the IPA server")
-        run(['rm', '-r', '-f', f"/home/{self.username}"], check=True)
-        logger.info(f"User {self.username} directory is removed.")
-        logger.debug(r)
+        """
+        Deletes the user and user's card directory
+        """
+        try:
+            r = self._meta_client.user_del(self.username)["result"]
+            logger.info(f"User {self.username} is removed from the IPA server")
+            logger.debug(r)
+        except python_freeipa.exceptions.NotFound:
+            pass
+        if list(self.card_dir.iterdir()):
+            rmtree(self.card_dir)
+            logger.info(f"User  {self.username} directory is removed.")
