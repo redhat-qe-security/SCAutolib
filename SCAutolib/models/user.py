@@ -188,8 +188,7 @@ class User(BaseUser):
                 dict_[k] = str(v)
 
         if self._card:
-            dict_["_card"] = str(
-                LIB_DUMP_CARDS.joinpath(f"card-{self.username}.json"))
+            dict_["_card"] = str(self._card.dump_file)
         return dict_
 
     def delete_user(self):
