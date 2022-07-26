@@ -8,52 +8,116 @@ password, smart card pin, etc.
 The classes implement add_user and delete_user methods which can be used to
 create or remove a specified user in the system or in the specified IPA server.
 """
-from pathlib import Path
+from shutil import rmtree
 
+import json
+import pwd
+import python_freeipa
+from pathlib import Path, PosixPath
+
+from SCAutolib import run, logger, LIB_DUMP_USERS, LIB_DUMP_CARDS
+from SCAutolib.exceptions import SCAutolibException
+from SCAutolib.models import card as card_model
 from SCAutolib.models.CA import IPAServerCA
-from SCAutolib import run, logger
+from SCAutolib.models.file import OpensslCnf
 
 
-class User:
+class BaseUser:
+    username: str = None
+    password: str = None
+    pin: str = None
+    dump_file: Path = None
+    _cnf: OpensslCnf = None
+    _key: Path = None
+    _cert: Path = None
+    card_dir: Path = None
+    _card: card_model.Card = None
+    local: bool = None
+
+    @staticmethod
+    def load(json_file, **kwargs):
+        """
+        Load values from user's JSON file to corresponding user object.
+
+        :param json_file: path to JSON file to read from
+        :type json_file: pathlib.Path
+        :param kwargs: dictionary of additional values needed to initialise the
+            object
+        :return: object of local or IPA user
+        :rtype: SCAutolib.models.user.User or SCAutolib.models.user.IPAUser
+        """
+        with json_file.open("r") as f:
+            cnt = json.load(f)
+
+        if cnt["local"]:
+            user = User(local=cnt["local"],
+                        username=cnt["username"],
+                        card_dir=Path(cnt["card_dir"]),
+                        password=cnt["password"],
+                        pin=cnt["pin"],
+                        key=cnt["_key"],
+                        cert=cnt["_cert"])
+        else:
+            if "ipa_server" not in kwargs:
+                raise SCAutolibException("IPA Server object does not provided. "
+                                         "Can't load IPA user.")
+
+            user = IPAUser(ipa_server=kwargs["ipa_server"],
+                           local=cnt["local"],
+                           username=cnt["username"],
+                           card_dir=Path(cnt["card_dir"]),
+                           password=cnt["password"],
+                           pin=cnt["pin"],
+                           key=cnt["_key"],
+                           cert=cnt["_cert"])
+        logger.debug(f"User {user.__class__} is loaded: {user.__dict__}")
+        return user
+
+
+class User(BaseUser):
     """
     Generic class to represent system users.
     """
 
-    def __init__(self, username: str, password: str, pin: str, card=None,
-                 cnf: Path = None, key: Path = None, cert: Path = None):
+    def __init__(self, username: str, password: str, pin: str,
+                 cnf: Path = None, key: Path = None, cert: Path = None,
+                 card_dir: Path = None, local: bool = True):
 
         """
         :param username: Username for the system user
-        :type: str
+        :type username: str
         :param password: Password for the system user
-        :type str
+        :type password: str
         :param pin: Smart card pin for the system user
-        :type str
-        :param card: Card to be associated with the user
-        :type Card
+        :type pin: str
         :param cnf: CNF file to be associated with the user
-        :type Path
+        :type cnf: Path
         :param key: Key to be associated with the user
-        :type Path
+        :type key: Path
         :param cert: Certificate to be associated with the user.
-        :type Path
+        :type cert: Path
+        :param card_dir: Directory for the card. If None, standard
+            home directory would be used (/home/<username>)
+        :type card_dir: Path
         """
 
         self.username = username
         self.password = password
         self.pin = pin
-        self._card = card
+        self.dump_file = LIB_DUMP_USERS.joinpath(f"{self.username}.json")
         self._cnf = cnf
         self._key = key
         self._cert = cert
-        self.card_dir = None
+        self.card_dir = card_dir if card_dir is not None \
+            else Path("/home", self.username)
+        self.local = local
 
     @property
     def card(self):
         return self._card
 
     @card.setter
-    def card(self, card: Path):
+    def card(self, card: card_model.Card):
         if self._card:
             logger.error("Delete the existing card before adding a new one.")
             raise ValueError("A card is already assigned to this user")
@@ -109,6 +173,25 @@ class User:
         logger.info("Removing current CNF file.")
         self._cnf = None
 
+    @property
+    def __dict__(self):
+        """
+        Customising default property for better serialisation for storing to
+        JSON format.
+
+        :return: dictionary with all values. Path objects are typed to string.
+        :rtype: dict
+        """
+        dict_ = super().__dict__.copy()
+        for k, v in dict_.items():
+            if type(v) in (PosixPath, Path):
+                dict_[k] = str(v)
+
+        if self._card:
+            dict_["_card"] = str(
+                LIB_DUMP_CARDS.joinpath(f"card-{self.username}.json"))
+        return dict_
+
     def delete_user(self):
         """
         Deletes the user and the content of user's card directory
@@ -159,23 +242,25 @@ class IPAUser(User):
     """
     default_password = "redhat"
 
+    def __init__(self, ipa_server: IPAServerCA, *args, **kwargs):
         """
+        Class for IPA user. IPA client should be configured first before
+        creating an IPA user through this class.
+
         :param ipa_server: IPAServerCA object which provides the ipa hostname
-        :type IPAServerCA
+        :type ipa_server: IPAServerCA
         :param username: Username for the system user
-        :type: str
+        :type username: str
         :param password: Password for the system user
-        :type str
+        :type password: str
         :param pin: Smart card pin for the system user
-        :type str
-        :param card: Card to be associated with the user
-        :type Card
+        :type pin: str
         :param cnf: CNF file to be associated with the user
-        :type Path
+        :type cnf: Path
         :param key: Key to be associated with the user
-        :type Path
+        :type key: Path
         :param cert: Certificate to be associated with the user.
-        :type Path
+        :type cert: Path
         """
 
         super().__init__(*args, **kwargs)
