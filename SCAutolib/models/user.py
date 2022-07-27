@@ -136,6 +136,8 @@ class User(BaseUser):
         logger.warning("Make sure to remove the existing key/cert "
                        "pairs before adding a new one.")
         self._key = key
+        if self.card:
+            self.card._private_key = key
 
     @key.deleter
     def key(self):
@@ -151,6 +153,8 @@ class User(BaseUser):
         logger.warning("Make sure to remove the existing key/cert "
                        "pairs before adding a new one.")
         self._cert = cert
+        if self.card:
+            self.card._cert = cert
 
     @cert.deleter
     def cert(self):

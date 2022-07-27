@@ -5,7 +5,7 @@ from pathlib import Path
 from python_freeipa.client_meta import ClientMeta
 from random import randint
 from shutil import copyfile
-from subprocess import check_output
+from subprocess import check_output, run, PIPE, CalledProcessError
 
 from SCAutolib import TEMPLATES_DIR
 from SCAutolib.models import CA
@@ -13,12 +13,15 @@ from SCAutolib.models import CA
 
 @pytest.fixture(scope="session")
 def local_ca_fixture(tmp_path_factory, backup_sssd_ca_db):
-    ca = CA.LocalCA(tmp_path_factory.mktemp("local-ca"))
-    ca.setup(force=True)
+    ca = CA.LocalCA(tmp_path_factory.mktemp("ca").joinpath("local-ca"))
+    try:
+        ca.setup()
+    except FileExistsError:
+        pass
     return ca
 
 
-@pytest.fixture()
+@pytest.fixture(scope="session")
 def dummy_ipa_vals(ipa_ip, ipa_hostname, ipa_admin_passwd, ipa_root_passwd):
     """
     Creates dummy values for IPA serve and client for testings
@@ -57,20 +60,33 @@ def ipa_meta_client(dummy_ipa_vals):
     return client
 
 
-@pytest.fixture()
-def installed_ipa(dummy_ipa_vals, clean_ipa):
-    check_output(["ipa-client-install", "-p", "admin",
-                  "--password", dummy_ipa_vals["server_admin_passwd"],
-                  "--server", dummy_ipa_vals["server_hostname"],
-                  "--domain", dummy_ipa_vals["server_domain"],
-                  "--realm", dummy_ipa_vals["server_realm"],
-                  "--hostname", dummy_ipa_vals["client_hostname"],
-                  "--all-ip-addresses", "--force", "--force-join",
-                  "--no-ntp", "-U"],
-                 input="yes", encoding="utf-8")
+@pytest.fixture(scope="session")
+def installed_ipa(dummy_ipa_vals):
+    cmd = ["ipa-client-install", "-p", "admin",
+           "--password", dummy_ipa_vals["server_admin_passwd"],
+           "--server", dummy_ipa_vals["server_hostname"],
+           "--domain", dummy_ipa_vals["server_domain"],
+           "--realm", dummy_ipa_vals["server_realm"],
+           "--hostname", dummy_ipa_vals["client_hostname"],
+           "--all-ip-addresses", "--force", "--force-join",
+           "--no-ntp", "-U"]
+    print("Installing IPA client on the system")
+    proc = run(cmd, input="yes", encoding="utf-8", stdout=PIPE, stderr=PIPE)
+    if proc.returncode not in [0, 3]:
+        raise CalledProcessError(proc.returncode, cmd)
+    print("IPA client is installed on the system")
+    return CA.IPAServerCA(ip_addr=dummy_ipa_vals["server_ip"],
+                          client_hostname=dummy_ipa_vals[
+                              "client_hostname"],
+                          hostname=dummy_ipa_vals["server_hostname"],
+                          root_passwd=dummy_ipa_vals[
+                              "server_root_passwd"],
+                          admin_passwd=dummy_ipa_vals[
+                              "server_admin_passwd"],
+                          domain=dummy_ipa_vals["server_domain"])
 
 
-@pytest.fixture()
+@pytest.fixture(scope="session")
 def clean_ipa():
     yield
     check_output(["ipa-client-install", "--uninstall", "--unattended"],
@@ -93,24 +109,6 @@ def test_local_ca_setup(backup_sssd_ca_db, tmpdir, caplog):
             assert f.read() in f_db.read()
 
     assert "Local CA is configured" in caplog.messages
-
-
-@pytest.mark.parametrize("force", (False, True))
-def test_local_ca_setup_force(backup_sssd_ca_db, tmpdir, caplog, force):
-    ca_dir = Path(tmpdir, "ca")
-    tmp_file = ca_dir.joinpath("some-file")
-    ca_dir.mkdir()
-    tmp_file.touch()
-
-    ca = CA.LocalCA(ca_dir)
-    ca.setup(force=force)
-
-    if force:
-        assert not tmp_file.exists()
-        assert f"Removing local CA {ca_dir}" in caplog.messages
-    else:
-        assert tmp_file.exists()
-        assert "Skipping configuration." in caplog.messages
 
 
 def test_request_cert(local_ca_fixture, tmpdir):
@@ -156,36 +154,7 @@ def test_revoke_cert(local_ca_fixture, tmpdir):
 
 
 @pytest.mark.ipa
-@pytest.mark.parametrize("force", (False, True))
-def test_ipa_server_setup_force(installed_ipa, force, dummy_ipa_vals,
-                                ipa_meta_client, caplog):
-    ipa_ca = CA.IPAServerCA(ip_addr=dummy_ipa_vals["server_ip"],
-                            client_hostname=dummy_ipa_vals[
-                                "client_hostname"],
-                            hostname=dummy_ipa_vals["server_hostname"],
-                            root_passwd=dummy_ipa_vals[
-                                "server_root_passwd"],
-                            admin_passwd=dummy_ipa_vals[
-                                "server_admin_passwd"],
-                            domain=dummy_ipa_vals["server_domain"])
-    ipa_ca.setup(force)
-
-    # Test if meta client can get info about freshly configured host
-    ipa_meta_client.host_show(a_fqdn=dummy_ipa_vals["client_hostname"])
-
-    # Cleanup after test
-    ipa_meta_client.host_del(a_fqdn=dummy_ipa_vals["client_hostname"])
-
-    msg = "IPA client is already configured on this system."
-    assert msg in caplog.messages
-    if not force:
-        msg = "Set force argument to True if you want to remove " \
-              "previous installation."
-        assert msg in caplog.messages
-
-
-@pytest.mark.ipa
-def test_ipa_setup_change_pwpolicy(ipa_meta_client, dummy_ipa_vals, clean_ipa):
+def test_ipa_server_setup(dummy_ipa_vals, ipa_meta_client, caplog):
     ipa_ca = CA.IPAServerCA(ip_addr=dummy_ipa_vals["server_ip"],
                             client_hostname=dummy_ipa_vals[
                                 "client_hostname"],
@@ -196,6 +165,9 @@ def test_ipa_setup_change_pwpolicy(ipa_meta_client, dummy_ipa_vals, clean_ipa):
                                 "server_admin_passwd"],
                             domain=dummy_ipa_vals["server_domain"])
     ipa_ca.setup()
+
+    # Test if meta client can get info about freshly configured host
+    ipa_meta_client.host_show(a_fqdn=dummy_ipa_vals["client_hostname"])
 
     try:
         policy = ipa_meta_client.pwpolicy_show(a_cn="global_policy")["result"]
@@ -222,16 +194,7 @@ def test_ipa_cert_request_and_revoke(installed_ipa, ipa_meta_client,
                                  dummy_user.username, dummy_user.username,
                                  o_userpassword=dummy_user.password)
 
-        ipa_ca = CA.IPAServerCA(ip_addr=dummy_ipa_vals["server_ip"],
-                                client_hostname=dummy_ipa_vals[
-                                    "client_hostname"],
-                                hostname=dummy_ipa_vals["server_hostname"],
-                                root_passwd=dummy_ipa_vals[
-                                    "server_root_passwd"],
-                                admin_passwd=dummy_ipa_vals[
-                                    "server_admin_passwd"],
-                                domain=dummy_ipa_vals["server_domain"])
-        ipa_ca.setup()
+        ipa_ca = installed_ipa
         out = ipa_ca.request_cert(csr, dummy_user.username, cert)
 
         assert out.suffix == ".pem"
@@ -277,16 +240,7 @@ def test_ipa_user_del(installed_ipa, ipa_meta_client, dummy_ipa_vals,
     ipa_meta_client.user_add(dummy_user.username, dummy_user.username,
                              dummy_user.username, dummy_user.username,
                              o_userpassword=dummy_user.password)
-    ipa_ca = CA.IPAServerCA(ip_addr=dummy_ipa_vals["server_ip"],
-                            client_hostname=dummy_ipa_vals[
-                                "client_hostname"],
-                            hostname=dummy_ipa_vals["server_hostname"],
-                            root_passwd=dummy_ipa_vals[
-                                "server_root_passwd"],
-                            admin_passwd=dummy_ipa_vals[
-                                "server_admin_passwd"],
-                            domain=dummy_ipa_vals["server_domain"])
-    ipa_ca.setup()
+    ipa_ca = installed_ipa
     ipa_ca.del_user(dummy_user)
 
     # If the user is not properly created, this would raise an IPA exception
