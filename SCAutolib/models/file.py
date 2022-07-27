@@ -140,17 +140,14 @@ class File:
 
     def get(self, key, section: str = None, separator: str = "="):
         """
-        Method processes and return the value of the key in section. If the
-        section is not provided (section=None), then file would parsed line by
-        line splitting the line on separator. First match wins and returned.
+        Method processes and returns the value of the key in section. If the
+        section is not provided (section=None), then file would be parsed line
+        by line splitting the line on separator. First match wins and is
+        returned.
 
         If section is provided and the file can be parsed by the ConfigParser,
         then this object would be used to look for the key.
 
-        The exception is raised if the key is not found.
-
-         for no-configparser files, and for
-        configparser some of its exceptions.
         :param key: required key
         :param section: section where the key should be found
         :param separator: applicable only for non-configparser file. Separator
@@ -291,8 +288,6 @@ class SSSDConf(File):
             with self._conf_file.open() as config:
                 self._default_parser.read_file(config)
             logger.info(f"{self._conf_file} file exists, loading values")
-            logger.info(f"Backing up {self._conf_file}"
-                        f"as {self._backup_original}")
             self._backup_original = self.backup("original")
 
         except FileNotFoundError:
