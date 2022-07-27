@@ -1,5 +1,3 @@
-from os.path import (join)
-
 import coloredlogs
 import logging
 import subprocess
@@ -21,8 +19,6 @@ TEMPLATES_DIR = DIR_PATH.joinpath("templates")
 LIB_DIR = Path("/etc/SCAutolib")
 SETUP_IPA_SERVER = LIB_DIR.joinpath("ipa-install-server.sh")
 LIB_BACKUP = LIB_DIR.joinpath("backup")
-LIB_KEYS = join(LIB_DIR, "keys")
-LIB_CERTS = join(LIB_DIR, "certs")
 LIB_DUMP = LIB_DIR.joinpath("dump")
 LIB_DUMP_USERS = LIB_DUMP.joinpath("users")
 LIB_DUMP_CAS = LIB_DUMP.joinpath("cas")
