@@ -8,14 +8,13 @@ password, smart card pin, etc.
 The classes implement add_user and delete_user methods which can be used to
 create or remove a specified user in the system or in the specified IPA server.
 """
-from shutil import rmtree
-
 import json
 import pwd
 import python_freeipa
 from pathlib import Path, PosixPath
+from shutil import rmtree
 
-from SCAutolib import run, logger, LIB_DUMP_USERS, LIB_DUMP_CARDS
+from SCAutolib import run, logger, LIB_DUMP_USERS
 from SCAutolib.exceptions import SCAutolibException
 from SCAutolib.models import card as card_model
 from SCAutolib.models.CA import IPAServerCA
@@ -220,7 +219,7 @@ class User(BaseUser):
             run(cmd, check=True)
             cmd = ["passwd", self.username, "--stdin"]
             run(cmd, input=self.password)
-            logger.info(f"User {self.username} is present ons the system")
+            logger.info(f"User {self.username} is present on the system")
 
     def gen_csr(self):
         """
