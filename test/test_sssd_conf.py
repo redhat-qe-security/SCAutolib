@@ -81,8 +81,6 @@ def test_create_content_backup_original(sssd_test_prepare):
     shutil.copy2(SSSDConf._template, sssd_test._conf_file)
     sssd_test.create()
 
-    assert sssd_test._backup_original.exists()
-    compare_conf_files(SSSDConf._template, sssd_test._backup_original)
     assert sssd_test._backup_default.exists()
     compare_conf_files(SSSDConf._template, sssd_test._backup_default)
 

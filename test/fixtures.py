@@ -48,11 +48,11 @@ def backup_sssd_ca_db(tmp_path_factory):
         backup = tmp_path_factory.mktemp("backup").joinpath(
             "sssd_auth_ca_db.pem")
         copyfile(sssd_auth_ca_db, backup)
-
     yield
 
     # Restore SSSD CA db
     if backup:
         copyfile(backup, "/etc/sssd/pki/sssd_auth_ca_db.pem")
     else:
-        sssd_auth_ca_db.unlink()
+        if sssd_auth_ca_db.exists():
+            sssd_auth_ca_db.unlink()

@@ -1,12 +1,8 @@
+import pytest
+from pathlib import Path
+from subprocess import check_output, run
 from time import sleep
 
-from pathlib import Path
-
-import pytest
-
-from subprocess import check_output, run
-
-from SCAutolib.models import card
 from SCAutolib.models.CA import LocalCA
 from SCAutolib.models.file import SoftHSM2Conf
 
@@ -39,8 +35,7 @@ def local_user_with_smart_card(local_user, gen_key_and_cert):
     hsm_conf.save()
 
     local_user.key, local_user.cert = gen_key_and_cert
-    local_user.card = card.VirtualCard(user=local_user,
-                                       softhsm2_conf=hsm_conf._conf_file)
+    local_user.card.softhsm2_conf = hsm_conf.path
     return local_user
 
 

@@ -1,3 +1,5 @@
+import re
+
 import os
 import paramiko
 from cryptography import x509
@@ -104,10 +106,10 @@ class LocalCA(CA):
             self.cleanup()
 
         self.root_dir.mkdir(parents=True, exist_ok=True)
-        self._ca_cnf.parent.mkdir()
-        self._newcerts.mkdir()
-        self._certs.mkdir()
-        self._crl.parent.mkdir()
+        self._ca_cnf.parent.mkdir(exist_ok=True)
+        self._newcerts.mkdir(exist_ok=True)
+        self._certs.mkdir(exist_ok=True)
+        self._crl.parent.mkdir(exist_ok=True)
 
         # Copy template and edit it with current root dir for CA
         copy(self.template, self._ca_cnf)
@@ -179,10 +181,10 @@ class LocalCA(CA):
                 cert_out = cert_out.with_suffix(".pem")
         else:
             cert_out = self._certs.joinpath(f"{username}.pem")
-        cmd = ["openssl", "ca", "-config", self._ca_cnf,
-               "-batch", "-keyfile", self._ca_key, "-in", csr,
+        cmd = ["openssl", "ca", "-config", str(self._ca_cnf),
+               "-batch", "-keyfile", str(self._ca_key), "-in", str(csr),
                "-notext", "-days", "365", "-extensions", "usr_cert",
-               "-out", cert_out]
+               "-out", str(cert_out)]
         run(cmd, check=True)
         return cert_out
 
@@ -306,6 +308,7 @@ class IPAServerCA(CA):
         logger.debug("IPA client is installed")
 
         ipa_client_script = self._get_sc_setup_script()
+        run("kinit admin", input=self._ipa_server_admin_passwd)
         run(f'bash {ipa_client_script} /etc/ipa/ca.crt', check=True)
         logger.debug("Setup of IPA client for smart card is finished")
 
@@ -345,9 +348,11 @@ class IPAServerCA(CA):
         editing
         """
         nameserver = f"nameserver {self._ipa_server_ip}"
+        pattern = rf"^nameserver\s+{self._ipa_server_ip}\s*"
         with open("/etc/resolv.conf", "w+") as f:
             cnt = f.read()
-            if nameserver not in cnt:
+            logger.debug(f"Original resolv.conf:\n{cnt}")
+            if re.match(pattern, cnt) is None:
                 logger.warning(f"Nameserver {self._ipa_server_ip} is not "
                                "present in /etc/resolve.conf. Adding...")
                 f.write(nameserver + "\n" + cnt)
@@ -356,6 +361,9 @@ class IPAServerCA(CA):
                     "as first nameserver")
                 run("chattr -i /etc/resolv.conf")
                 logger.info("File /etc/resolv.conf is blocked for editing")
+
+        with open("/etc/resolv.conf", "r") as f:
+            logger.debug(f"New resolv.conf\n{f.read()}")
 
     def _add_to_hosts(self):
         """
@@ -380,8 +388,11 @@ class IPAServerCA(CA):
         :rtype: patlib.Path
         """
         ipa_client_script = Path(LIB_DIR, "ipa-client-sc.sh")
-        kinitpass = Responder(pattern="Password for admin@SC.TEST.COM: ",
-                              response=f"{self._ipa_server_admin_passwd}\n")
+        kinitpass = Responder(
+            pattern=f"Password for admin@{self._ipa_server_realm}: ",
+            response=f"{self._ipa_server_admin_passwd}\n")
+        logger.debug("Start receiving client script for setting up smart card "
+                     "on IPA client")
         with Connection(self._ipa_server_ip, user="root",
                         connect_kwargs={"password":
                                         self._ipa_server_root_passwd}) as c:
@@ -396,9 +407,11 @@ class IPAServerCA(CA):
             c.open()
             # in_stream = False is required because while testing with pytest
             # it collision appears with capturing of the output.
+            logger.debug("Running kinit on the IPA server")
             c.run("kinit admin", pty=True, watchers=[kinitpass], in_stream=False)
             result = c.run("ipa-advise config-client-for-smart-card-auth",
                            hide=True, in_stream=False)
+            logger.debug("Script is generated on server side")
             with open(ipa_client_script, "w") as f:
                 f.write(result.stdout)
         if os.stat(ipa_client_script).st_size == 0:
