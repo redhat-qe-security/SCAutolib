@@ -193,14 +193,18 @@ class User(BaseUser):
     def delete_user(self):
         """
         Deletes the user and the content of user's card directory
+
+        Note: card directory would be recursively deleted with a directory
+        by itself.
         """
         try:
             pwd.getpwnam(self.username)
             logger.info(f"Deleting the user {self.username}")
             run(['userdel', '-f', self.username], check=True)
-            rmtree(self.card_dir)
-            logger.debug("User's card directory "
-                         f"{str(self.card_dir)} is removed")
+            if self.card_dir.exists():
+                rmtree(self.card_dir)
+                logger.debug("User's card directory "
+                             f"{str(self.card_dir)} is removed")
         except KeyError:
             pass
         logger.info(f"User {self.username} is not present on the system")
@@ -291,7 +295,10 @@ class IPAUser(User):
 
     def delete_user(self):
         """
-        Deletes the user and user's card directory
+        Deletes the user and user's card directory.
+
+        Note: card directory would be recursively deleted with a directory
+        by itself.
         """
         try:
             r = self._meta_client.user_del(self.username)["result"]
@@ -299,7 +306,7 @@ class IPAUser(User):
             logger.debug(r)
         except python_freeipa.exceptions.NotFound:
             pass
-        if list(self.card_dir.iterdir()):
+        if self.card_dir.exists():
             rmtree(self.card_dir)
             logger.info(f"User  {self.username} directory is removed.")
 
