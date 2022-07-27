@@ -345,7 +345,7 @@ class SSSDConf(File):
                 self._changes.optionxform = str
         os.chmod(self._conf_file, 0o600)
 
-    def clean(self):
+    def restore(self):
         """
         Removes sssd.conf file in case it was created by this package or
         restore original sssd.conf in case the file was modified.
@@ -358,10 +358,9 @@ class SSSDConf(File):
         #  required attributes in JSON format load() method that would be used
         #  in other then setup runtimes to restore (load from JSON) all
         #  attributes of this object
+        self.clean()
         if self._backup_original:
             copy2(self._backup_original, self._conf_file)
-        else:
-            self._conf_file.unlink()
 
     def update_default_content(self):
         """
