@@ -60,6 +60,7 @@ def run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True,
     """
     if type(cmd) == str:
         cmd = cmd.split(" ")
+    logger.debug(f"run: {' '.join([str(i) for i in cmd])}")
     out = subprocess.run(cmd, stdout=stdout, stderr=stderr, encoding="utf-8",
                          **kwargs)
     if print_:

@@ -9,7 +9,6 @@ from pathlib import Path
 from traceback import format_exc
 
 from SCAutolib import run, logger, TEMPLATES_DIR, LIB_DUMP_CARDS
-from SCAutolib.models.file import SoftHSM2Conf
 
 
 class Card:
@@ -140,9 +139,9 @@ class VirtualCard(Card):
         return self._softhsm2_conf
 
     @softhsm2_conf.setter
-    def softhsm2_conf(self, conf: SoftHSM2Conf):
-        assert conf.conf_path.exists(), "File doesn't exist"
-        self._softhsm2_conf = conf.conf_path
+    def softhsm2_conf(self, conf: Path):
+        assert conf.exists(), "File doesn't exist"
+        self._softhsm2_conf = conf
 
     def insert(self):
         """
@@ -170,17 +169,17 @@ class VirtualCard(Card):
         NSS database) with pkcs11-tool.
         """
         cmd = ["pkcs11-tool", "--module", "libsofthsm2.so", "--slot-index",
-               '0', "-w", self._private_key, "-y", "privkey", "--label",
+               '0', "-w", str(self._private_key), "-y", "privkey", "--label",
                f"'{self.user.username}'", "-p", self.user.pin, "--set-id", "0",
                "-d", "0"]
-        run(cmd, env={"SOFTHSM2_CONF": self._softhsm2_conf})
+        run(cmd, env={"SOFTHSM2_CONF": str(self._softhsm2_conf)})
         logger.debug(
             f"User key {self._private_key} is added to virtual smart card")
 
         cmd = ['pkcs11-tool', '--module', 'libsofthsm2.so', '--slot-index', "0",
-               '-w', self._cert, '-y', 'cert', '-p', self.user.pin,
+               '-w', str(self._cert), '-y', 'cert', '-p', self.user.pin,
                '--label', f"'{self.user.username}'", '--set-id', "0", '-d', "0"]
-        run(cmd, env={"SOFTHSM2_CONF": self._softhsm2_conf})
+        run(cmd, env={"SOFTHSM2_CONF": str(self._softhsm2_conf)})
         logger.debug(
             f"User certificate {self._cert} is added to virtual smart card")
 
