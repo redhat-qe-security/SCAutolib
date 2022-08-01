@@ -7,18 +7,10 @@ from random import randint
 from shutil import copyfile
 from subprocess import check_output, run, PIPE, CalledProcessError
 
+import SCAutolib.exceptions
 from SCAutolib import TEMPLATES_DIR
 from SCAutolib.models import CA
-
-
-@pytest.fixture(scope="session")
-def local_ca_fixture(tmp_path_factory, backup_sssd_ca_db):
-    ca = CA.LocalCA(tmp_path_factory.mktemp("ca").joinpath("local-ca"))
-    try:
-        ca.setup()
-    except FileExistsError:
-        pass
-    return ca
+from SCAutolib.models.file import OpensslCnf
 
 
 @pytest.fixture(scope="session")
@@ -95,7 +87,13 @@ def clean_ipa():
 
 def test_local_ca_setup(backup_sssd_ca_db, tmpdir, caplog):
     sssd_auth_ca_db = Path("/etc/sssd/pki/sssd_auth_ca_db.pem")
-    ca = CA.LocalCA(Path(tmpdir, "ca"))
+    root = Path(tmpdir, "ca")
+    root.mkdir()
+    cnf = OpensslCnf(conf_type="CA", filepath=root.joinpath("ca.cnf"),
+                     replace=str(root))
+    cnf.create()
+    cnf.save()
+    ca = CA.LocalCA(root, cnf)
     ca.setup()
 
     assert ca.root_dir.exists()
@@ -109,6 +107,22 @@ def test_local_ca_setup(backup_sssd_ca_db, tmpdir, caplog):
             assert f.read() in f_db.read()
 
     assert "Local CA is configured" in caplog.messages
+
+
+def test_local_ca_raise_no_cnf(backup_sssd_ca_db, tmpdir, caplog):
+    root = Path(tmpdir, "ca")
+    root.mkdir()
+    cnf = OpensslCnf(conf_type="CA", filepath=root.joinpath("ca.cnf"),
+                     replace=str(root))
+    ca = CA.LocalCA(root)
+    with pytest.raises(SCAutolib.exceptions.SCAutolibException):
+        ca.setup()
+
+    cnf.create()
+    cnf.save()
+
+    ca.cnf = cnf
+    ca.setup()
 
 
 def test_request_cert(local_ca_fixture, tmpdir):
@@ -158,7 +172,7 @@ def test_ipa_server_setup(dummy_ipa_vals, ipa_meta_client, caplog):
     ipa_ca = CA.IPAServerCA(ip_addr=dummy_ipa_vals["server_ip"],
                             client_hostname=dummy_ipa_vals[
                                 "client_hostname"],
-                            hostname=dummy_ipa_vals["server_hostname"],
+                            server_hostname=dummy_ipa_vals["server_hostname"],
                             root_passwd=dummy_ipa_vals[
                                 "server_root_passwd"],
                             admin_passwd=dummy_ipa_vals[
