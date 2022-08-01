@@ -161,7 +161,7 @@ class VirtualCard(Card):
         for k, v in dict_.items():
             if type(v) in (PosixPath, Path):
                 dict_[k] = str(v)
-        dict_["_softhsm2_conf"] = str(self._softhsm2_conf.path)
+        dict_["_softhsm2_conf"] = str(self._softhsm2_conf)
         dict_.pop("_user")
         return dict_
 
@@ -182,6 +182,10 @@ class VirtualCard(Card):
     def user(self, system_user):
         self._user = system_user
         self._nssdb = self.user.card_dir.joinpath("db")
+
+    @property
+    def service_location(self):
+        return self._service_location
 
     def insert(self):
         """
@@ -212,14 +216,14 @@ class VirtualCard(Card):
                '0', "-w", self._user.key, "-y", "privkey", "--label",
                f"'{self._user.username}'", "-p", self._user.pin, "--set-id", "0",
                "-d", "0"]
-        run(cmd, env={"SOFTHSM2_CONF": self._softhsm2_conf.path})
+        run(cmd, env={"SOFTHSM2_CONF": self._softhsm2_conf})
         logger.debug(
             f"User key {self._user.key} is added to virtual smart card")
 
         cmd = ['pkcs11-tool', '--module', 'libsofthsm2.so', '--slot-index', "0",
                '-w', self._user.cert, '-y', 'cert', '-p', self._user.pin,
                '--label', f"'{self._user.username}'", '--set-id', "0", '-d', "0"]
-        run(cmd, env={"SOFTHSM2_CONF": self._softhsm2_conf.path})
+        run(cmd, env={"SOFTHSM2_CONF": self._softhsm2_conf})
         logger.debug(
             f"User certificate {self._user.cert} is added to virtual smart card")
 
