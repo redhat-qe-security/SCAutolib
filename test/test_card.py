@@ -8,14 +8,7 @@ from SCAutolib.models.file import SoftHSM2Conf
 
 
 @pytest.fixture()
-def local_ca(tmp_path):
-    ca = LocalCA(Path(tmp_path, "ca"))
-    ca.setup(force=True)
-    return ca
-
-
-@pytest.fixture()
-def gen_key_and_cert(local_ca, local_user):
+def gen_key_and_cert(local_ca_fixture, local_user):
     csr = Path(local_user.card_dir, f"{local_user.username}.csr")
     cert = Path(local_user.card_dir, f"{local_user.username}.cert")
     key = Path(local_user.card_dir, f"{local_user.username}.key")
@@ -23,7 +16,7 @@ def gen_key_and_cert(local_ca, local_user):
            "-keyout", key, "-out", csr, "-subj", f"/CN={local_user.username}"]
     check_output(cmd, encoding="utf-8")
 
-    local_ca.request_cert(csr, username=local_user.username, cert_out=cert)
+    local_ca_fixture.request_cert(csr, username=local_user.username, cert_out=cert)
     return key, cert
 
 

@@ -2,14 +2,31 @@ import pytest
 from pathlib import Path
 from shutil import copyfile
 
+from SCAutolib.models import CA
 from SCAutolib.models.card import VirtualCard
-from SCAutolib.models.file import SSSDConf, File
+from SCAutolib.models.file import SSSDConf, File, OpensslCnf
 from SCAutolib.models.user import User
 
 
+@pytest.fixture(scope="session")
+def local_ca_fixture(tmp_path_factory, backup_sssd_ca_db):
+    root = tmp_path_factory.mktemp("ca").joinpath("local-ca")
+    root.mkdir(exist_ok=True)
+    cnf = OpensslCnf(conf_type="CA", filepath=root.joinpath("ca.cnf"),
+                     replace=str(root))
+    ca = CA.LocalCA(root, cnf)
+    try:
+        cnf.create()
+        cnf.save()
+        ca.setup()
+    except FileExistsError:
+        pass
+    return ca
+
+
 @pytest.fixture
-def local_user(tmp_path):
-    user = User("testuser", "testpassword", "123456")
+def local_user(tmp_path, request):
+    user = User(f"user-{request.node.name}", "testpassword", "123456")
     user.card_dir = tmp_path
     user.dump_file = tmp_path.joinpath("test-user-dump-file.json")
     user.card = VirtualCard(user=user)
