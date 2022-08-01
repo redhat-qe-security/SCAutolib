@@ -107,7 +107,10 @@ class LocalCA(BaseCA):
         self._crl: Path = self.root_dir.joinpath("crl", "root.pem")
         self._ca_pki_db: Path = Path("/etc/sssd/pki/sssd_auth_ca_db.pem")
 
-        self._ca_cnf: OpensslCnf = cnf
+        self._ca_cnf: OpensslCnf = cnf if cnf else OpensslCnf(
+            conf_type="CA",
+            filepath=self.root_dir.joinpath("ca.cnf"),
+            replace=str(self.root_dir))
         self._ca_cert: Path = self.root_dir.joinpath("rootCA.pem")
         self._ca_key: Path = self.root_dir.joinpath("rootCA.key")
 
@@ -117,6 +120,12 @@ class LocalCA(BaseCA):
     @property
     def cnf(self):
         return self._ca_cnf
+
+    @cnf.setter
+    def cnf(self, cnf: OpensslCnf):
+        if not cnf.path.exists():
+            raise SCAutolibException("CNF file does not exist")
+        self._ca_cnf = cnf
 
     @property
     def __dict__(self):
@@ -140,6 +149,10 @@ class LocalCA(BaseCA):
         and new local CA would be created. Otherwise, configuration would be
         skipped.
         """
+        if self._ca_cnf is None:
+            raise SCAutolibException("CA CNF file is not set")
+        elif not self._ca_cnf.path.exists():
+            raise SCAutolibException("CA CNF does not exist")
 
         self.root_dir.mkdir(parents=True, exist_ok=True)
         self._newcerts.mkdir(exist_ok=True)
@@ -457,7 +470,7 @@ class IPAServerCA(BaseCA):
                      "on IPA client")
         with Connection(self._ipa_server_ip, user="root",
                         connect_kwargs={"password":
-                                        self._ipa_server_root_passwd}) as c:
+                                            self._ipa_server_root_passwd}) as c:
             # Delete this block when PR in paramiko will be accepted
             # https://github.com/paramiko/paramiko/issues/396
             #### noqa:E266
