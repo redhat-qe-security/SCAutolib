@@ -29,7 +29,11 @@ def local_user_with_smart_card(local_user, gen_key_and_cert):
 
     local_user.key, local_user.cert = gen_key_and_cert
     local_user.card.softhsm2_conf = hsm_conf.path
-    return local_user
+    yield local_user
+
+    if local_user.card.service_location and \
+            local_user.card.service_location.exists():
+        local_user.card.service_location.unlink()
 
 
 @pytest.mark.service_restart
