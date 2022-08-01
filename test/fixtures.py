@@ -1,14 +1,13 @@
-from subprocess import check_output, run, CalledProcessError, PIPE
-
+import pwd
 import pytest
 from pathlib import Path
 from shutil import copyfile
+from subprocess import check_output, run, CalledProcessError, PIPE
 
 from SCAutolib.models import CA
 from SCAutolib.models.card import VirtualCard
 from SCAutolib.models.file import SSSDConf, File, OpensslCnf
 from SCAutolib.models.user import User
-import pwd
 
 
 @pytest.fixture(scope="session")
