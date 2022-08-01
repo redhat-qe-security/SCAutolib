@@ -8,6 +8,8 @@ password, smart card pin, etc.
 The classes implement add_user and delete_user methods which can be used to
 create or remove a specified user in the system or in the specified IPA server.
 """
+from shutil import rmtree
+
 import json
 import pwd
 import python_freeipa
