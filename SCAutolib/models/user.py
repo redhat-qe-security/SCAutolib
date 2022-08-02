@@ -214,14 +214,10 @@ class User(BaseUser):
             pass
         logger.info(f"User {self.username} is not present on the system")
 
-    def add_user(self, force=False):
+    def add_user(self):
         """
         Add user to the local system with `useradd` bash command and set
         password for created user.
-
-        :param force: specifies if the user should be recreated if the
-            collision appears.
-        :type force: bool
         :return:
         """
         try:

@@ -13,23 +13,6 @@ from SCAutolib.models import CA
 from SCAutolib.models.file import OpensslCnf
 
 
-@pytest.fixture(scope="session")
-def dummy_ipa_vals(ipa_ip, ipa_hostname, ipa_admin_passwd, ipa_root_passwd):
-    """
-    Creates dummy values for IPA serve and client for testings
-    """
-    domain = ipa_hostname.split(".", 1)[1]
-    return {
-        "server_ip": ipa_ip,
-        "server_domain": domain,
-        "server_hostname": ipa_hostname,
-        "server_admin_passwd": ipa_admin_passwd,
-        "server_realm": domain.upper(),
-        "server_root_passwd": ipa_root_passwd,
-        "client_hostname": f"client-hostname.{domain}"
-    }
-
-
 @pytest.fixture()
 def dummy_user():
     class User:
@@ -41,48 +24,15 @@ def dummy_user():
 
 
 @pytest.fixture()
-def ipa_meta_client(dummy_ipa_vals):
+def ipa_meta_client(ipa_config):
     """
     Return ready-to-use IPA MetaClient with admin login. This fixture might not
     work if there is no mapping rule on your system for given IPA IP address and
     IPA hostnames (no corresponding entry in /etc/hosts)
     """
-    client = ClientMeta(dummy_ipa_vals["server_hostname"], verify_ssl=False)
-    client.login("admin", dummy_ipa_vals["server_admin_passwd"])
+    client = ClientMeta(ipa_config["hostname"], verify_ssl=False)
+    client.login("admin", ipa_config["admin_passwd"])
     return client
-
-
-@pytest.fixture(scope="session")
-def installed_ipa(dummy_ipa_vals):
-    cmd = ["ipa-client-install", "-p", "admin",
-           "--password", dummy_ipa_vals["server_admin_passwd"],
-           "--server", dummy_ipa_vals["server_hostname"],
-           "--domain", dummy_ipa_vals["server_domain"],
-           "--realm", dummy_ipa_vals["server_realm"],
-           "--hostname", dummy_ipa_vals["client_hostname"],
-           "--all-ip-addresses", "--force", "--force-join",
-           "--no-ntp", "-U"]
-    print("Installing IPA client on the system")
-    proc = run(cmd, input="yes", encoding="utf-8", stdout=PIPE, stderr=PIPE)
-    if proc.returncode not in [0, 3]:
-        raise CalledProcessError(proc.returncode, cmd)
-    print("IPA client is installed on the system")
-    return CA.IPAServerCA(ip_addr=dummy_ipa_vals["server_ip"],
-                          client_hostname=dummy_ipa_vals[
-                              "client_hostname"],
-                          hostname=dummy_ipa_vals["server_hostname"],
-                          root_passwd=dummy_ipa_vals[
-                              "server_root_passwd"],
-                          admin_passwd=dummy_ipa_vals[
-                              "server_admin_passwd"],
-                          domain=dummy_ipa_vals["server_domain"])
-
-
-@pytest.fixture(scope="session")
-def clean_ipa():
-    yield
-    check_output(["ipa-client-install", "--uninstall", "--unattended"],
-                 encoding="utf-8")
 
 
 def test_local_ca_setup(backup_sssd_ca_db, tmpdir, caplog):
@@ -168,20 +118,18 @@ def test_revoke_cert(local_ca_fixture, tmpdir):
 
 
 @pytest.mark.ipa
-def test_ipa_server_setup(dummy_ipa_vals, ipa_meta_client, caplog):
-    ipa_ca = CA.IPAServerCA(ip_addr=dummy_ipa_vals["server_ip"],
-                            client_hostname=dummy_ipa_vals[
-                                "client_hostname"],
-                            server_hostname=dummy_ipa_vals["server_hostname"],
-                            root_passwd=dummy_ipa_vals[
-                                "server_root_passwd"],
-                            admin_passwd=dummy_ipa_vals[
-                                "server_admin_passwd"],
-                            domain=dummy_ipa_vals["server_domain"])
+def test_ipa_server_setup(ipa_config, ipa_meta_client, caplog):
+    client_name = f'client-{ipa_config["hostname"]}'
+    ipa_ca = CA.IPAServerCA(ip_addr=ipa_config["ip"],
+                            server_hostname=ipa_config["hostname"],
+                            admin_passwd=ipa_config["admin_passwd"],
+                            root_passwd=ipa_config["root_passwd"],
+                            domain=ipa_config["domain"],
+                            client_hostname=client_name)
     ipa_ca.setup()
 
     # Test if meta client can get info about freshly configured host
-    ipa_meta_client.host_show(a_fqdn=dummy_ipa_vals["client_hostname"])
+    ipa_meta_client.host_show(a_fqdn=client_name)
 
     try:
         policy = ipa_meta_client.pwpolicy_show(a_cn="global_policy")["result"]
@@ -193,8 +141,8 @@ def test_ipa_server_setup(dummy_ipa_vals, ipa_meta_client, caplog):
 
 
 @pytest.mark.ipa
-def test_ipa_cert_request_and_revoke(installed_ipa, ipa_meta_client,
-                                     dummy_ipa_vals, tmpdir, dummy_user):
+def test_ipa_cert_request_and_revoke(ipa_fixture, ipa_meta_client,
+                                     tmpdir, dummy_user):
     csr = Path(tmpdir, "cert.csr")
     key = Path(tmpdir, "cert.key")
     cert = Path(tmpdir, "cert.out")
@@ -208,8 +156,7 @@ def test_ipa_cert_request_and_revoke(installed_ipa, ipa_meta_client,
                                  dummy_user.username, dummy_user.username,
                                  o_userpassword=dummy_user.password)
 
-        ipa_ca = installed_ipa
-        out = ipa_ca.request_cert(csr, dummy_user.username, cert)
+        out = ipa_fixture.request_cert(csr, dummy_user.username, cert)
 
         assert out.suffix == ".pem"
         with out.open("rb") as f:
@@ -218,7 +165,7 @@ def test_ipa_cert_request_and_revoke(installed_ipa, ipa_meta_client,
         # If cert is not properly created, this would raise an IPA exception
         ipa_meta_client.cert_show(a_serial_number=cert_obj.serial_number)
 
-        ipa_ca.revoke_cert(out)
+        ipa_fixture.revoke_cert(out)
         revoked = ipa_meta_client.cert_show(
             a_serial_number=cert_obj.serial_number)["result"]["revoked"]
         assert revoked
@@ -227,20 +174,9 @@ def test_ipa_cert_request_and_revoke(installed_ipa, ipa_meta_client,
 
 
 @pytest.mark.ipa
-def test_ipa_user_add(installed_ipa, ipa_meta_client, dummy_ipa_vals,
-                      dummy_user):
+def test_ipa_user_add(ipa_fixture, ipa_meta_client, dummy_user):
     try:
-        ipa_ca = CA.IPAServerCA(ip_addr=dummy_ipa_vals["server_ip"],
-                                client_hostname=dummy_ipa_vals[
-                                    "client_hostname"],
-                                hostname=dummy_ipa_vals["server_hostname"],
-                                root_passwd=dummy_ipa_vals[
-                                    "server_root_passwd"],
-                                admin_passwd=dummy_ipa_vals[
-                                    "server_admin_passwd"],
-                                domain=dummy_ipa_vals["server_domain"])
-        ipa_ca.setup()
-        ipa_ca.add_user(dummy_user)
+        ipa_fixture.add_user(dummy_user)
 
         # If the user is not properly created, this would raise an IPA exception
         ipa_meta_client.user_show(a_uid=dummy_user.username)
@@ -249,13 +185,11 @@ def test_ipa_user_add(installed_ipa, ipa_meta_client, dummy_ipa_vals,
 
 
 @pytest.mark.ipa
-def test_ipa_user_del(installed_ipa, ipa_meta_client, dummy_ipa_vals,
-                      dummy_user):
+def test_ipa_user_del(ipa_fixture, ipa_meta_client, dummy_user):
     ipa_meta_client.user_add(dummy_user.username, dummy_user.username,
                              dummy_user.username, dummy_user.username,
                              o_userpassword=dummy_user.password)
-    ipa_ca = installed_ipa
-    ipa_ca.del_user(dummy_user)
+    ipa_fixture.del_user(dummy_user)
 
     # If the user is not properly created, this would raise an IPA exception
     with pytest.raises(python_freeipa.exceptions.NotFound):

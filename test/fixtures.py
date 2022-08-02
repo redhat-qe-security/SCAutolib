@@ -1,3 +1,5 @@
+from subprocess import check_output, run, CalledProcessError, PIPE
+
 import pytest
 from pathlib import Path
 from shutil import copyfile
@@ -6,6 +8,39 @@ from SCAutolib.models import CA
 from SCAutolib.models.card import VirtualCard
 from SCAutolib.models.file import SSSDConf, File, OpensslCnf
 from SCAutolib.models.user import User
+import pwd
+
+
+@pytest.fixture(scope="session")
+def ipa_fixture(ipa_config):
+    client_name = f'client-{ipa_config["hostname"]}'
+    cmd = ["ipa-client-install", "-p", "admin",
+           "--password", ipa_config["admin_passwd"],
+           "--server", ipa_config["hostname"],
+           "--domain", ipa_config["domain"],
+           "--realm", ipa_config["domain"].upper(),
+           "--hostname", client_name,
+           "--all-ip-addresses", "--force", "--force-join",
+           "--no-ntp", "-U"]
+
+    proc = run(cmd, input="yes", encoding="utf-8", stdout=PIPE, stderr=PIPE)
+    # Return code 3 is a return code when IPA client is already installed
+    if proc.returncode not in [0, 3]:
+        raise CalledProcessError(proc.returncode, cmd)
+
+    return CA.IPAServerCA(ip_addr=ipa_config["ip"],
+                          server_hostname=ipa_config["hostname"],
+                          admin_passwd=ipa_config["admin_passwd"],
+                          root_passwd=ipa_config["root_passwd"],
+                          domain=ipa_config["domain"],
+                          client_hostname=client_name)
+
+
+@pytest.fixture(scope="session")
+def clean_ipa():
+    yield
+    check_output(["ipa-client-install", "--uninstall", "--unattended"],
+                 encoding="utf-8")
 
 
 @pytest.fixture(scope="session")
@@ -26,11 +61,20 @@ def local_ca_fixture(tmp_path_factory, backup_sssd_ca_db):
 
 @pytest.fixture
 def local_user(tmp_path, request):
-    user = User(f"user-{request.node.name}", "testpassword", "123456")
+    # In linux useradd command max length of the username is 32 chars
+    username = f"user-{request.node.name}"[0:32]
+    user = User(username, "testpassword", "123456")
     user.card_dir = tmp_path
     user.dump_file = tmp_path.joinpath("test-user-dump-file.json")
     user.card = VirtualCard(user=user)
-    return user
+    yield user
+
+    # Delete the user if it was added during the test phase
+    try:
+        pwd.getpwnam(username)
+        check_output(["userdel", username], encoding="utf-8")
+    except KeyError:
+        pass
 
 
 @pytest.fixture()
