@@ -167,6 +167,8 @@ class File:
                 with self._conf_file.open() as config:
                     self._simple_content = config.readlines()
             for line in self._simple_content:
+                if line.strip().startswith("#") or line.strip() == "":
+                    continue
                 key_from_file, value = line.split(separator, maxsplit=1)
                 if key_from_file == key:
                     return value.strip()

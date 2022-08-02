@@ -49,7 +49,8 @@ def pytest_generate_tests(metafunc):
             and all([ipa_ip, ipa_hostname, ipa_admin_passwd, ipa_root_passwd]):
         ipa_config = {"ip": ipa_ip, "hostname": ipa_hostname,
                       "admin_passwd": ipa_admin_passwd,
-                      "root_passwd": ipa_root_passwd}
+                      "root_passwd": ipa_root_passwd,
+                      "domain": ipa_hostname.split(".", 1)[1]}
         metafunc.parametrize("ipa_config", [ipa_config])
 
     if 'ipa_ip' in metafunc.fixturenames and ipa_ip is not None:
