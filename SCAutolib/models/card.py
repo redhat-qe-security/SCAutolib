@@ -4,10 +4,9 @@ that we are using in the library. Those types are: virtual smart card, real
 (physical) smart card in standard reader, cards in the removinator.
 """
 import json
-
 import re
 import time
-from pathlib import Path, PosixPath
+from pathlib import Path
 from traceback import format_exc
 
 from SCAutolib import run, logger, TEMPLATES_DIR, LIB_DUMP_CARDS
@@ -65,7 +64,8 @@ class Card:
         if cnt["type"] == "virtual":
             assert "user" in kwars.keys(),\
                 "No user is provided to load the card."
-            card = VirtualCard(user=kwars["user"], insert=cnt["_insert"])
+            card = VirtualCard(user=kwars["user"],
+                               softhsm2_conf=Path(cnt["softhsm"]))
             card.uri = cnt["uri"]
         return card
 
@@ -157,13 +157,12 @@ class VirtualCard(Card):
     def __dict__(self):
         # Need to copy to not referencing the same object what leads to
         # changing it on retyping
-        dict_ = super().__dict__.copy()
-        for k, v in dict_.items():
-            if type(v) in (PosixPath, Path):
-                dict_[k] = str(v)
-        dict_["_softhsm2_conf"] = str(self._softhsm2_conf)
-        dict_.pop("_user")
-        return dict_
+        return {
+            "softhsm": str(self._softhsm2_conf),
+            "type": "virtual",
+            "uri": self.uri,
+            "username": self.user.username
+        }
 
     @property
     def softhsm2_conf(self):

@@ -469,8 +469,8 @@ class IPAServerCA(BaseCA):
         logger.debug("Start receiving client script for setting up smart card "
                      "on IPA client")
         with Connection(self._ipa_server_ip, user="root",
-                        connect_kwargs={"password":
-                                            self._ipa_server_root_passwd}) as c:
+                        connect_kwargs={
+                            "password": self._ipa_server_root_passwd}) as c:
             # Delete this block when PR in paramiko will be accepted
             # https://github.com/paramiko/paramiko/issues/396
             #### noqa:E266
