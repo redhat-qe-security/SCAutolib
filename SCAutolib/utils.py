@@ -21,6 +21,8 @@ class OSVersion(Enum):
     Fedora = 1
     RHEL_9 = 2
     RHEL_8 = 3
+    CentOS_8 = 4
+    CentOS_9 = 5
 
 
 def _check_selinux():
@@ -75,6 +77,10 @@ def _get_os_version():
         return OSVersion.RHEL_8
     elif "Fedora" in cnt:
         return OSVersion.Fedora
+    elif "CentOS Stream release 8" in cnt:
+        return OSVersion.CentOS_8
+    elif "CentOS Stream release 9" in cnt:
+        return OSVersion.CentOS_9
     else:
         raise SCAutolibException("OS is not detected.")
 

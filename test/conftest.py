@@ -1,10 +1,11 @@
 from os import environ
-from shutil import rmtree
+
 import logging
 import os
-from subprocess import check_output, CalledProcessError
+from shutil import rmtree
 
-from SCAutolib import LIB_DIR
+from SCAutolib import (LIB_DIR, LIB_BACKUP, LIB_DUMP, LIB_DUMP_CARDS,
+                       LIB_DUMP_USERS, LIB_DUMP_CAS)
 from fixtures import *  # noqa: F401
 
 DIR_PATH = os.path.dirname(os.path.abspath(__file__))
@@ -51,7 +52,7 @@ def pytest_generate_tests(metafunc):
                       "admin_passwd": ipa_admin_passwd,
                       "root_passwd": ipa_root_passwd,
                       "domain": ipa_hostname.split(".", 1)[1]}
-        metafunc.parametrize("ipa_config", [ipa_config])
+        metafunc.parametrize("ipa_config", [ipa_config], scope="session")
 
     if 'ipa_ip' in metafunc.fixturenames and ipa_ip is not None:
         metafunc.parametrize("ipa_ip", [ipa_ip], scope="session")
@@ -68,7 +69,9 @@ def pytest_generate_tests(metafunc):
 
 
 def pytest_sessionstart(session):
-    LIB_DIR.mkdir(exist_ok=True, parents=True)
+    for d in (LIB_DIR, LIB_BACKUP, LIB_DUMP, LIB_DUMP_CARDS, LIB_DUMP_USERS,
+              LIB_DUMP_CAS):
+        d.mkdir(exist_ok=True, parents=True)
 
 
 def pytest_sessionfinish(session, exitstatus):

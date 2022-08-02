@@ -4,7 +4,6 @@ from shutil import copy
 from subprocess import check_output
 
 from SCAutolib.controller import Controller
-from SCAutolib.models.CA import IPAServerCA
 from conftest import FILES_DIR
 
 
@@ -32,13 +31,8 @@ def test_parse_config(dummy_config):
     assert cnt.conf_path.is_absolute()
     assert isinstance(cnt.lib_conf, dict)
 
-#
-# def test_prepare(controller):
-#     """Test for overall setup including dumps."""
-#     cnt: Controller = controller
-#     cnt.prepare(False, False, False)
 
-
+@pytest.mark.service_restart
 def test_setup_system(controller):
     cnt: Controller = controller
     packages = ["opensc", "httpd", "sssd", "sssd-tools", "gnutls-utils",
@@ -74,20 +68,6 @@ def test_users_create_and_delete(controller, tmp_path, ipa_fixture):
             cnt.setup_user(u)
         for p in [t["card_dir"] for t in cnt.lib_conf["users"]]:
             assert p.joinpath("sofhtsm2.conf").exists()
-
-        for u in cnt.lib_conf["users"]:
-            cnt.setup_user(u)
     finally:
         for u in cnt.users:
             u.delete_user()
-
-# def test_cas_create(controller):
-#     cnt: Controller = controller
-#
-#
-# def test_enroll_card(controller):
-#     cnt: Controller = controller
-#
-#
-# def test_cleanup(controller):
-#     cnt: Controller = controller
