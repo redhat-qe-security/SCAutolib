@@ -5,7 +5,7 @@ from pathlib import Path
 from python_freeipa.client_meta import ClientMeta
 from random import randint
 from shutil import copyfile
-from subprocess import check_output, run, PIPE, CalledProcessError
+from subprocess import check_output
 
 import SCAutolib.exceptions
 from SCAutolib import TEMPLATES_DIR

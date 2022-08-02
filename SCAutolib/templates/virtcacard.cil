@@ -1,0 +1,3 @@
+(allow pcscd_t node_t(tcp_socket(node_bind)))
+;; allow p11_child to read softhsm cache - not present in RHEL by default
+(allow sssd_t named_cache_t(dir(read search)))

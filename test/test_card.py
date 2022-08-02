@@ -3,8 +3,10 @@ from pathlib import Path
 from subprocess import check_output, run
 from time import sleep
 
-from SCAutolib.models.CA import LocalCA
+from SCAutolib.models.card import Card
 from SCAutolib.models.file import SoftHSM2Conf
+from SCAutolib.models.user import BaseUser
+from SCAutolib.utils import dump_to_json
 
 
 @pytest.fixture()
@@ -16,7 +18,8 @@ def gen_key_and_cert(local_ca_fixture, local_user):
            "-keyout", key, "-out", csr, "-subj", f"/CN={local_user.username}"]
     check_output(cmd, encoding="utf-8")
 
-    local_ca_fixture.request_cert(csr, username=local_user.username, cert_out=cert)
+    local_ca_fixture.request_cert(csr, username=local_user.username,
+                                  cert_out=cert)
     return key, cert
 
 
@@ -78,3 +81,20 @@ def test_context_manager(local_user_with_smart_card):
                                    "uploaded to the virtual card"
     proc = run(["systemctl", "status", sc._service_name])
     assert proc.returncode == 3  # Service is not active
+
+
+@pytest.mark.service_restart
+def test_load_user_with_card(local_user_with_smart_card):
+    local_user_with_smart_card.card.create()
+    local_user_with_smart_card.card.enroll()
+
+    dump_to_json(local_user_with_smart_card.card)
+    dump_to_json(local_user_with_smart_card)
+
+    user, card_file = BaseUser.load(local_user_with_smart_card.dump_file)
+    card = Card.load(card_file, user=user)
+
+    assert card.uri == local_user_with_smart_card.card.uri
+
+    card.insert()
+    card.remove()

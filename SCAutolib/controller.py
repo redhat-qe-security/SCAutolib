@@ -133,7 +133,7 @@ class Controller:
 
         ca_dir: Path = self.lib_conf["ca"]["local_ca"]["dir"]
         cnf = file.OpensslCnf(ca_dir.joinpath("ca.cnf"), "CA", str(ca_dir))
-        self.local_ca = CA.LocalCA(dir=ca_dir, cnf=cnf)
+        self.local_ca = CA.LocalCA(root_dir=ca_dir, cnf=cnf)
 
         if force:
             logger.warning(f"Removing previous local CA in a directory "
@@ -256,7 +256,7 @@ class Controller:
             hsm_conf.save()
 
             new_card = card.VirtualCard(new_user)
-            new_card.softhsm2_conf = hsm_conf
+            new_card.softhsm2_conf = hsm_conf.path
         else:
             raise NotImplementedError("Other card type than 'virtual' does not "
                                       "supported yet")
@@ -429,7 +429,7 @@ class Controller:
         :return: name of the IPA client package for current Linux
         """
         os_version = _get_os_version()
-        if os_version != OSVersion.RHEL_9:
+        if os_version not in (OSVersion.RHEL_9, OSVersion.CentOS_9):
             run("dnf module enable -y idm:DL1")
             run("dnf install @idm:DL1 -y")
             logger.debug("idm:DL1 module is installed")

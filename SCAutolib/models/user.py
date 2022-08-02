@@ -15,7 +15,7 @@ import pwd
 import python_freeipa
 from pathlib import Path, PosixPath
 
-from SCAutolib import run, logger, LIB_DUMP_USERS, LIB_DUMP_CARDS
+from SCAutolib import run, logger, LIB_DUMP_USERS
 from SCAutolib.exceptions import SCAutolibException
 from SCAutolib.models import card as card_model
 from SCAutolib.models.CA import IPAServerCA
@@ -71,6 +71,8 @@ class BaseUser:
                            key=cnt["_key"],
                            cert=cnt["_cert"])
         logger.debug(f"User {user.__class__} is loaded: {user.__dict__}")
+        if "card" in cnt:
+            return user, Path(cnt["card"])
         return user
 
 
@@ -191,8 +193,9 @@ class User(BaseUser):
             if type(v) in (PosixPath, Path):
                 dict_[k] = str(v)
 
-        if self._card:
-            dict_["_card"] = str(self._card.dump_file)
+        if self._card and isinstance(self._card, card_model.VirtualCard):
+            dict_.pop("_card")
+            dict_["card"] = str(self._card.dump_file)
         return dict_
 
     def delete_user(self):
