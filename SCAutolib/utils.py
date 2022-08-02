@@ -101,8 +101,8 @@ def _check_packages(packages):
     """
     missing = []
     for pkg in packages:
-        out = run(["rpm", "-q", pkg])
-        if pkg not in out.stdout:
+        out = run(["rpm", "-q", pkg], return_code=[0, 1])
+        if out.returncode == 1:
             logger.warning(f"Package {pkg} is required for the testing, "
                            f"but is not present in the system")
             missing.append(pkg)

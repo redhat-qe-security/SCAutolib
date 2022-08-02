@@ -25,26 +25,6 @@ def controller(dummy_config):
     return Controller(dummy_config)
 
 
-@pytest.fixture()
-def ready_ipa(ipa_config):
-    domain = ipa_config["hostname"].split(".", 1)[1]
-    client_name = f'client-{ipa_config["hostname"]}'
-    # cmd = ["ipa-client-install", "-p", "admin",
-    #      "--password", ipa_config["admin_passwd"],
-    #      "--server", ipa_config["hostname"],
-    #      "--domain", domain,  # noqa: E501 user everything after first dot as domain, e.g ipa.test.local -> test.local would be used
-    #      "--realm", domain.upper(),
-    #      "--hostname", client_name,
-    #      "--all-ip-addresses", "--force", "--force-join", "--no-ntp", "-U"]
-    # check_output(cmd, input="yes", encoding="utf-8")
-    return IPAServerCA(ip_addr=ipa_config["ip"],
-                       server_hostname=ipa_config["hostname"],
-                       admin_passwd=ipa_config["admin_passwd"],
-                       root_passwd=ipa_config["root_passwd"],
-                       domain=domain,
-                       client_hostname=client_name)
-
-
 def test_parse_config(dummy_config):
     """Test that configuration is parsed and validated properly."""
     cnt = Controller(dummy_config)
@@ -82,17 +62,24 @@ def test_setup_system(controller):
         cnt.sssd_conf._default_parser.sections())), msg
 
 
-def test_users_create(controller, tmp_path, ready_ipa):
+@pytest.mark.ipa
+def test_users_create_and_delete(controller, tmp_path, ipa_fixture):
     """Test for adding local and IPA users to the systems and initializing all
     required files."""
     cnt: Controller = controller
-    cnt.ipa_ca = ready_ipa
-    for u in cnt.lib_conf["users"]:
-        cnt.setup_user(u)
+    cnt.ipa_ca = ipa_fixture
 
-    for p in [t["card_dir"] for t in cnt.lib_conf["users"]]:
-        assert p.joinpath("sofhtsm2.conf").exists()
+    try:
+        for u in cnt.lib_conf["users"]:
+            cnt.setup_user(u)
+        for p in [t["card_dir"] for t in cnt.lib_conf["users"]]:
+            assert p.joinpath("sofhtsm2.conf").exists()
 
+        for u in cnt.lib_conf["users"]:
+            cnt.setup_user(u)
+    finally:
+        for u in cnt.users:
+            u.delete_user()
 
 # def test_cas_create(controller):
 #     cnt: Controller = controller

@@ -1,0 +1,35 @@
+{
+  "root_passwd": "redhat",
+  "ca": {
+    "local_ca": {
+
+    },
+    "ipa": {
+      "admin_passwd": "SECret.123",
+      "root_passwd": "redhat",
+      "ip_addr":  "192.168.122.60",
+      "server_hostname": "ipa-server-v2.test.local",
+      "client_hostname": "unit.test.local",
+      "domain": "test.local",
+      "realm": "test.local"
+    }
+  },
+  "users": [
+    {
+      "name": "local-user",
+      "passwd": "654321",
+      "pin": "123456",
+      "card_dir": "/root/local-user",
+      "card_type": "virtual",
+      "local": true
+    },
+    {
+      "name": "unit-user",
+      "passwd": "unit-user-passwd",
+      "pin": "123456",
+      "card_dir": "/root/unit-user",
+      "card_type": "virtual",
+      "local": false
+    }
+  ]
+}
