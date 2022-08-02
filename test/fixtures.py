@@ -59,22 +59,6 @@ def local_ca_fixture(tmp_path_factory, backup_sssd_ca_db):
     return ca
 
 
-@pytest.fixture(scope="session")
-def local_ca_fixture(tmp_path_factory, backup_sssd_ca_db):
-    root = tmp_path_factory.mktemp("ca").joinpath("local-ca")
-    root.mkdir(exist_ok=True)
-    cnf = OpensslCnf(conf_type="CA", filepath=root.joinpath("ca.cnf"),
-                     replace=str(root))
-    ca = CA.LocalCA(root, cnf)
-    try:
-        cnf.create()
-        cnf.save()
-        ca.setup()
-    except FileExistsError:
-        pass
-    return ca
-
-
 @pytest.fixture
 def local_user(tmp_path, request):
     # In linux useradd command max length of the username is 32 chars
