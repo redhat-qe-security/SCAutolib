@@ -68,9 +68,6 @@ class Authselect:
             run(cmd)
             logger.debug("Authselect configuration is restored to:")
             run(["authselect", "current"], return_code=[0, 2])
-
-            # run(["authselect", "backup-remove", self.backup_name, "--debug"])
-            # logger.debug("Authselect backup file is removed.")
         else:
             # as _set and _restore should be used in context manager defined in
             # this class, it should not happen that backup does not exist except

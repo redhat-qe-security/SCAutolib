@@ -10,6 +10,7 @@ from pathlib import Path
 from traceback import format_exc
 
 from SCAutolib import run, logger, TEMPLATES_DIR, LIB_DUMP_CARDS
+from SCAutolib.exceptions import SCAutolibException
 
 
 class Card:
@@ -67,6 +68,9 @@ class Card:
             card = VirtualCard(user=kwars["user"],
                                softhsm2_conf=Path(cnt["softhsm"]))
             card.uri = cnt["uri"]
+        else:
+            raise SCAutolibException(
+                f"Unknown card type: {cnt['type']}")
         return card
 
 
