@@ -1,5 +1,5 @@
 """
-This module provides different additional helping functions that are used
+This module provides a set of additional helping functions that are used
 across the library. These functions are made based on library demands and are
 not attended to cover some general use-cases or specific corner cases.
 """
@@ -54,7 +54,9 @@ def _gen_private_key(key_path: Path):
 
     :param key_path: path to output certificate
     """
-    key = rsa.generate_private_key(public_exponent=65537, key_size=4096)
+    # CAC specification do not specify key size specifies key size
+    # up to 2048 bits, so keys greater than 2048 bits is not supported
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
 
     with key_path.open("wb") as f:
         f.write(key.private_bytes(
