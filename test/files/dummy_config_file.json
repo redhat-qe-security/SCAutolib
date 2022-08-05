@@ -2,7 +2,7 @@
   "root_passwd": "redhat",
   "ca": {
     "local_ca": {
-
+      "dir": "{path}/local-ca"
     },
     "ipa": {
       "admin_passwd": "SECret.123",
@@ -19,7 +19,7 @@
       "name": "local-user",
       "passwd": "654321",
       "pin": "123456",
-      "card_dir": "/root/local-user",
+      "card_dir": "{path}/local-user",
       "card_type": "virtual",
       "local": true
     },
@@ -27,7 +27,7 @@
       "name": "unit-user",
       "passwd": "unit-user-passwd",
       "pin": "123456",
-      "card_dir": "/root/unit-user",
+      "card_dir": "{path}/unit-user",
       "card_type": "virtual",
       "local": false
     }

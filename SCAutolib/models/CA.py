@@ -428,7 +428,7 @@ class IPAServerCA(BaseCA):
         logger.debug(f"Original resolv.conf:\n{cnt}")
         if re.match(pattern, cnt) is None:
             logger.warning(f"Nameserver {self._ipa_server_ip} is not "
-                           "present in /etc/resolve.conf. Adding...")
+                           "present in /etc/resolv.conf. Adding...")
             cnt = (nameserver + "\n" + cnt)
             with open("/etc/resolv.conf", "w") as f:
                 f.write(cnt)
@@ -599,6 +599,7 @@ class IPAServerCA(BaseCA):
         except exceptions.NotFound:
             logger.error(f"Current hostname ({gethostname()}) is not found "
                          f"on the IPA server")
+        # Return code 2 means that the IPA client is not configured
         run(["ipa-client-install", "--uninstall", "-U"], return_code=[0, 2])
         logger.info("IPA client is removed.")
 
