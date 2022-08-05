@@ -3,15 +3,18 @@ This module contains classes that represent configuration files. Each class
 contains information and methods to manipulate specific config file except
 the parent (File) class that is supposed to operate on general config file.
 
-basic operations on config files defined in this module:
-    create: create content of config file usually based on template.
-            Note, that some child classes may also update content of config
-            file if it already existed and backup original file.
-    set:    modify values of config files, add keys or sections
-            if necessary
-    save:   save modified content to config file
-    clean:  remove config file; note that some child classes may also restore
-            original config file if backup exists.
+Basic operations on config files defined in this module:
+    * create
+        creates content of config file usually based on template.
+        Note, that some child classes may also update content of config
+        file if it already existed and backup original file.
+    * set
+        modify values of config files, add keys or sections if necessary
+    * save
+        save modified content to config file
+    * clean
+        remove config file; note that some child classes may also restore
+        original config file if backup exists.
 """
 import os
 from configparser import ConfigParser
@@ -28,14 +31,17 @@ class File:
     """
     This class defines an interface for generic operations on config files
 
-    create: create content of config file based on template file
-    set:    modify content of config files, add keys or sections if necessary
-    save:   save config file
-    clean:  remove config file
+    * create: create content of config file based on template file
+    * set:    modify content of config files, add keys or sections if necessary
+    * save:   save config file
+    * clean:  remove config file
 
-    Note:   Set method operates on 1) files compatible with ConfigParser (i.e.
-            files containing sections); 2) simple config files without sections.
-            Other formats of config files are not supported.
+    .. note:: Set method operates **only** on:
+
+     * files compatible with ConfigParser (i.e. files containing sections)
+     * simple config files without sections.
+
+     Other formats of config files are not supported.
     """
     _conf_file = None
     _template = None
@@ -80,9 +86,12 @@ class File:
         """
         Modify value in config file. Modification is made through the
         ConfigParser object if it is defined. If not, then key value pair
-        would be written to the file through normal `write()` method with
-        composed string in the following form `<key><separator><value>` (spaces
-        around key has to be specified as a part of the `separator` parameter).
+        would be written to the file through normal :code:`write()` method with
+        composed string in the following form :code:`<key><separator><value>`
+
+        .. note::
+            spaces around key has to be specified as a part of the
+            :code:`separator` parameter.
 
         :param key: value for this key will be updated
         :type key: str
@@ -146,8 +155,9 @@ class File:
         by line splitting the line on separator. First match wins and is
         returned.
 
-        If section is provided and the file can be parsed by the ConfigParser,
-        then this object would be used to look for the key.
+        If section is provided and the file can be parsed by the
+        :code:`ConfigParser`, then this object would be used to look for the
+        key.
 
         :param key: required key
         :param section: section where the key should be found
@@ -207,7 +217,7 @@ class File:
     def backup(self, name: str = None):
         """
         Save original file to the backup directory with given name. If name is
-        None, default name is <filename>.<extension>.backup
+        None, default name is :code:`<filename>.<extension>.backup`
 
         :param name: custom file name to be set for the file
         :type name: str
@@ -237,20 +247,12 @@ class SSSDConf(File):
     /etc/sssd/sssd.conf file.
 
     It is implemented as singleton, which allows to use class object
-    _default_parser as representation of content of sssd.conf file during
-    runtime.
+    :code:`_default_parser` as representation of content of sssd.conf file
+    during runtime.
 
     Intended use is to create/update and save config file in first runtime
-    and load content of config file to internal parser object in in following
+    and load content of config file to internal parser object in following
     runtimes.
-
-    Following methods are implemented:
-
-    create: create a content of internal parser object representing sssd.conf
-    set:  set or modify content of internal parser object representing sssd.conf
-    save: save content of internal parser object representing sssd.conf to
-          /etc/sssd/sssd.conf file
-    clean:  restore original state of /etc/sssd/sssd.conf file
     """
     __instance = None
     _template = Path(TEMPLATES_DIR, "sssd.conf")
@@ -425,11 +427,7 @@ class SSSDConf(File):
 class SoftHSM2Conf(File):
     """
     This class provide information and methods to create and modify
-    softhsm2.conf file. Following methods are implemented:
-
-    create: create content of internal file object representing softhsm2.conf
-    save:   save content of internal file object representing softhsm2.conf to
-            softhsm2.conf file
+    softhsm2.conf file.
     """
     _template = Path(TEMPLATES_DIR, "softhsm2.conf")
     _conf_file = None
@@ -462,7 +460,7 @@ class SoftHSM2Conf(File):
 
     def set(self, *args):
         """
-        Raise NotImplementedError as set method for softHSM2 is not implemented
+        :raise NotImplementedError: if this method is called on SoftHSM2Conf.
         """
         # parent class set method does not work as softHSM2 conf does not have
         # sections. Method do modify softHSM2 conf is not implemented
@@ -481,11 +479,7 @@ class SoftHSM2Conf(File):
 class OpensslCnf(File):
     """
     This class provides information and methods to create and modify
-    openssl cnf files. Following methods are implemented:
-
-    create: create content of internal file object representing openssl cnf file
-    save:  save content of internal file object representing openssl cnf file to
-           .cnf file specified by user
+    openssl cnf files.
     """
     _template = None
     _conf_file = None
