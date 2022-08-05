@@ -4,7 +4,6 @@ across the library. These functions are made based on library demands and are
 not attended to cover some general use-cases or specific corner cases.
 """
 import json
-
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from enum import Enum
@@ -111,6 +110,7 @@ def _check_packages(packages):
     """
     missing = []
     for pkg in packages:
+        # Return code 1 means the package is not installed
         out = run(["rpm", "-q", pkg], return_code=[0, 1])
         if out.returncode == 1:
             logger.warning(f"Package {pkg} is required for the testing, "

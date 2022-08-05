@@ -1,3 +1,7 @@
+"""
+Implementation of CLI commands for SCAutolib.
+"""
+
 import click
 from SCAutolib.controller import Controller
 

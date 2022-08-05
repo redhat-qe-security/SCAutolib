@@ -1,3 +1,7 @@
+"""
+This module implements classes that represents Certification Authority's (CA).
+"""
+
 import re
 
 import json
@@ -34,6 +38,7 @@ class BaseCA:
             Default None
         :type cert_out: pathlib.Path
         :return: None or path where the certificate is stored.
+        :rtype: None or pathlib.Path
         """
         ...
 
