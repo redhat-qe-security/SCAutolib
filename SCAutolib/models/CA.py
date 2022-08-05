@@ -1,5 +1,5 @@
 """
-This module implements classes that represents Certification Authority's (CA).
+This module implements classes that represents Certification Authorities (CA).
 """
 
 import re

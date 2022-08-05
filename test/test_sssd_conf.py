@@ -1,7 +1,7 @@
 """
 This module contains unit tests for SSSDConf and related functions
 
-The unit test name reflects mane of tested sssd_conf method. For example
+The unit test name reflects name of tested sssd_conf method. For example
 'test_create_template_exists' is unit test for method 'create' of sssd_conf.
 """
 import configparser
