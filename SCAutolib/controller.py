@@ -281,12 +281,13 @@ class Controller:
 
         return new_user
 
-    def enroll_card(self, user_: user.User):
+    def enroll_card(self, user_: user.User, force: bool = False):
         """
         Enroll the card of a given user with configured CA. If private key
         and/or the certificate do not exists, new one's would be requested
         from corresponding CA.
 
+        :param force:
         :param user_: User with a card to be enrolled.
         """
         logger.debug(f"Starting enrollment of the card for user "
@@ -305,11 +306,10 @@ class Controller:
             if user_.cert is None:
                 user_.cert = user_.card_dir.joinpath(
                     f"cert-{user_.username}.pem")
-
-            if isinstance(user_, user.IPAUser):
-                self.ipa_ca.request_cert(csr, user_.username, user_.cert)
-            else:
-                self.local_ca.request_cert(csr, user_.username, user_.cert)
+            ca = self.ipa_ca if isinstance(user_, user.IPAUser) else self.local_ca
+            if force:
+                ca.revoke_cert(user_.cert)
+            user_.cert = ca.request_cert(csr, user_.username, user_.cert)
 
         user_.card.enroll()
 
