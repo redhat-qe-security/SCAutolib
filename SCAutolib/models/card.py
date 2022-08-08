@@ -121,9 +121,13 @@ class VirtualCard(Card):
         self._softhsm2_conf = softhsm2_conf if softhsm2_conf \
             else Path("/home", self.user.username, "softhsm2.conf")
 
-        if not self._softhsm2_conf.exists():
-            logger.warning(f"Configuration file {self._softhsm2_conf} doesn't "
-                           f"exist.")
+    def __call__(self, insert: bool = False):
+        """
+        Call method for virtual smart card. It would be used in the context
+        manager.
+        """
+        self._insert = insert
+        return self.__enter__()
 
     def __call__(self, insert: bool):
         """
@@ -288,3 +292,5 @@ class VirtualCard(Card):
 
         logger.debug(f"Service is created in {self._service_location}")
         run("systemctl daemon-reload")
+
+        return self
