@@ -212,8 +212,6 @@ class Controller:
         if force and card_dir.exists():
             rmtree(card_dir)
 
-        user_dict["card_dir"].mkdir(exist_ok=True, parents=True)
-
         if user_dict["local"]:
             new_user = user.User(username=user_dict["name"],
                                  pin=user_dict["pin"],
@@ -223,12 +221,12 @@ class Controller:
                                  local=True)
             if force:
                 new_user.delete_user()
-                user_dict["card_dir"].mkdir(exist_ok=True)
+            user_dict["card_dir"].mkdir(exist_ok=True)
+            new_user.add_user()
 
             csr_path = new_user.card_dir.joinpath(f"csr-{new_user.username}.csr")
             cnf = file.OpensslCnf(filepath=csr_path, conf_type="user",
                                   replace=new_user.username)
-            new_user.add_user()
             cnf.create()
             cnf.save()
 
@@ -255,7 +253,7 @@ class Controller:
                                     local=False)
             if force:
                 new_user.delete_user()
-                user_dict["card_dir"].mkdir(exist_ok=True)
+            user_dict["card_dir"].mkdir(exist_ok=True)
 
             new_user.add_user()
 
@@ -268,13 +266,12 @@ class Controller:
             hsm_conf.create()
             hsm_conf.save()
 
-            new_card = card.VirtualCard(new_user)
-            new_card.softhsm2_conf = hsm_conf.path
+            new_card = card.VirtualCard(new_user, softhsm2_conf=hsm_conf.path)
         else:
             raise NotImplementedError("Other card type than 'virtual' does not "
                                       "supported yet")
-        new_card.create()
-        new_user.card = new_card
+
+        new_user.card = new_card.create()
         self.users.append(new_user)
 
         dump_to_json(new_user)
@@ -451,3 +448,29 @@ class Controller:
             return ["freeipa-client"]
         else:
             return ["ipa-client"]
+
+    def get_user_dict(self, name):
+        """
+        Get user dictionary from the config file.
+
+        :param name: name of the user
+        :type name: str
+        :return: user dictionary
+        :rtype: dict
+        """
+        for user_dict in self.lib_conf["users"]:
+            if user_dict["name"] == name:
+                return user_dict
+        raise SCAutolibException(f"User {name} not found in config file")
+
+    def init_ca(self, local: bool = False):
+        """
+        Initialize CA.
+
+        :param local: if True, local CA is initialized, otherwise IPA
+        :type local: bool
+        """
+        if local:
+            self.local_ca = CA.LocalCA(self.lib_conf["ca"]["local_ca"]["dir"])
+        else:
+            self.ipa_ca = CA.IPAServerCA(self.lib_conf["ca"]["ipa"])
