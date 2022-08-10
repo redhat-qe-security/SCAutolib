@@ -64,8 +64,16 @@ class Controller:
         CLI commands
         """
         self.setup_system(install_missing, gdm)
-        self.setup_local_ca(force=force)
-        self.setup_ipa_client(force=force)
+
+        # In this method not having section for local CA and/or for IPA CA is OK
+        try:
+            self.setup_local_ca(force=force)
+        except SCAutolibWrongConfig as e:
+            logger.info(e)
+        try:
+            self.setup_ipa_client(force=force)
+        except SCAutolibWrongConfig as e:
+            logger.info(e)
         for usr in self.lib_conf["users"]:
             u = self.setup_user(usr, force=force)
             self.enroll_card(u)
