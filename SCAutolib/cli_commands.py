@@ -24,7 +24,7 @@ def setup_ca(conf_file, ca_type):
 @click.option("--conf", "-c", required=True)
 @click.option("--force", "-f", required=False, default=False, is_flag=True)
 @click.option("--gdm", "-g", required=False, default=False, is_flag=True)
-@click.option("--install-missing", "-i", required=False, default=True,
+@click.option("--install-missing", "-i", required=False, default=False,
               is_flag=True)
 def prepare(conf, force, gdm, install_missing):
     cnt = Controller(conf)
