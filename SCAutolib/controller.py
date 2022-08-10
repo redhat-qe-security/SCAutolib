@@ -103,8 +103,13 @@ class Controller:
 
         # Check for installed packages
         missing = _check_packages(packages)
-        if install_missing:
+        if install_missing and missing:
             _install_packages(missing)
+        elif missing:
+            msg = "Can't continue. Some packages are missing: " \
+                  f"{', '.join(missing)}"
+            logger.critical(msg)
+            raise SCAutolibException(msg)
 
         run(['dnf', 'groupinstall', "Smart Card Support", '-y'])
         logger.debug("Smart Card Support group in installed.")
