@@ -158,6 +158,8 @@ class Controller:
             cnf.create()
             cnf.save()
             self.local_ca.setup()
+
+        run(["systemctl", "restart", "sssd"])
         logger.info(f"Local CA is configured in {ca_dir}")
 
         dump_to_json(self.local_ca)

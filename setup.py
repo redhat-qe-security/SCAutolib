@@ -16,7 +16,7 @@ with readme.open() as f:
 
 setup(
     name="SCAutolib",
-    version="1.0.11",
+    version="1.0.12",
     description=description,
     long_description=long_description,
     long_description_content_type='text/markdown',
