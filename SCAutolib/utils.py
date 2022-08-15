@@ -142,11 +142,15 @@ def user_factory(username):
     :rtype: BaseUser
     """
     user_file = LIB_DUMP_USERS.joinpath(f"{username}.json")
+    logger.debug(f"Loading user {username} from {user_file}")
     result = None
+    user = None
     if user_file.exists():
         result = BaseUser.load(user_file)
     if type(result) == tuple:
-        card_file = result[1]
-        user = result[0]
+        user, card_file = result
+        logger.debug(f"Loading card from {card_file}")
         user.card = Card.load(card_file, user=user)
-    return result
+    else:
+        user = result
+    return user
