@@ -3,9 +3,9 @@ Implementation of CLI commands for SCAutolib.
 """
 
 import click
+
 from SCAutolib.controller import Controller
-import coloredlogs
-from enum import Enum, auto
+from SCAutolib import logger
 
 
 @click.group()
@@ -17,20 +17,25 @@ from enum import Enum, auto
               help="Increase verbosity. Max level is 3.")
 @click.pass_context
 def cli(ctx, force, verbose):
-    coloredlogs.set_level(verbose)
-    ctx.ensure_object(dict)
-    ctx.obj["FORCE"] = force
+    logger.setLevel(verbose)
+    ctx.ensure_object(dict)  # Create a dict to store the context
+    ctx.obj["FORCE"] = force  # Store the force option in the context
 
 
 @click.command()
-@click.option("--ca-type", "-t", required=False, default='all',
-              show_default=True, type=click.Choice(['all', 'local', 'ipa'], case_sensitive=False),
+@click.option("--ca-type", "-t",
+              required=False,
+              default='all',
+              type=click.Choice(['all', 'local', 'ipa'], case_sensitive=False),
+              show_default=True,
               help="Type of the CA to be configured. If not set, all CA's "
                    "from the config file would be configured")
-@click.option("--conf-file", "-c", required=False, default="./conf.json",
+@click.option("--conf-file", "-c",
+              required=False,
+              default="./conf.json",
               type=click.Path(exists=True, resolve_path=True),
-              show_default=True, metavar="<conf-file>")
-@click.pass_context
+              show_default=True)
+@click.pass_context  # to pass context (ctx) parameter to the function
 def setup_ca(ctx, conf_file, ca_type):
     """
     Configure the CA's in the config file. If more than one CA is
