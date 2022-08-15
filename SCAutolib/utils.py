@@ -10,8 +10,10 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from enum import Enum
 from pathlib import Path
 
-from SCAutolib import run, logger, TEMPLATES_DIR
+from SCAutolib import run, logger, TEMPLATES_DIR, LIB_DUMP_USERS
 from SCAutolib.exceptions import SCAutolibException
+from SCAutolib.models.card import Card
+from SCAutolib.models.user import BaseUser
 
 
 class OSVersion(Enum):
@@ -126,3 +128,25 @@ def dump_to_json(obj):
     with obj.dump_file.open("w") as f:
         json.dump(obj.__dict__, f)
     logger.debug(f"Object {type(obj)} is stored to the {obj.dump_file} file")
+
+
+def user_factory(username):
+    """
+    Load user with given username from JSON file. If user have the card file
+    linked, then load it as well.
+
+    :param username: username of the user
+    :type username: str
+
+    :return: user object
+    :rtype: BaseUser
+    """
+    user_file = LIB_DUMP_USERS.joinpath(f"{username}.json")
+    result = None
+    if user_file.exists():
+        result = BaseUser.load(user_file)
+    if type(result) == tuple:
+        card_file = result[1]
+        user = result[0]
+        user.card = Card.load(card_file, user=user)
+    return result
