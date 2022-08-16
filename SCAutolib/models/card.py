@@ -91,20 +91,16 @@ class VirtualCard(Card):
     _template: Path = Path(TEMPLATES_DIR, "virt_cacard.service")
     _pattern = r"(pkcs11:model=PKCS%2315%20emulated;" \
                r"manufacturer=Common%20Access%20Card;serial=.*)"
-    _insert: bool = None
+    _inserted: bool = False
     type = "virtual"
 
-    def __init__(self, user, insert: bool = False,
-                 softhsm2_conf: Path = None):
+    def __init__(self, user, softhsm2_conf: Path = None):
         """
         Initialise virtual smart card. Constructor of the base class is also
         used.
 
         :param user: User of this card
-        :type user: User
-        :param insert: If True, the card would be inserted on entering the
-            context manager. Default False.
-        :type insert: bool
+        :type user: SCAutolib.models.user.User
         :param softhsm2_conf: path to SoftHSM2 configuration file
         :type softhsm2_conf: pathlib.Path
         """
@@ -120,7 +116,6 @@ class VirtualCard(Card):
         self._service_name = f"virt-sc-{self.user.username}"
         self._service_location = Path(
             f"/etc/systemd/system/{self._service_name}.service")
-        self._insert = insert
         self.dump_file = LIB_DUMP_CARDS.joinpath(
             f"card-{self._user.username}.json")
         self._softhsm2_conf = softhsm2_conf if softhsm2_conf \
@@ -129,6 +124,18 @@ class VirtualCard(Card):
         if not self._softhsm2_conf.exists():
             logger.warning(f"Configuration file {self._softhsm2_conf} doesn't "
                            f"exist.")
+
+    def __call__(self, insert: bool):
+        """
+        Call method for virtual smart card. It would be used in the context
+        manager.
+
+        :param insert: True if the card should be inserted, False otherwise
+        :type insert: bool
+        """
+        if insert:
+            self.insert()
+        return self.__enter__()
 
     def __enter__(self):
         """
@@ -139,8 +146,6 @@ class VirtualCard(Card):
         """
         assert self._service_location.exists(), \
             "Service for virtual sc doesn't exists."
-        if self._insert:
-            self.insert()
         return self
 
     def __exit__(self, exp_type, exp_value, exp_traceback):
@@ -155,7 +160,8 @@ class VirtualCard(Card):
         if exp_type is not None:
             logger.error("Exception in virtual smart card context")
             logger.error(format_exc())
-        self.remove()
+        if self._inserted:
+            self.remove()
 
     @property
     def __dict__(self):
@@ -198,6 +204,7 @@ class VirtualCard(Card):
         out = run(cmd, check=True)
         time.sleep(2)  # to prevent error with fast restarting of the service
         logger.info(f"Smart card {self._service_name} is inserted")
+        self._inserted = True
         return out
 
     def remove(self):
@@ -208,6 +215,7 @@ class VirtualCard(Card):
         out = run(cmd, check=True)
         time.sleep(2)  # to prevent error with fast restarting of the service
         logger.info(f"Smart card {self._service_name} is removed")
+        self._inserted = False
         return out
 
     def enroll(self):
