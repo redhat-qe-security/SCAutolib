@@ -2,6 +2,7 @@ import coloredlogs
 import logging
 import subprocess
 from pathlib import Path
+import time
 
 fmt = "%(name)s:%(module)s.%(funcName)s.%(lineno)d [%(levelname)s] %(message)s"
 date_fmt = "%H:%M:%S"
@@ -26,7 +27,7 @@ LIB_DUMP_CARDS = LIB_DUMP.joinpath("cards")
 
 
 def run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True,
-        print_=True, return_code: list = None, **kwargs) \
+        print_=True, return_code: list = None, sleep: int = 0, **kwargs) \
         -> subprocess.CompletedProcess:
     """
     Wrapper for subrpocess.run function. This function explicitly set several
@@ -37,6 +38,8 @@ def run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True,
     subprocess.run function needed to be passed to this wrapper, you can do
     it by adding same parameters names in key=value format.
 
+    :param sleep: time to sleep after command is executed
+    :type sleep: int
     :param return_code: acceptable return codes from given commands.
         If check=True, and the return code of the cmd is not in the return_code
         list an subprocess.CalledProcessError exception would be raised.
@@ -81,4 +84,5 @@ def run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True,
             logger.error(f"Unexpected return code {out.returncode}. "
                          f"Expected: {return_code}")
             raise subprocess.CalledProcessError(out.returncode, cmd)
+    time.sleep(sleep)
     return out

@@ -289,7 +289,7 @@ class SSSDConf(File):
                  section: str = None):
         self.set(key, value, section)
         self.save()
-        run("systemctl restart sssd")
+        run("systemctl restart sssd", sleep=5)
         return self
 
     def __enter__(self):
