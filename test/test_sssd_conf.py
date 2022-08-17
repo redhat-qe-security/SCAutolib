@@ -155,12 +155,13 @@ def test_save_reset_parser(sssd_test_prepare):
     assert len(sssd_test._changes.sections()) == 0
 
 
+@pytest.mark.service_restart
 def test_context_manager(tmpdir, sssd_test_prepare):
     """
     Test that context manager works as expected
     """
     call_key, call_value, call_section = "testkey", "testvalue", "testsection"
-    sssd_test_prepare._backup_original.touch(exist_ok=True)
+    sssd_test_prepare._backup_default.touch(exist_ok=True)
 
     with sssd_test_prepare(key=call_key, value=call_value, section=call_section):
         parser = ConfigParser()
