@@ -1,5 +1,3 @@
-from time import sleep
-
 import json
 from pathlib import Path
 from schema import Schema, Use, Or, And, Optional
@@ -161,8 +159,7 @@ class Controller:
             cnf.save()
             self.local_ca.setup()
 
-        run(["systemctl", "restart", "sssd"])
-        sleep(4)
+        run(["systemctl", "restart", "sssd"], sleep=5)
         logger.info(f"Local CA is configured in {ca_dir}")
 
         dump_to_json(self.local_ca)
