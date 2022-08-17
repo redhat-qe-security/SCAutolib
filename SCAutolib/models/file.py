@@ -335,8 +335,6 @@ class SSSDConf(File):
         :param section: section of config file to be created/updated
         :type section: str
         """
-        self._changed = True
-
         if len(self._changes.sections()) == 0:
             self._changes.read_dict(self._default_parser)
 
@@ -346,8 +344,14 @@ class SSSDConf(File):
             self._changes.add_section(section)
 
         previous = self._changes.get(section, key, fallback="Not set")
+        if previous == value:
+            logger.info(f"A key '{key}' in section '{section}' is already set "
+                        f"to {value}. No changes in SSSD are required.")
+            return
 
         self._changes.set(section, key, value)
+        self._changed = True
+
         logger.info(f"Value is changed in section {self._changes[section]}")
         logger.debug(f"Old value in section [{section}] {key}={previous}")
         logger.debug(f"New value in section [{section}] {key}={value}")
@@ -375,6 +379,8 @@ class SSSDConf(File):
         """
         Removes sssd.conf file in case it was created by this package or
         restore original sssd.conf in case the file was modified.
+
+        .. note: SSSD service restart is caller's responsibility.
         """
 
         # FIXME: this implementation would not work in real usage. When setup
