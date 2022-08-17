@@ -17,9 +17,11 @@ import os
 from configparser import ConfigParser
 from pathlib import Path
 from shutil import copy2
+from time import sleep
+from traceback import format_exc
 from typing import Union
 
-from SCAutolib import logger, TEMPLATES_DIR, LIB_BACKUP
+from SCAutolib import logger, TEMPLATES_DIR, LIB_BACKUP, run
 from SCAutolib.exceptions import SCAutolibException
 
 
@@ -256,6 +258,7 @@ class SSSDConf(File):
     _conf_file = Path("/etc/sssd/sssd.conf")
     _backup_original = None
     _backup_default = LIB_BACKUP.joinpath('default-sssd.conf')
+    _changed = False
 
     def __new__(cls):
         if cls.__instance is None:
@@ -280,6 +283,23 @@ class SSSDConf(File):
         # _changes parser object reflects modifications imposed by set method
         self._changes = ConfigParser()
         self._changes.optionxform = str
+
+    def __call__(self, key: str, value: Union[int, str, bool],
+                 section: str = None):
+        self.set(key, value, section)
+        self.save()
+        run("systemctl restart sssd")
+        return self
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        if self._changed:
+            self.restore()
+        if exc_type is not None:
+            logger.error("Exception in virtual smart card context")
+            logger.error(format_exc())
 
     def create(self):
         """
@@ -315,6 +335,8 @@ class SSSDConf(File):
         :param section: section of config file to be created/updated
         :type section: str
         """
+        self._changed = True
+
         if len(self._changes.sections()) == 0:
             self._changes.read_dict(self._default_parser)
 
@@ -333,6 +355,8 @@ class SSSDConf(File):
     def save(self):
         """
         Save content of config file stored in parser object to config file.
+
+        .. note: SSSD service restart is caller's responsibility.
         """
         with self._conf_file.open("w") as config:
             if len(self._changes.sections()) == 0:
@@ -363,6 +387,7 @@ class SSSDConf(File):
         self.clean()
         if self._backup_original:
             copy2(self._backup_original, self._conf_file)
+        self._changed = False
 
     def update_default_content(self):
         """
