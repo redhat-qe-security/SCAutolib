@@ -153,3 +153,23 @@ def test_save_reset_parser(sssd_test_prepare):
     sssd_test.save()
     assert sssd_test._conf_file.exists()
     assert len(sssd_test._changes.sections()) == 0
+
+
+def test_context_manager(tmpdir, sssd_test_prepare):
+    """
+    Test that context manager works as expected
+    """
+    call_key, call_value, call_section = "testkey", "testvalue", "testsection"
+    sssd_test_prepare._backup_original.touch(exist_ok=True)
+
+    with sssd_test_prepare(key=call_key, value=call_value, section=call_section):
+        parser = ConfigParser()
+        with sssd_test_prepare._conf_file.open() as config:
+            parser.read_file(config)
+        assert parser.get(call_section, call_key) == call_value
+
+    with sssd_test_prepare._conf_file.open() as config:
+        parser = ConfigParser()
+        parser.read_file(config)
+        with pytest.raises(configparser.NoSectionError):
+            parser.get(call_section, call_key)
