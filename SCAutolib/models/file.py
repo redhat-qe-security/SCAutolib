@@ -17,7 +17,6 @@ import os
 from configparser import ConfigParser
 from pathlib import Path
 from shutil import copy2
-from time import sleep
 from traceback import format_exc
 from typing import Union
 
@@ -296,7 +295,8 @@ class SSSDConf(File):
 
     def __exit__(self, exc_type, exc_value, traceback):
         if self._changed:
-            self.restore()
+            copy2(self._backup_default, self._conf_file)
+            self._changed = False
         if exc_type is not None:
             logger.error("Exception in virtual smart card context")
             logger.error(format_exc())
@@ -384,9 +384,11 @@ class SSSDConf(File):
         #  required attributes in JSON format load() method that would be used
         #  in other then setup runtimes to restore (load from JSON) all
         #  attributes of this object
-        self.clean()
+
         if self._backup_original:
             copy2(self._backup_original, self._conf_file)
+        else:
+            self.clean()
         self._changed = False
 
     def update_default_content(self):
