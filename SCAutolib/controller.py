@@ -6,7 +6,7 @@ from typing import Union
 
 from SCAutolib import (logger, run, LIB_DIR, LIB_BACKUP, LIB_DUMP,
                        LIB_DUMP_USERS, LIB_DUMP_CAS, LIB_DUMP_CARDS)
-from SCAutolib.exceptions import SCAutolibWrongConfig, SCAutolibException
+from SCAutolib import exceptions
 from SCAutolib.models import CA, file, user, card, authselect as auth
 from SCAutolib.models.file import File
 from SCAutolib.utils import (OSVersion, _check_selinux, _gen_private_key,
@@ -54,7 +54,7 @@ class Controller:
         with self._lib_conf_path.open("r") as f:
             tmp_conf = json.load(f)
             if tmp_conf is None:
-                raise SCAutolibException("Data are not loaded correctly.")
+                raise exceptions.SCAutolibException("Data are not loaded correctly.")
         self.lib_conf = self._validate_configuration(tmp_conf, params)
         self.users = []
 
@@ -68,11 +68,11 @@ class Controller:
         # In this method not having section for local CA and/or for IPA CA is OK
         try:
             self.setup_local_ca(force=force)
-        except SCAutolibWrongConfig as e:
+        except exceptions.SCAutolibWrongConfig as e:
             logger.info(e)
         try:
             self.setup_ipa_client(force=force)
-        except SCAutolibWrongConfig as e:
+        except exceptions.SCAutolibWrongConfig as e:
             logger.info(e)
         for usr in self.lib_conf["users"]:
             u = self.setup_user(usr, force=force)
@@ -117,7 +117,7 @@ class Controller:
             msg = "Can't continue. Some packages are missing: " \
                   f"{', '.join(missing)}"
             logger.critical(msg)
-            raise SCAutolibException(msg)
+            raise exceptions.SCAutolibException(msg)
 
         run(['dnf', 'groupinstall', "Smart Card Support", '-y'])
         logger.debug("Smart Card Support group in installed.")
@@ -142,7 +142,7 @@ class Controller:
 
         if "local_ca" not in self.lib_conf["ca"]:
             msg = "Section for local CA is not found in the configuration file"
-            raise SCAutolibWrongConfig(msg)
+            raise exceptions.SCAutolibWrongConfig(msg)
 
         ca_dir: Path = self.lib_conf["ca"]["local_ca"]["dir"]
         cnf = file.OpensslCnf(ca_dir.joinpath("ca.cnf"), "CA", str(ca_dir))
@@ -177,7 +177,7 @@ class Controller:
         """
         if "ipa" not in self.lib_conf["ca"]:
             msg = "Section for IPA is not found in the configuration file"
-            raise SCAutolibWrongConfig(msg)
+            raise exceptions.SCAutolibWrongConfig(msg)
         self.ipa_ca = CA.IPAServerCA(**self.lib_conf["ca"]["ipa"])
 
         if self.ipa_ca.is_installed:
@@ -245,7 +245,7 @@ class Controller:
             if self.ipa_ca is None:
                 msg = "Can't proceed in configuration of IPA user because no " \
                       "IPA Client is configured"
-                raise SCAutolibException(msg)
+                raise exceptions.SCAutolibException(msg)
             new_user = user.IPAUser(ipa_server=self.ipa_ca,
                                     username=user_dict["name"],
                                     pin=user_dict["pin"],
@@ -293,8 +293,8 @@ class Controller:
         logger.debug(f"Starting enrollment of the card for user "
                      f"{user_.username}")
         if not user_.card:
-            raise SCAutolibException(f"Card for the user {user_.username} is "
-                                     f"not initialized")
+            raise exceptions.SCAutolibException(
+                f"Card for the user {user_.username} is not initialized")
         if user_.cert is None:
             # Creating a new private key makes sense only if the certificate
             # doesn't exist yet
@@ -416,7 +416,7 @@ class Controller:
         opensc_module.backup()
         try:
             opensc_module.get("disable-in", separator=":")
-        except SCAutolibException:
+        except exceptions.SCAutolibException:
             logger.warning("OpenSC module does not have option 'disable-in: "
                            "virt_cacard' set")
             opensc_module.set(key="disable-in", value="virt_cacard",
@@ -464,7 +464,8 @@ class Controller:
         for user_dict in self.lib_conf["users"]:
             if user_dict["name"] == name:
                 return user_dict
-        raise SCAutolibException(f"User {name} not found in config file")
+        raise exceptions.SCAutolibException(
+            f"User {name} not found in config file")
 
     def init_ca(self, local: bool = False):
         """
@@ -475,5 +476,11 @@ class Controller:
         """
         if local:
             self.local_ca = CA.LocalCA(self.lib_conf["ca"]["local_ca"]["dir"])
+            if not self.local_ca.cert.exists():
+                raise exceptions.SCAutolibMissingCA(
+                    f"CA certificate not found in {str(self.local_ca.cert)}")
         else:
             self.ipa_ca = CA.IPAServerCA(self.lib_conf["ca"]["ipa"])
+            if not self.ipa_ca.is_installed:
+                raise exceptions.SCAutolibMissingCA(
+                    f"IPA server CA is not installed")

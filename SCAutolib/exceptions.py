@@ -18,3 +18,11 @@ class SCAutolibWrongConfig(SCAutolibException):
     def __init__(self, msg=None):
         msg = self.default if msg is None else msg
         super().__init__(msg)
+
+
+class SCAutolibMissingCA(SCAutolibException):
+    default = "CA is not configured on the system"
+
+    def __init__(self, msg=None):
+        msg = self.default if msg is None else msg
+        super().__init__(msg)

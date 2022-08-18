@@ -6,6 +6,20 @@ import click
 
 from SCAutolib.controller import Controller
 from SCAutolib import logger
+from SCAutolib import exceptions
+from enum import Enum, auto
+
+
+class ReturnCode(Enum):
+    """
+    Enum for return codes
+    """
+    SUCCESS = 0
+    MISSING_CA = auto()
+    FAILURE = auto()
+    ERROR = auto()
+    EXCEPTION = auto()
+    UNKNOWN = auto()
 
 
 @click.group()
@@ -51,28 +65,45 @@ def setup_ca(ctx, ca_type):
         cnt.setup_local_ca(force=ctx.obj["FORCE"])
     elif ca_type == 'ipa':
         cnt.setup_ipa_client(force=ctx.obj["FORCE"])
+    return ReturnCode.SUCCESS
 
 
 @click.command()
-@click.option("--gdm", "-g", required=False, default=False, is_flag=True)
-@click.option("--install-missing", "-i", required=False, default=False,
-              is_flag=True)
+@click.option("--gdm", "-g",
+              required=False,
+              default=False,
+              is_flag=True,
+              help="Install GDM package")
+@click.option("--install-missing", "-i",
+              required=False,
+              default=False,
+              is_flag=True,
+              help="Install missing packages")
 @click.pass_context
 def prepare(ctx, gdm, install_missing):
     """Configure entire system for smart cards based on the config file."""
     ctx.obj["CONTROLLER"].prepare(ctx.obj["FORCE"], gdm, install_missing)
+    return ReturnCode.SUCCESS
 
 
 @click.command()
-@click.option("--name", "-n", required=True, default=None)
+@click.argument("name", required=True, default=None)
 @click.pass_context
 def setup_user(ctx, name):
     """Configure user with smart cards (if set) based on the config file."""
     cnt = ctx.obj["CONTROLLER"]
-    user_dict = cnt.get_user_dict(name)
-    cnt.init_ca(user_dict["local"])
+    try:
+        user_dict = cnt.get_user_dict(name)
+        cnt.init_ca(user_dict["local"])
+    except exceptions.SCAutolibMissingCA:
+        logger.error(f"CA is not configured on the system")
+        return ReturnCode.MISSING_CA
+    except exceptions.SCAutolibException:
+        logger.warning(f"User {name} not found in config file, "
+                       f"trying to create a new one")
     user = cnt.setup_user(user_dict, ctx.obj["FORCE"])
     cnt.enroll_card(user, ctx.obj["FORCE"])
+    return ReturnCode.SUCCESS
 
 
 cli.add_command(setup_ca)
