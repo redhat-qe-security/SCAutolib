@@ -3,24 +3,11 @@ Implementation of CLI commands for SCAutolib.
 """
 
 import click
-
-from SCAutolib.controller import Controller
-from SCAutolib import logger
-from SCAutolib import exceptions
-from enum import Enum, auto
+from pathlib import Path
 from sys import exit
 
-
-class ReturnCode(Enum):
-    """
-    Enum for return codes
-    """
-    SUCCESS = 0
-    MISSING_CA = auto()
-    FAILURE = auto()
-    ERROR = auto()
-    EXCEPTION = auto()
-    UNKNOWN = auto()
+from SCAutolib import logger, exceptions, schema_user, ReturnCode
+from SCAutolib.controller import Controller
 
 
 @click.group()

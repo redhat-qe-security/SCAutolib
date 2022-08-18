@@ -1,8 +1,11 @@
+from enum import Enum, auto
+
 import coloredlogs
 import logging
 import subprocess
 from pathlib import Path
 import time
+from schema import Schema, Use, Or, And, Optional
 
 fmt = "%(name)s:%(module)s.%(funcName)s.%(lineno)d [%(levelname)s] %(message)s"
 date_fmt = "%H:%M:%S"
@@ -24,6 +27,46 @@ LIB_DUMP = LIB_DIR.joinpath("dump")
 LIB_DUMP_USERS = LIB_DUMP.joinpath("users")
 LIB_DUMP_CAS = LIB_DUMP.joinpath("cas")
 LIB_DUMP_CARDS = LIB_DUMP.joinpath("cards")
+
+
+schema_cas = Schema(And(
+    Use(dict),
+    # Check that CA section contains at least one and maximum
+    # two entries
+    lambda l: 1 <= len(l.keys()) <= 2,
+    {Optional("local_ca"): {
+        Optional("dir", default=Path("/etc/SCAutolib/ca")): Use(Path)},
+        Optional("ipa"): {
+            'admin_passwd': Use(str),
+            'root_passwd': Use(str),
+            Optional('ip_addr', default=None): Use(str),
+            'server_hostname': Use(str),
+            'client_hostname': Use(str),
+            'domain': Use(str),
+            'realm': Use(str.upper)}}),
+    ignore_extra_keys=True)
+
+# Specify validation schema for all users
+schema_user = Schema({'name': Use(str),
+                      'passwd': Use(str),
+                      'pin': Use(str),
+                      Optional('card_dir', default=None): Use(Path),
+                      'card_type': Or("virtual", "real", "removinator"),
+                      Optional('cert', default=None): Use(Path),
+                      Optional('key', default=None): Use(Path),
+                      'local': Use(bool)})
+
+
+class ReturnCode(Enum):
+    """
+    Enum for return codes
+    """
+    SUCCESS = 0
+    MISSING_CA = auto()
+    FAILURE = auto()
+    ERROR = auto()
+    EXCEPTION = auto()
+    UNKNOWN = auto()
 
 
 def run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True,
