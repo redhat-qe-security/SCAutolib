@@ -8,6 +8,7 @@ from SCAutolib.controller import Controller
 from SCAutolib import logger
 from SCAutolib import exceptions
 from enum import Enum, auto
+from sys import exit
 
 
 class ReturnCode(Enum):
@@ -65,7 +66,7 @@ def setup_ca(ctx, ca_type):
         cnt.setup_local_ca(force=ctx.obj["FORCE"])
     elif ca_type == 'ipa':
         cnt.setup_ipa_client(force=ctx.obj["FORCE"])
-    return ReturnCode.SUCCESS
+    exit(ReturnCode.SUCCESS.value)
 
 
 @click.command()
@@ -83,7 +84,7 @@ def setup_ca(ctx, ca_type):
 def prepare(ctx, gdm, install_missing):
     """Configure entire system for smart cards based on the config file."""
     ctx.obj["CONTROLLER"].prepare(ctx.obj["FORCE"], gdm, install_missing)
-    return ReturnCode.SUCCESS
+    exit(ReturnCode.SUCCESS.value)
 
 
 @click.command()
@@ -97,13 +98,14 @@ def setup_user(ctx, name):
         cnt.init_ca(user_dict["local"])
     except exceptions.SCAutolibMissingCA:
         logger.error(f"CA is not configured on the system")
-        return ReturnCode.MISSING_CA
-    except exceptions.SCAutolibException:
+        exit(ReturnCode.MISSING_CA.value)
+    except exceptions.SCAutolibMissingUserConfig:
         logger.warning(f"User {name} not found in config file, "
                        f"trying to create a new one")
+        exit(ReturnCode.FAILURE.value)
     user = cnt.setup_user(user_dict, ctx.obj["FORCE"])
     cnt.enroll_card(user, ctx.obj["FORCE"])
-    return ReturnCode.SUCCESS
+    exit(ReturnCode.SUCCESS.value)
 
 
 cli.add_command(setup_ca)
