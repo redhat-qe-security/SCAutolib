@@ -464,8 +464,7 @@ class Controller:
         for user_dict in self.lib_conf["users"]:
             if user_dict["name"] == name:
                 return user_dict
-        raise exceptions.SCAutolibException(
-            f"User {name} not found in config file")
+        raise exceptions.SCAutolibMissingUserConfig(name)
 
     def init_ca(self, local: bool = False):
         """
