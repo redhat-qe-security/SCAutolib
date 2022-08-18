@@ -26,3 +26,9 @@ class SCAutolibMissingCA(SCAutolibException):
     def __init__(self, msg=None):
         msg = self.default if msg is None else msg
         super().__init__(msg)
+
+
+class SCAutolibMissingUserConfig(SCAutolibException):
+    def __init__(self, name):
+        msg = f"User {name} is found in config file"
+        super().__init__(msg)
