@@ -8,8 +8,6 @@ from SCAutolib import (LIB_DIR, LIB_BACKUP, LIB_DUMP, LIB_DUMP_CARDS,
                        LIB_DUMP_USERS, LIB_DUMP_CAS)
 from fixtures import *  # noqa: F401
 
-DIR_PATH = os.path.dirname(os.path.abspath(__file__))
-FILES_DIR = os.path.join(DIR_PATH, "files")
 LOGGER = logging.getLogger("pytest-custom")
 
 

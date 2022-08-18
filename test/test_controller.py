@@ -1,22 +1,8 @@
 import pytest
 from configparser import ConfigParser
-from shutil import copy
 from subprocess import check_output
 
 from SCAutolib.controller import Controller
-from conftest import FILES_DIR
-
-
-@pytest.fixture()
-def dummy_config(tmp_path):
-    config_path = f'{tmp_path}/dummy_config_file.json'
-    copy(f"{FILES_DIR}/dummy_config_file.json", config_path)
-    with open(f"{FILES_DIR}/dummy_config_file.json", "r") as f:
-        cnt = f.read()
-    with open(config_path, "w") as f:
-        f.write(cnt.replace("{path}", str(tmp_path)))
-
-    return config_path
 
 
 @pytest.fixture()
