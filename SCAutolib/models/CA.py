@@ -25,6 +25,12 @@ from SCAutolib.models.file import OpensslCnf
 
 class BaseCA:
     dump_file: Path = None
+    _ca_cert: Path = None
+    _ca_key: Path = None
+
+    @property
+    def cert(self):
+        return self._ca_cert
 
     def request_cert(self, csr, username: str, cert_out: Path):
         """
@@ -116,8 +122,8 @@ class LocalCA(BaseCA):
             conf_type="CA",
             filepath=self.root_dir.joinpath("ca.cnf"),
             replace=str(self.root_dir))
-        self._ca_cert: Path = self.root_dir.joinpath("rootCA.pem")
-        self._ca_key: Path = self.root_dir.joinpath("rootCA.key")
+        self._ca_cert = self.root_dir.joinpath("rootCA.pem")
+        self._ca_key = self.root_dir.joinpath("rootCA.key")
 
         self._serial: Path = self.root_dir.joinpath("serial")
         self._index: Path = self.root_dir.joinpath("index.txt")
@@ -146,6 +152,30 @@ class LocalCA(BaseCA):
         if self._ca_cnf:
             dict_["_ca_cnf"] = str(self._ca_cnf.path)
         return dict_
+
+    @property
+    def is_installed(self):
+        """
+        Check if the local CA is installed
+        """
+        try:
+            result = all([self.root_dir.exists(),
+                          self._ca_cert.exists(),
+                          self._ca_key.exists(),
+                          self._ca_cnf.path.exists(),
+                          self._conf_dir.exists(),
+                          self._newcerts.exists(),
+                          self._certs.exists(),
+                          self._crl.exists(),
+                          self._serial.exists(),
+                          self._index.exists()])
+            if result and self._ca_pki_db.exists():
+                with self._ca_pki_db.open("r") as f, self._ca_cert.open("r") as cert:
+                    result &= cert.read() in f.read()
+        except Exception as e:
+            logger.error(e)
+            return False
+        return result
 
     def setup(self):
         """
@@ -273,6 +303,7 @@ class IPAServerCA(BaseCA):
     ``IPAServerCA.create()`` method.
     """
 
+    _ca_cert: Path = Path("/etc/ipa/ca.crt")
     _ipa_server_ip: str = None
     _ipa_server_hostname: str = None
     _ipa_server_domain: str = None
