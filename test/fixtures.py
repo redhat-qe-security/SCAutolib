@@ -55,8 +55,8 @@ def ipa_fixture(ipa_config):
 @pytest.fixture(scope="session")
 def clean_ipa():
     yield
-    check_output(["ipa-client-install", "--uninstall", "--unattended"],
-                 encoding="utf-8")
+    run(["ipa-client-install", "--uninstall", "--unattended"],
+        encoding="utf-8")
 
 
 @pytest.fixture(scope="session")

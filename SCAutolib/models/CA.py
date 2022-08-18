@@ -170,8 +170,9 @@ class LocalCA(BaseCA):
                           self._serial.exists(),
                           self._index.exists()])
             if result and self._ca_pki_db.exists():
-                with self._ca_pki_db.open("r") as f, self._ca_cert.open("r") as cert:
-                    result &= cert.read() in f.read()
+                with self._ca_pki_db.open("r") as f:
+                    with self._ca_cert.open("r") as cert:
+                        result &= cert.read() in f.read()
         except Exception as e:
             logger.error(e)
             return False
