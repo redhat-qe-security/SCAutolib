@@ -19,7 +19,7 @@ from SCAutolib.controller import Controller
               help="Path to JSON configuration file.")
 @click.option('--force', "-f", is_flag=True, default=False, show_default=True,
               help="Force the command to overwrite configuration if it exists.")
-@click.option("--verbose", "-v", default="INFO", show_default=True,
+@click.option("--verbose", "-v", default="DEBUG", show_default=True,
               type=click.Choice(
                   ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]),
               help="Verbosity level.")
@@ -75,23 +75,71 @@ def prepare(ctx, gdm, install_missing):
 
 
 @click.command()
-@click.argument("name", required=True, default=None)
+@click.argument("name",
+                required=True,
+                default=None)
+@click.option("--card-dir", "-d",
+              required=False,
+              default=None,
+              help="Path to the directory where smart card should be created")
+@click.option("--card-type", "-t",
+              required=False,
+              default="virtual",
+              type=click.Choice(
+                  ["virtual", "real", "removinator"], case_sensitive=False),
+              show_default=True,
+              help="Type of the smart card to be created")
+@click.option("--passwd", "-p",
+              required=False,
+              default=None,
+              show_default=True,
+              help="Password for the user")
+@click.option("--pin", "-P",
+              required=False,
+              default=None,
+              show_default=True,
+              help="PIN for the smart card")
+@click.option("--user-type", "-T",
+              required=False,
+              default="local",
+              type=click.Choice(["local", "ipa"], case_sensitive=False),
+              show_default=True,
+              help="Type of the user to be created")
 @click.pass_context
-def setup_user(ctx, name):
+def setup_user(ctx, name, card_dir, card_type, passwd, pin, user_type):
     """Configure user with smart cards (if set) based on the config file."""
     cnt = ctx.obj["CONTROLLER"]
+    logger.info(f"Start setup user {name}")
     try:
         user_dict = cnt.get_user_dict(name)
+    except exceptions.SCAutolibMissingUserConfig:
+        logger.warning(f"User {name} not found in config file, "
+                       f"trying to create a new one")
+        if not all([card_dir, card_type, passwd, pin, user_type]):
+            logger.error(f"Not all required arguments are set")
+            logger.error(f"Required arguments: --card-dir, --pin, --password")
+            exit(ReturnCode.ERROR.value)
+        user_dict = schema_user.validate(
+            {"name": name,
+             "card_dir": Path(card_dir),
+             "card_type": card_type,
+             "passwd": passwd,
+             "pin": pin,
+             "local": user_type == "local"})
+        logger.debug(f"User dict: {user_dict}")
+
+    try:
         cnt.init_ca(user_dict["local"])
     except exceptions.SCAutolibMissingCA:
         logger.error(f"CA is not configured on the system")
         exit(ReturnCode.MISSING_CA.value)
-    except exceptions.SCAutolibMissingUserConfig:
-        logger.warning(f"User {name} not found in config file, "
-                       f"trying to create a new one")
+
+    try:
+        user = cnt.setup_user(user_dict, ctx.obj["FORCE"])
+        cnt.enroll_card(user, ctx.obj["FORCE"])
+    except exceptions.SCAutolibException:
+        logger.error(f"Something went wrong")
         exit(ReturnCode.FAILURE.value)
-    user = cnt.setup_user(user_dict, ctx.obj["FORCE"])
-    cnt.enroll_card(user, ctx.obj["FORCE"])
     exit(ReturnCode.SUCCESS.value)
 
 
