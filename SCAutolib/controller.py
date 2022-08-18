@@ -54,7 +54,8 @@ class Controller:
         with self._lib_conf_path.open("r") as f:
             tmp_conf = json.load(f)
             if tmp_conf is None:
-                raise exceptions.SCAutolibException("Data are not loaded correctly.")
+                raise exceptions.SCAutolibException(
+                    "Data are not loaded correctly.")
         self.lib_conf = self._validate_configuration(tmp_conf, params)
         self.users = []
         for d in (LIB_DIR, LIB_BACKUP, LIB_DUMP, LIB_DUMP_USERS, LIB_DUMP_CAS,
@@ -309,7 +310,8 @@ class Controller:
 
             csr = user_.gen_csr()
 
-            ca = self.ipa_ca if isinstance(user_, user.IPAUser) else self.local_ca
+            ca = self.ipa_ca \
+                if isinstance(user_, user.IPAUser) else self.local_ca
             user_.cert = ca.request_cert(csr, user_.username, user_.cert)
 
         user_.card.enroll()
@@ -457,5 +459,5 @@ class Controller:
             self.ipa_ca = CA.IPAServerCA(self.lib_conf["ca"]["ipa"])
             if not self.ipa_ca.is_installed:
                 raise exceptions.SCAutolibMissingCA(
-                    f"IPA server CA is not installed")
-        logger.info(f"CA is initialized")
+                    "IPA server CA is not installed")
+        logger.info("CA is initialized")

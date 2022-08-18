@@ -1,16 +1,12 @@
-from subprocess import check_output, run
-
 import json
-from os.path import exists
-
 import pytest
 from click.testing import CliRunner
 from pwd import getpwnam
-from SCAutolib import LIB_DUMP_USERS
-from SCAutolib.cli_commands import ReturnCode
-from SCAutolib.controller import Controller
+from subprocess import run
 
 import SCAutolib.cli_commands as cli_cmd
+from SCAutolib.cli_commands import ReturnCode
+from SCAutolib.controller import Controller
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -45,4 +41,26 @@ def test_cli_setup_user(dummy_config, runner, username, ca, tmpdir):
     finally:
         run(["userdel", "-r", username], check=False)
 
-    # assert LIB_DUMP_USERS.joinpath(f"{username}.json").exists()
+
+@pytest.mark.ipa
+@pytest.mark.parametrize("ca_type", ["all", "local", "ipa"])
+def test_setup_ca(runner, dummy_config, ca_type, clean_ipa, ipa_config):
+    """Test the CLI command setup-ca."""
+
+    if ca_type in ["all", "ipa"]:
+        with open(dummy_config, "r") as f:
+            cfg = json.load(f)
+        cfg["ca"]["ipa"]["ip_addr"] = ipa_config["ip"]
+        cfg["ca"]["ipa"]["server_hostname"] = ipa_config["hostname"]
+        cfg["ca"]["ipa"]["admin_passwd"] = ipa_config["admin_passwd"]
+        cfg["ca"]["ipa"]["root_passwd"] = ipa_config["root_passwd"]
+        cfg["ca"]["ipa"]["domain"] = ipa_config["domain"]
+        cfg["ca"]["ipa"]["realm"] = ipa_config["domain"].upper()
+        with open(dummy_config, "w") as f:
+            json.dump(cfg, f)
+
+    result = runner.invoke(cli_cmd.cli, ["--conf", dummy_config,
+                                         "setup-ca", "--ca-type", ca_type])
+
+    print(result.stdout)
+    assert result.exit_code == ReturnCode.SUCCESS.value
