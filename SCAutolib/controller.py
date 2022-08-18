@@ -1,12 +1,12 @@
 import json
 from pathlib import Path
-from schema import Schema, Use, Or, And, Optional
+from schema import Schema, Use
 from shutil import rmtree
 from typing import Union
 
+from SCAutolib import exceptions, schema_cas, schema_user
 from SCAutolib import (logger, run, LIB_DIR, LIB_BACKUP, LIB_DUMP,
                        LIB_DUMP_USERS, LIB_DUMP_CAS, LIB_DUMP_CARDS)
-from SCAutolib import exceptions
 from SCAutolib.models import CA, file, user, card, authselect as auth
 from SCAutolib.models.file import File
 from SCAutolib.utils import (OSVersion, _check_selinux, _gen_private_key,
@@ -358,32 +358,6 @@ class Controller:
         #  Add loading of the values from params dict
         # IP regex
         # Specify validation schema for CAs
-        schema_cas = Schema(And(
-            Use(dict),
-            # Check that CA section contains at least one and maximum
-            # two entries
-            lambda l: 1 <= len(l.keys()) <= 2,
-            {Optional("local_ca"): {
-                Optional("dir", default=Path("/etc/SCAutolib/ca")): Use(Path)},
-                Optional("ipa"): {
-                    'admin_passwd': Use(str),
-                    'root_passwd': Use(str),
-                    Optional('ip_addr', default=None): Use(str),
-                    'server_hostname': Use(str),
-                    'client_hostname': Use(str),
-                    'domain': Use(str),
-                    'realm': Use(str.upper)}}),
-            ignore_extra_keys=True)
-
-        # Specify validation schema for all users
-        schema_user = Schema({'name': Use(str),
-                              'passwd': Use(str),
-                              'pin': Use(str),
-                              Optional('card_dir', default=None): Use(Path),
-                              'card_type': Or("virtual", "real", "removinator"),
-                              Optional('cert', default=None): Use(Path),
-                              Optional('key', default=None): Use(Path),
-                              'local': Use(bool)})
 
         # Specify general schema for whole config file
         schema = Schema({"root_passwd": Use(str),
