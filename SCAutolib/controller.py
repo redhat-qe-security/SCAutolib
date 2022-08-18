@@ -225,6 +225,7 @@ class Controller:
                                  cert=user_dict["cert"], key=user_dict["key"],
                                  local=True)
             if force:
+                self.local_ca.revoke_cert(new_user.cert)
                 new_user.delete_user()
             user_dict["card_dir"].mkdir(exist_ok=True)
             new_user.add_user()
@@ -298,20 +299,17 @@ class Controller:
         if not user_.card:
             raise exceptions.SCAutolibException(
                 f"Card for the user {user_.username} is not initialized")
-        if user_.cert is None:
+
+        if not user_.key.exists():
+            _gen_private_key(user_.key)
+
+        if not user_.cert.exists():
             # Creating a new private key makes sense only if the certificate
             # doesn't exist yet
-            if user_.key is None:
-                user_.key = user_.card_dir.joinpath("private.key")
-                _gen_private_key(user_.key)
 
             csr = user_.gen_csr()
-            if user_.cert is None:
-                user_.cert = user_.card_dir.joinpath(
-                    f"cert-{user_.username}.pem")
+
             ca = self.ipa_ca if isinstance(user_, user.IPAUser) else self.local_ca
-            if force:
-                ca.revoke_cert(user_.cert)
             user_.cert = ca.request_cert(csr, user_.username, user_.cert)
 
         user_.card.enroll()
@@ -460,3 +458,4 @@ class Controller:
             if not self.ipa_ca.is_installed:
                 raise exceptions.SCAutolibMissingCA(
                     f"IPA server CA is not installed")
+        logger.info(f"CA is initialized")
