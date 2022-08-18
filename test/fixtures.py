@@ -1,6 +1,8 @@
+import os
 import pwd
 import pytest
 from pathlib import Path
+from shutil import copy
 from shutil import copyfile
 from subprocess import check_output, run, CalledProcessError, PIPE
 
@@ -8,6 +10,21 @@ from SCAutolib.models import CA
 from SCAutolib.models.card import VirtualCard
 from SCAutolib.models.file import SSSDConf, File, OpensslCnf
 from SCAutolib.models.user import User
+
+DIR_PATH = os.path.dirname(os.path.abspath(__file__))
+FILES_DIR = os.path.join(DIR_PATH, "files")
+
+
+@pytest.fixture()
+def dummy_config(tmp_path):
+    config_path = f'{tmp_path}/dummy_config_file.json'
+    copy(f"{FILES_DIR}/dummy_config_file.json", config_path)
+    with open(f"{FILES_DIR}/dummy_config_file.json", "r") as f:
+        cnt = f.read()
+    with open(config_path, "w") as f:
+        f.write(cnt.replace("{path}", str(tmp_path)))
+
+    return config_path
 
 
 @pytest.fixture(scope="session")
