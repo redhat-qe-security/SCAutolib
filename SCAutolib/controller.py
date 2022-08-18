@@ -57,6 +57,9 @@ class Controller:
                 raise exceptions.SCAutolibException("Data are not loaded correctly.")
         self.lib_conf = self._validate_configuration(tmp_conf, params)
         self.users = []
+        for d in (LIB_DIR, LIB_BACKUP, LIB_DUMP, LIB_DUMP_USERS, LIB_DUMP_CAS,
+                  LIB_DUMP_CARDS):
+            d.mkdir(exist_ok=True)
 
     def prepare(self, force: bool, gdm: bool, install_missing: bool):
         """
@@ -153,7 +156,7 @@ class Controller:
                            f"{ca_dir}")
             self.local_ca.cleanup()
         if not ca_dir.exists():
-            ca_dir.mkdir(exist_ok=True)
+            ca_dir.mkdir(exist_ok=True, parents=True)
 
             cnf.create()
             cnf.save()
