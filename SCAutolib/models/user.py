@@ -111,7 +111,8 @@ class User(BaseUser):
         self.card_dir = card_dir if card_dir is not None \
             else Path("/home", self.username)
         self._key = key if key else self.card_dir.joinpath(f"key-{username}.pem")
-        self._cert = cert if cert else self.card_dir.joinpath(f"cert-{username}.pem")
+        self._cert = cert \
+            if cert else self.card_dir.joinpath(f"cert-{username}.pem")
         self.local = local
 
     @property

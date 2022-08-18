@@ -1,7 +1,6 @@
 from os import environ
 
 import logging
-import os
 from shutil import rmtree
 
 from SCAutolib import (LIB_DIR, LIB_BACKUP, LIB_DUMP, LIB_DUMP_CARDS,

@@ -116,8 +116,8 @@ def setup_user(ctx, name, card_dir, card_type, passwd, pin, user_type):
         logger.warning(f"User {name} not found in config file, "
                        f"trying to create a new one")
         if not all([card_dir, card_type, passwd, pin, user_type]):
-            logger.error(f"Not all required arguments are set")
-            logger.error(f"Required arguments: --card-dir, --pin, --password")
+            logger.error("Not all required arguments are set")
+            logger.error("Required arguments: --card-dir, --pin, --password")
             exit(ReturnCode.ERROR.value)
         user_dict = schema_user.validate(
             {"name": name,
@@ -131,14 +131,14 @@ def setup_user(ctx, name, card_dir, card_type, passwd, pin, user_type):
     try:
         cnt.init_ca(user_dict["local"])
     except exceptions.SCAutolibMissingCA:
-        logger.error(f"CA is not configured on the system")
+        logger.error("CA is not configured on the system")
         exit(ReturnCode.MISSING_CA.value)
 
     try:
         user = cnt.setup_user(user_dict, ctx.obj["FORCE"])
         cnt.enroll_card(user, ctx.obj["FORCE"])
     except exceptions.SCAutolibException:
-        logger.error(f"Something went wrong")
+        logger.error("Something went wrong")
         exit(ReturnCode.FAILURE.value)
     exit(ReturnCode.SUCCESS.value)
 

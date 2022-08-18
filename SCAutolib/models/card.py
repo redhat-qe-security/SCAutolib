@@ -121,14 +121,6 @@ class VirtualCard(Card):
         self._softhsm2_conf = softhsm2_conf if softhsm2_conf \
             else Path("/home", self.user.username, "softhsm2.conf")
 
-    def __call__(self, insert: bool = False):
-        """
-        Call method for virtual smart card. It would be used in the context
-        manager.
-        """
-        self._insert = insert
-        return self.__enter__()
-
     def __call__(self, insert: bool):
         """
         Call method for virtual smart card. It would be used in the context
