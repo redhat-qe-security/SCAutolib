@@ -11,7 +11,9 @@ from pathlib import Path
 
 from SCAutolib import run, logger, TEMPLATES_DIR, LIB_DUMP_USERS
 from SCAutolib.exceptions import SCAutolibException
+from SCAutolib.models.CA import LocalCA
 from SCAutolib.models.card import Card
+from SCAutolib.models.file import OpensslCnf
 from SCAutolib.models.user import BaseUser
 
 
@@ -154,3 +156,22 @@ def user_factory(username):
     else:
         user = result
     return user
+
+
+def ca_factory(path, force=False):
+    """
+    Create a new LocalCA object.
+
+    .. note: Creating new IPA server with CA is not supported.
+    """
+    path.mkdir(exist_ok=True, parents=True)
+    cnf = OpensslCnf(path.joinpath("ca.cnf"), "CA", str(path))
+    ca = LocalCA(root_dir=path, cnf=cnf)
+    if force:
+        logger.warning(f"Removing previous local CA in a directory {path}")
+        ca.cleanup()
+    ca.dump_file = path.joinpath("ca-dump.json")
+    cnf.create()
+    cnf.save()
+    ca.setup()
+    run(["systemctl", "restart", "sssd"], sleep=5)
