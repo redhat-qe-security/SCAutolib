@@ -214,7 +214,8 @@ class Controller:
                                  cert=user_dict["cert"], key=user_dict["key"],
                                  local=True)
             if force:
-                self.local_ca.revoke_cert(new_user.cert)
+                if new_user.cert and new_user.cert.exists():
+                    self.local_ca.revoke_cert(new_user.cert)
                 new_user.delete_user()
             user_dict["card_dir"].mkdir(exist_ok=True)
             new_user.add_user()
@@ -248,6 +249,8 @@ class Controller:
                                     key=user_dict["key"],
                                     local=False)
             if force:
+                if new_user.cert and new_user.cert.exists():
+                    self.ipa_ca.revoke_cert(new_user.cert)
                 new_user.delete_user()
             user_dict["card_dir"].mkdir(exist_ok=True)
 
