@@ -1,6 +1,7 @@
 """
 This module implements classes that represents Certification Authorities (CA).
 """
+import shutil
 
 import re
 
@@ -287,7 +288,11 @@ class LocalCA(BaseCA):
         Remove the root directory of the CA
         """
         logger.warning(f"Removing local CA {self.root_dir}")
-        rmtree(self.root_dir, ignore_errors=True)
+        for file in self.root_dir.iterdir():
+            if file.is_file():
+                file.unlink()
+            elif file.is_dir():
+                shutil.rmtree(file)
         logger.info(f"Local CA from {self.root_dir} is removed")
 
 
