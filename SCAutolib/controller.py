@@ -131,6 +131,8 @@ class Controller:
         self._general_steps_for_virtual_sc()
         # FIXME: think how to do this better
         run(["useradd", "base-user"], return_code=[0, 9])
+        dump_to_json(user.BaseUser(username="root",
+                                   password=self.lib_conf["root_passwd"]))
 
     def setup_local_ca(self, force: bool = False):
         """

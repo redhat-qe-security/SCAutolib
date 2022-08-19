@@ -175,3 +175,4 @@ def ca_factory(path, force=False):
     cnf.save()
     ca.setup()
     run(["systemctl", "restart", "sssd"], sleep=5)
+    return ca
