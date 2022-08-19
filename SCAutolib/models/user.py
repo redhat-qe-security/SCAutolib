@@ -34,6 +34,15 @@ class BaseUser:
     _card: card_model.Card = None
     local: bool = None
 
+    def __init__(self, username, password):
+        self.username = username
+        self.password = password
+        self.dump_file = LIB_DUMP_USERS.joinpath(f"{self.username}.json")
+
+    @property
+    def __dict__(self):
+        return {"username": self.username, "password": self.password}
+
     @staticmethod
     def load(json_file, **kwargs):
         """
@@ -49,7 +58,9 @@ class BaseUser:
         with json_file.open("r") as f:
             cnt = json.load(f)
 
-        if cnt["local"]:
+        if "card_dir" not in cnt:
+            user = BaseUser(username=cnt["username"], password=cnt["password"])
+        elif cnt["local"]:
             user = User(local=cnt["local"],
                         username=cnt["username"],
                         card_dir=Path(cnt["card_dir"]),
