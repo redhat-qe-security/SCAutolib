@@ -11,7 +11,7 @@ from SCAutolib.models import CA, file, user, card, authselect as auth
 from SCAutolib.models.file import File
 from SCAutolib.utils import (OSVersion, _check_selinux, _gen_private_key,
                              _get_os_version, _install_packages,
-                             _check_packages, dump_to_json)
+                             _check_packages, dump_to_json, ca_factory)
 
 
 class Controller:
@@ -149,21 +149,7 @@ class Controller:
             raise exceptions.SCAutolibWrongConfig(msg)
 
         ca_dir: Path = self.lib_conf["ca"]["local_ca"]["dir"]
-        cnf = file.OpensslCnf(ca_dir.joinpath("ca.cnf"), "CA", str(ca_dir))
-        self.local_ca = CA.LocalCA(root_dir=ca_dir, cnf=cnf)
-
-        if force:
-            logger.warning(f"Removing previous local CA in a directory "
-                           f"{ca_dir}")
-            self.local_ca.cleanup()
-        if not ca_dir.exists():
-            ca_dir.mkdir(exist_ok=True, parents=True)
-
-            cnf.create()
-            cnf.save()
-            self.local_ca.setup()
-
-        run(["systemctl", "restart", "sssd"], sleep=5)
+        self.local_ca = ca_factory(ca_dir, force)
         logger.info(f"Local CA is configured in {ca_dir}")
 
         dump_to_json(self.local_ca)
