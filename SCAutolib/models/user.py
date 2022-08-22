@@ -200,7 +200,7 @@ class User(BaseUser):
         :return: dictionary with all values. Path objects are typed to string.
         :rtype: dict
         """
-        dict_ = super().__dict__.copy()
+        dict_ = object.__dict__.copy()
         for k, v in dict_.items():
             if type(v) in (PosixPath, Path):
                 dict_[k] = str(v)
@@ -303,9 +303,7 @@ class IPAUser(User):
         :return: dictionary with all values. Path objects are typed to string.
         :rtype: dict
         """
-        dict_ = super().__dict__
-        dict_.pop("_meta_client")
-        return dict_
+        return super().__dict__.pop("_meta_client")
 
     def add_user(self):
         """
