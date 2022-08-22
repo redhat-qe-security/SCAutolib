@@ -265,12 +265,12 @@ class Controller:
             hsm_conf.create()
             hsm_conf.save()
 
-            new_card = card.VirtualCard(new_user, softhsm2_conf=hsm_conf.path)
+            new_user.card = card.VirtualCard(new_user, softhsm2_conf=hsm_conf.path)
         else:
             raise NotImplementedError("Other card type than 'virtual' does not "
                                       "supported yet")
 
-        new_user.card = new_card.create()
+        new_user.card.create()
         self.users.append(new_user)
 
         dump_to_json(new_user)
