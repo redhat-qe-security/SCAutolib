@@ -256,8 +256,6 @@ class Controller:
 
             new_user.add_user()
 
-        new_card = None
-
         if user_dict["card_type"] == "virtual":
             hsm_conf = file.SoftHSM2Conf(
                 new_user.card_dir.joinpath("sofhtsm2.conf"),
@@ -265,10 +263,11 @@ class Controller:
             hsm_conf.create()
             hsm_conf.save()
 
-            new_user.card = card.VirtualCard(new_user, softhsm2_conf=hsm_conf.path)
+            new_user.card = card.VirtualCard(new_user,
+                                             softhsm2_conf=hsm_conf.path)
         else:
-            raise NotImplementedError("Other card type than 'virtual' does not "
-                                      "supported yet")
+            raise NotImplementedError("Other card type than 'virtual' does"
+                                      "not supported yet")
 
         new_user.card.create()
         self.users.append(new_user)

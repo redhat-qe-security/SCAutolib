@@ -139,8 +139,7 @@ class LocalCA(BaseCA):
             raise SCAutolibException("CNF file does not exist")
         self._ca_cnf = cnf
 
-    @property
-    def __dict__(self):
+    def to_dict(self):
         """
         Customising default property for better serialisation for storing to
         JSON format.
@@ -375,8 +374,7 @@ class IPAServerCA(BaseCA):
     def domain(self):
         return self._ipa_server_domain
 
-    @property
-    def __dict__(self):
+    def to_dict(self):
         """
         Customising default property for better serialisation for storing to
         JSON format.

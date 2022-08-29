@@ -128,7 +128,7 @@ def dump_to_json(obj):
     Store serialised object to the JSON file.
     """
     with obj.dump_file.open("w") as f:
-        json.dump(obj.__dict__, f)
+        json.dump(obj.to_dict(), f)
     logger.debug(f"Object {type(obj)} is stored to the {obj.dump_file} file")
 
 
