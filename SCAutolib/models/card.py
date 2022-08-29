@@ -159,10 +159,7 @@ class VirtualCard(Card):
         if self._inserted:
             self.remove()
 
-    @property
-    def __dict__(self):
-        # Need to copy to not referencing the same object what leads to
-        # changing it on retyping
+    def to_dict(self):
         return {
             "softhsm": str(self._softhsm2_conf),
             "type": "virtual",
