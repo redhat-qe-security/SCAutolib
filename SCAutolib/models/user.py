@@ -39,9 +39,16 @@ class BaseUser:
         self.password = password
         self.dump_file = LIB_DUMP_USERS.joinpath(f"{self.username}.json")
 
-    @property
-    def __dict__(self):
-        return {"username": self.username, "password": self.password}
+    def to_dict(self):
+        # Retype patlib.Path object to str
+        d = {k: str(v) if type(v) in (PosixPath, Path) else v
+             for k, v in self.__dict__.items()}
+
+        if self._card and isinstance(self._card, card_model.VirtualCard):
+            d.pop("_card")
+            d["card"] = str(self._card.dump_file)
+
+        return d
 
     @staticmethod
     def load(json_file, **kwargs):
@@ -191,25 +198,6 @@ class User(BaseUser):
         logger.info("Removing current CNF file.")
         self._cnf = None
 
-    @property
-    def __dict__(self):
-        """
-        Customising default property for better serialisation for storing to
-        JSON format.
-
-        :return: dictionary with all values. Path objects are typed to string.
-        :rtype: dict
-        """
-        dict_ = object.__dict__.copy()
-        for k, v in dict_.items():
-            if type(v) in (PosixPath, Path):
-                dict_[k] = str(v)
-
-        if self._card and isinstance(self._card, card_model.VirtualCard):
-            dict_.pop("_card")
-            dict_["card"] = str(self._card.dump_file)
-        return dict_
-
     def delete_user(self):
         """
         Deletes the user and the content of user's card directory
@@ -294,16 +282,11 @@ class IPAUser(User):
         self._meta_client = ipa_server.meta_client
         self._ipa_hostname = ipa_server.ipa_server_hostname
 
-    @property
-    def __dict__(self):
-        """
-        Customising default property for better serialisation for storing to
-        JSON format.
-
-        :return: dictionary with all values. Path objects are typed to string.
-        :rtype: dict
-        """
-        return super().__dict__.pop("_meta_client")
+    def to_dict(self):
+        d = super().to_dict()
+        d.pop("_meta_client")
+        d.pop("_ipa_hostname")
+        return d
 
     def add_user(self):
         """
