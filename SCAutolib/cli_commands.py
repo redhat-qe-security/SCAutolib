@@ -12,7 +12,6 @@ from SCAutolib.controller import Controller
 
 @click.group()
 @click.option("--conf", "-c",
-              required=True,
               default="./conf.json",
               type=click.Path(exists=True, resolve_path=True),
               show_default=True,
@@ -21,7 +20,8 @@ from SCAutolib.controller import Controller
               help="Force the command to overwrite configuration if it exists.")
 @click.option("--verbose", "-v", default="DEBUG", show_default=True,
               type=click.Choice(
-                  ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]),
+                  ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+                  case_sensitive=False),
               help="Verbosity level.")
 @click.pass_context
 def cli(ctx, force, verbose, conf):
