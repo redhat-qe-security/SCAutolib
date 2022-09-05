@@ -9,9 +9,9 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from enum import Enum
 from pathlib import Path
 
-from SCAutolib import run, logger, TEMPLATES_DIR, LIB_DUMP_USERS
+from SCAutolib import run, logger, TEMPLATES_DIR, LIB_DUMP_USERS, LIB_DUMP_CAS
 from SCAutolib.exceptions import SCAutolibException
-from SCAutolib.models.CA import LocalCA
+from SCAutolib.models.CA import LocalCA, BaseCA
 from SCAutolib.models.card import Card
 from SCAutolib.models.file import OpensslCnf
 from SCAutolib.models.user import BaseUser
@@ -132,7 +132,7 @@ def dump_to_json(obj):
     logger.debug(f"Object {type(obj)} is stored to the {obj.dump_file} file")
 
 
-def user_factory(username):
+def user_factory(username, **kwargs):
     """
     Load user with given username from JSON file. If user have the card file
     linked, then load it as well.
@@ -148,7 +148,7 @@ def user_factory(username):
     result = None
     user = None
     if user_file.exists():
-        result = BaseUser.load(user_file)
+        result = BaseUser.load(user_file, **kwargs)
     if type(result) == tuple:
         user, card_file = result
         logger.debug(f"Loading card from {card_file}")
@@ -158,7 +158,17 @@ def user_factory(username):
     return user
 
 
-def ca_factory(path, force=False):
+def ipa_factory():
+    """
+    Create a new IPAServerCA object.
+
+    :return: object of IPAServerCA
+    :rtype: SCAutolib.models.CA.IPAServerCA
+    """
+    return BaseCA.load(LIB_DUMP_CAS.joinpath("ipa-server.json"))
+
+
+def local_ca_factory(path, force=False):
     """
     Create a new LocalCA object.
 
