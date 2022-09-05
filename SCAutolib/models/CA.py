@@ -80,14 +80,14 @@ class BaseCA:
         Load CA from JSON file.
         :return: CA object
         """
-        with json_file.dump_file.open("r") as f:
+        with json_file.open("r") as f:
             cnt = json.load(f)
 
         if "_ipa_server_ip" in cnt.keys():
             ca = IPAServerCA(ip_addr=cnt["_ipa_server_ip"],
                              server_hostname=cnt["_ipa_server_hostname"],
-                             root_passwd=cnt["_ipa_server_root_password"],
-                             admin_passwd=cnt["_ipa_server_admin_password"],
+                             root_passwd=cnt["_ipa_server_root_passwd"],
+                             admin_passwd=cnt["_ipa_server_admin_passwd"],
                              client_hostname=cnt["_ipa_client_hostname"],
                              domain=cnt["_ipa_server_domain"],
                              realm=cnt["_ipa_server_realm"])
