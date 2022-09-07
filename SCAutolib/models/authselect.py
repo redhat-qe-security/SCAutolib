@@ -16,7 +16,8 @@ from SCAutolib.utils import run
 class Authselect:
     backup_name = LIB_BACKUP.joinpath("SCAutolib_authselect_backup")
 
-    def __init__(self, required=False, lock_on_removal=False, mk_homedir=False, sudo=False):
+    def __init__(self, required=False, lock_on_removal=False,
+                 mk_homedir=False, sudo=False):
         """
         Constructor for Authselect class. Only 'with-smartcard' feature of sssd
         profile is set by default and --force option is used if the sssd profile
@@ -40,6 +41,7 @@ class Authselect:
             self._options.append("with-mkhomedir")
         if sudo:
             self._options.append("with-sudo")
+
     def _set(self):
         """
         Set authselect with SSSD profile and set selected Authselect profile
