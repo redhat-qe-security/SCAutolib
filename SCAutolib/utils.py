@@ -11,7 +11,7 @@ from pathlib import Path
 
 from SCAutolib import run, logger, TEMPLATES_DIR, LIB_DUMP_USERS, LIB_DUMP_CAS
 from SCAutolib.exceptions import SCAutolibException
-from SCAutolib.models.CA import LocalCA, BaseCA
+from SCAutolib.models.CA import LocalCA, BaseCA, IPAServerCA
 from SCAutolib.models.card import Card
 from SCAutolib.models.file import OpensslCnf
 from SCAutolib.models.user import BaseUser
@@ -162,18 +162,39 @@ def ipa_factory():
     """
     Create a new IPAServerCA object.
 
+    .. note: Creating new IPA server with CA is not supported.
+
     :return: object of IPAServerCA
     :rtype: SCAutolib.models.CA.IPAServerCA
     """
-    return BaseCA.load(LIB_DUMP_CAS.joinpath("ipa-server.json"))
+    json_file = LIB_DUMP_CAS.joinpath("ipa-server.json")
+    if not json_file.exists():
+        logger.error("Dump file for ipa server CA is not present.")
+        logger.error("The reason for this is most likely that the system was "
+                     "not configured for IPA client via SCAutolib")
+        return None
+    ca = BaseCA.load(json_file)
+    if not isinstance(ca, IPAServerCA):
+        logger.error("Values in dump file are not valid for IPA server, "
+                     "so the object can't be created")
+        return None
+    return ca
 
 
-def local_ca_factory(path, force=False):
+def local_ca_factory(path: Path = None, force: bool = False):
     """
-    Create a new LocalCA object.
+    Create a new LocalCA object or load existing one if no path provided.
 
-    .. note: Creating new IPA server with CA is not supported.
+    :param path: path to the CA directory
+    :type path: Path
+    :param force: force creation of new CA
+    :type force: bool
+    :return: object of LocalCA
+    :rtype: SCAutolib.models.CA.LocalCA
     """
+    if not path:
+        return BaseCA.load(LIB_DUMP_CAS.joinpath("local-ca.json"))
+
     path.mkdir(exist_ok=True, parents=True)
     cnf = OpensslCnf(path.joinpath("ca.cnf"), "CA", str(path))
     ca = LocalCA(root_dir=path, cnf=cnf)
