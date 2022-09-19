@@ -169,15 +169,17 @@ def ipa_factory():
     """
     json_file = LIB_DUMP_CAS.joinpath("ipa-server.json")
     if not json_file.exists():
-        logger.error("Dump file for ipa server CA is not present.")
+        msg = "Dump file for ipa server CA is not present."
+        logger.error(msg)
         logger.error("The reason for this is most likely that the system was "
                      "not configured for IPA client via SCAutolib")
-        return None
+        raise SCAutolibException(msg)
     ca = BaseCA.load(json_file)
     if not isinstance(ca, IPAServerCA):
-        logger.error("Values in dump file are not valid for IPA server, "
-                     "so the object can't be created")
-        return None
+        msg = "Values in dump file are not valid for IPA server, so the " \
+              "object can't be created"
+        logger.error(msg)
+        raise SCAutolibException(msg)
     return ca
 
 
