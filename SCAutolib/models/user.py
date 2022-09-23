@@ -93,6 +93,27 @@ class BaseUser:
             return user, Path(cnt["card"])
         return user
 
+    def add_user(self):
+        """
+        Add user to the local system with `useradd` bash command and set
+        password for created user.
+        :return:
+        """
+        try:
+            pwd.getpwnam(self.username)
+            msg = f"User {self.username} already exists on this " \
+                  f"machine. Username should be unique to avoid " \
+                  f"future problems with collisions"
+            logger.critical(msg)
+            raise SCAutolibException(msg)
+        except KeyError:
+            logger.debug(f"Creating new user {self.username}")
+            cmd = ['useradd', '-m', self.username]
+            run(cmd, check=True)
+            cmd = ["passwd", self.username, "--stdin"]
+            run(cmd, input=self.password)
+            logger.info(f"User {self.username} is present on the system")
+
 
 class User(BaseUser):
     """
@@ -216,27 +237,6 @@ class User(BaseUser):
         except KeyError:
             pass
         logger.info(f"User {self.username} is not present on the system")
-
-    def add_user(self):
-        """
-        Add user to the local system with `useradd` bash command and set
-        password for created user.
-        :return:
-        """
-        try:
-            pwd.getpwnam(self.username)
-            msg = f"User {self.username} already exists on this " \
-                  f"machine. Username should be unique to avoid " \
-                  f"future problems with collisions"
-            logger.critical(msg)
-            raise SCAutolibException(msg)
-        except KeyError:
-            logger.debug(f"Creating new user {self.username}")
-            cmd = ['useradd', '-m', self.username]
-            run(cmd, check=True)
-            cmd = ["passwd", self.username, "--stdin"]
-            run(cmd, input=self.password)
-            logger.info(f"User {self.username} is present on the system")
 
     def gen_csr(self):
         """

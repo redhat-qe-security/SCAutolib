@@ -129,8 +129,10 @@ class Controller:
         self.sssd_conf.create()
         self.sssd_conf.save()
         self._general_steps_for_virtual_sc()
-        # FIXME: think how to do this better
-        run(["useradd", "base-user"], return_code=[0, 9])
+
+        base_user = user.BaseUser("base-user", "redhat")
+        base_user.add_user()
+        dump_to_json(base_user)
         dump_to_json(user.BaseUser(username="root",
                                    password=self.lib_conf["root_passwd"]))
 
