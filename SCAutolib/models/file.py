@@ -302,6 +302,7 @@ class SSSDConf(File):
         if exc_type is not None:
             logger.error("Exception in virtual smart card context")
             logger.error(format_exc())
+        run("systemctl restart sssd", sleep=5)
 
     def create(self):
         """
