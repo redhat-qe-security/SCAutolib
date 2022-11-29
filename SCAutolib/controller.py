@@ -234,6 +234,7 @@ class Controller:
                 key="matchrule",
                 value=f"<SUBJECT>.*CN={new_user.username}.*")
             self.sssd_conf.save()
+            self.sssd_conf.update_default_content()
             run(["systemctl", "restart", "sssd"])
             logger.debug(f"Match rule for user {new_user.username} is added "
                          f"to /etc/sssd/sssd.conf")
