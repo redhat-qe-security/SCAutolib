@@ -62,12 +62,13 @@ class Controller:
                   LIB_DUMP_CARDS):
             d.mkdir(exist_ok=True)
 
-    def prepare(self, force: bool, gdm: bool, install_missing: bool):
+    def prepare(self, force: bool, gdm: bool, install_missing: bool,
+                graphical: bool):
         """
         Method for setting up whole system based on configuration file and
         CLI commands
         """
-        self.setup_system(install_missing, gdm)
+        self.setup_system(install_missing, gdm, graphical)
 
         # In this method not having section for local CA and/or for IPA CA is OK
         try:
@@ -82,7 +83,7 @@ class Controller:
             u = self.setup_user(usr, force=force)
             self.enroll_card(u)
 
-    def setup_system(self, install_missing: bool, gdm: bool):
+    def setup_system(self, install_missing: bool, gdm: bool, graphical: bool):
         """
         Do general system setup meaning package installation based on
         specifications in the configuration file, SSSD configuration,
@@ -103,6 +104,10 @@ class Controller:
         if gdm:
             packages.append("gdm")
 
+        if graphical:
+            # ffmpeg-free is in EPEL repo
+            packages += ["tesseract", "ffmpeg-free"]
+
         # Prepare for virtual cards
         if "virtual" in [u["card_type"] for u in self.lib_conf["users"]]:
             packages += ["pcsc-lite-ccid", "pcsc-lite", "virt_cacard",
@@ -122,6 +127,9 @@ class Controller:
                   f"{', '.join(missing)}"
             logger.critical(msg)
             raise exceptions.SCAutolibException(msg)
+
+        if graphical:
+            run(['dnf', 'groupinstall', 'Server with GUI', '-y'])
 
         run(['dnf', 'groupinstall', "Smart Card Support", '-y'])
         logger.debug("Smart Card Support group in installed.")
