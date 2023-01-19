@@ -62,15 +62,20 @@ def setup_ca(ctx, ca_type):
               default=False,
               is_flag=True,
               help="Install GDM package")
+@click.option("--graphical",
+              required=False,
+              default=False,
+              is_flag=True,
+              help="Install dependencies for GUI testing module")
 @click.option("--install-missing", "-i",
               required=False,
               default=False,
               is_flag=True,
               help="Install missing packages")
 @click.pass_context
-def prepare(ctx, gdm, install_missing):
+def prepare(ctx, gdm, install_missing, graphical):
     """Configure entire system for smart cards based on the config file."""
-    ctx.obj["CONTROLLER"].prepare(ctx.obj["FORCE"], gdm, install_missing)
+    ctx.obj["CONTROLLER"].prepare(ctx.obj["FORCE"], gdm, install_missing, graphical)
     exit(ReturnCode.SUCCESS.value)
 
 

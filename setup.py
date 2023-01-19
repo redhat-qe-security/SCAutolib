@@ -14,6 +14,15 @@ with requirements.open() as f:
 with readme.open() as f:
     long_description = f.read()
 
+graphical_reqs = [
+    'python-uinput',
+    'opencv-python',
+    'pandas',
+    'numpy',
+    'pytesseract',
+    'keyboard',
+]
+
 setup(
     name="SCAutolib",
     version="1.0.17",
@@ -36,8 +45,12 @@ setup(
     packages=find_packages(),
     python_requires='>=3',
     install_requires=reqs,
+    extras_require={
+        'graphical': graphical_reqs
+    },
     include_package_data=True,
     tests_require=["pytest", "pytest-env"],
     entry_points={
-        "console_scripts": ["scauto=SCAutolib.cli_commands:cli"]}
+        "console_scripts": ["scauto=SCAutolib.cli_commands:cli"]
+    }
 )
