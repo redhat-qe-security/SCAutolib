@@ -4,8 +4,6 @@ import os
 from time import sleep, time
 import cv2
 import numpy as np
-import pandas as pd
-from io import StringIO
 import pytesseract
 import keyboard
 import uinput
@@ -120,31 +118,44 @@ class Mouse():
         self.device.emit(uinput_button, 0)
 
 
-class KB():
-    """Wrapper class for keyboard library."""
+def image_to_data(filename):
+    """
+    Convert screenshot into dataframe of words with their coordinates.
+    """
+    UPSCALING_FACTOR = 2
 
-    def __init__(self, wait_time: float = 5):
-        self.WAIT_TIME = wait_time
+    image = cv2.imread(filename)
+    grayscale = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    upscaled = cv2.resize(grayscale,
+                          dsize=None,
+                          fx=UPSCALING_FACTOR,
+                          fy=UPSCALING_FACTOR,
+                          interpolation=cv2.INTER_LANCZOS4)
+    _, binary = cv2.threshold(upscaled, 120, 255, cv2.THRESH_BINARY_INV)
+    df = pytesseract.image_to_data(binary, output_type='data.frame')
 
-        def kb_decorator(fn):
-            def wrapper(*args, **kwargs):
-                # Format the arguments for logging
-                kwargs_list = ["=".join((key, repr(value)))
-                               for key, value in kwargs.items()]
-                args_list = [repr(value) for value in list(args)]
-                all_args = ", ".join(args_list + kwargs_list)
-                logger.info(f'Calling keyboard.{fn.__name__}({all_args})')
-                fn(*args, **kwargs)
-                sleep(self.WAIT_TIME)
-            return wrapper
+    yres, xres = binary.shape[:2]
+    df[['left', 'width']] /= xres
+    df[['top', 'height']] /= yres
 
-        # Workarounds for keyboard library
-        # keyboard.write types nothing if the delay is not set
-        self.write = functools.partial(kb_decorator(keyboard.write), delay=0.1)
-        self.send = kb_decorator(keyboard.send)
-        # For some reason the first keypress is never sent
-        # So this effectively does nothing
-        keyboard.send('enter')
+    logger.debug(df)
+    return df
+
+
+def images_same(filename1: str, filename2: str):
+    """Compare two images, return True if they are completely identical."""
+    im1 = cv2.imread(filename1)
+    im2 = cv2.imread(filename2)
+
+    # Is the resolution the same
+    if im1.shape != im2.shape:
+        return False
+
+    # Check if value of every pixel is the same
+    if np.bitwise_xor(im1, im2).any():
+        return False
+
+    return True
 
 
 class GUI():
@@ -156,14 +167,17 @@ class GUI():
         :param wait_time: Time to wait after each action
         """
 
-        self.WAIT_TIME = wait_time
-        self.GDM_INIT_TIME = 10
+        self.wait_time = wait_time
+        self.gdm_init_time = 10
         # Create the directory for screenshots
         self.screenshot_directory = '/tmp/SC-tests/' + str(int(time()))
         os.makedirs(self.screenshot_directory, exist_ok=True)
 
         self.mouse = Mouse()
-        self.kb = KB(self.WAIT_TIME)
+
+        # workaround for keyboard library
+        # otherwise the first character is not sent
+        keyboard.send('enter')
 
     def __enter__(self):
         self.screen = Screen(self.screenshot_directory)
@@ -171,54 +185,57 @@ class GUI():
         run(['systemctl', 'restart', 'gdm'], check=True)
         # Cannot screenshot before gdm starts displaying
         # This would break the display
-        sleep(self.GDM_INIT_TIME)
+        sleep(self.gdm_init_time)
 
         return self
 
     def __exit__(self, type, value, traceback):
+        run(['systemctl', 'stop', 'gdm'], check=True)
         # Gather the screenshots, generate report
         pass
 
-    @staticmethod
-    def _image_to_data(filename):
+    def action_decorator(func):
+        """Decorator for all functions, that change the state of GUI.
+        This decorator takes a screenshot before and after the action.
+        The two screenshots are compared. If they are the same,
+        an exception is raised.
         """
-        Convert screenshot into dataframe of words with their coordinates.
-        """
-        UPSCALING_FACTOR = 2
+        def wrapper(*args,
+                    wait_time=None,
+                    screenshot=True,
+                    check_difference=True,
+                    **kwargs):
+            self = args[0]
 
-        image = cv2.imread(filename)
-        grayscale = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        upscaled = cv2.resize(grayscale,
-                              dsize=None,
-                              fx=UPSCALING_FACTOR,
-                              fy=UPSCALING_FACTOR,
-                              interpolation=cv2.INTER_LANCZOS4)
-        _, binary = cv2.threshold(upscaled, 120, 255, cv2.THRESH_BINARY_INV)
-        df = pytesseract.image_to_data(binary, output_type='data.frame')
+            start_screenshot = self.screen.screenshot() if screenshot else None
+            func(*args, **kwargs)
+            sleep(wait_time or self.wait_time)
+            end_screenshot = self.screen.screenshot() if screenshot else None
 
-        yres, xres = binary.shape[:2]
-        df[['left', 'width']] /= xres
-        df[['top', 'height']] /= yres
+            if screenshot and check_difference:
+                # If the checking is enabled
+                # the action should change contents of the screen
+                if images_same(start_screenshot, end_screenshot):
+                    # If the screenshot before and after action are the same
+                    # an exception is raised
+                    raise Exception("Action did not change" +
+                                    " the contents of the screen")
 
-        logger.debug(df)
-        return df
+        return wrapper
 
-    @staticmethod
-    def _images_same(filename1: str, filename2: str):
-        """Compare two images, return True if they are completely identical."""
-        im1 = cv2.imread(filename1)
-        im2 = cv2.imread(filename2)
+    def log_decorator(func):
+        def wrapper(*args, **kwargs):
+            # Format the arguments for logging
+            kwargs_list = ["=".join((key, repr(value)))
+                           for key, value in kwargs.items()]
+            args_list = [repr(value) for value in list(args[1:])]
+            all_args = ", ".join(args_list + kwargs_list)
+            logger.info(f'Calling GUI.{func.__name__}({all_args})')
+            func(*args, **kwargs)
+        return wrapper
 
-        # Is the resolution the same
-        if im1.shape != im2.shape:
-            return False
-
-        # Check if value of every pixel is the same
-        if np.bitwise_xor(im1, im2).any():
-            return False
-
-        return True
-
+    @action_decorator
+    @log_decorator
     def click_on(self, key: str, timeout: float = 30):
         """Clicks matching word on the screen.
 
@@ -238,7 +255,7 @@ class GUI():
             if first_scr is None:
                 first_scr = screenshot
 
-            df = self._image_to_data(screenshot)
+            df = image_to_data(screenshot)
             selection = df['text'] == key
 
             # If there is no matching word, try again
@@ -269,8 +286,21 @@ class GUI():
         self.mouse.move(x, y)
         sleep(0.5)
         self.mouse.click()
-        sleep(self.WAIT_TIME)
+        sleep(self.wait_time)
 
+    @action_decorator
+    @log_decorator
+    def kb_write(self, *args, **kwargs):
+        # delay is a workaround needed for keyboard library
+        kwargs.setdefault('delay', 0.1)
+        keyboard.write(*args, **kwargs)
+
+    @action_decorator
+    @log_decorator
+    def kb_send(self, *args, **kwargs):
+        keyboard.send(*args, **kwargs)
+
+    @log_decorator
     def assert_text(self, key: str, timeout: float = 0):
         """
         Given key must be found in a screenshot before the timeout.
@@ -289,7 +319,7 @@ class GUI():
             first = False
             # Capture the screenshot
             screenshot = self.screen.screenshot()
-            df = self._image_to_data(screenshot)
+            df = image_to_data(screenshot)
             selection = df['text'] == key
 
             # The key was found
@@ -298,6 +328,7 @@ class GUI():
 
         raise Exception('The key was not found.')
 
+    @log_decorator
     def assert_no_text(self, key: str, timeout: float = 0):
         """
         If the given key is found in any screenshot before the timeout,
@@ -316,7 +347,7 @@ class GUI():
             first = False
             # Capture the screenshot
             screenshot = self.screen.screenshot()
-            df = self._image_to_data(screenshot)
+            df = image_to_data(screenshot)
             selection = df['text'] == key
 
             # The key was found, but should not be
