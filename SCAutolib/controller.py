@@ -6,7 +6,8 @@ from typing import Union
 
 from SCAutolib import exceptions, schema_cas, schema_user
 from SCAutolib import (logger, run, LIB_DIR, LIB_BACKUP, LIB_DUMP,
-                       LIB_DUMP_USERS, LIB_DUMP_CAS, LIB_DUMP_CARDS)
+                       LIB_DUMP_USERS, LIB_DUMP_CAS, LIB_DUMP_CARDS,
+                       TEMPLATES_DIR)
 from SCAutolib.models import CA, file, user, card, authselect as auth
 from SCAutolib.models.file import File
 from SCAutolib.utils import (OSVersion, _check_selinux, _gen_private_key,
@@ -22,6 +23,8 @@ class Controller:
     local_ca: CA.LocalCA = None
     ipa_ca: CA.IPAServerCA = None
     users: [user.User] = None
+    dconf_file = File(filepath='/etc/dconf/db/local.d/gnome_disable_welcome',
+                      template=Path(TEMPLATES_DIR, 'gnome_disable_welcome'))
 
     @property
     def conf_path(self):
@@ -130,6 +133,13 @@ class Controller:
 
         if graphical:
             run(['dnf', 'groupinstall', 'Server with GUI', '-y'])
+            # disable subsription message
+            run(['systemctl', '--global', 'mask',
+                 'org.gnome.SettingsDaemon.Subscription.target'])
+            # disable welcome message
+            self.dconf_file.create()
+            self.dconf_file.save()
+            run('dconf update')
 
         run(['dnf', 'groupinstall', "Smart Card Support", '-y'])
         logger.debug("Smart Card Support group in installed.")
