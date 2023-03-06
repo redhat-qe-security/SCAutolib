@@ -7,7 +7,6 @@ import numpy as np
 import pytesseract
 import keyboard
 import uinput
-import functools
 
 
 class Screen():
