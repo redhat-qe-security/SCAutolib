@@ -75,7 +75,12 @@ def setup_ca(ctx, ca_type):
 @click.pass_context
 def prepare(ctx, gdm, install_missing, graphical):
     """Configure entire system for smart cards based on the config file."""
-    ctx.obj["CONTROLLER"].prepare(ctx.obj["FORCE"], gdm, install_missing, graphical)
+    ctx.obj["CONTROLLER"].prepare(
+        ctx.obj["FORCE"],
+        gdm,
+        install_missing,
+        graphical
+    )
     exit(ReturnCode.SUCCESS.value)
 
 
