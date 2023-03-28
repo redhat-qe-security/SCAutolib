@@ -4,9 +4,23 @@ import re
 
 
 @contextmanager
-def assert_log(filename: str, expected_log: str):
-    logger.info(f'Opening log file {filename}')
-    with open(filename) as f:
+def assert_log(path: str, expected_log: str):
+    """Asserts, that a new line in log is created, that matches given regex.
+
+    :param path: Path to the file, that will be checked for added logs.
+    :param expected_log: Regular expression
+        that has to match one of the new logs.
+
+    When the context manager starts, the log file is skipped until the end
+    to ignore any previous logs.
+    Then the action inside the context manager is run.
+    This action should generate some logs.
+    When the context manager exits,
+    newly generated logs are matched to the regular expression.
+    In case none of the logs match, an exception is raised.
+    """
+    logger.info(f'Opening log file {path}')
+    with open(path) as f:
         # Move file pointer to the end of file
         f.seek(0, 2)
         p = re.compile(expected_log)
@@ -16,7 +30,7 @@ def assert_log(filename: str, expected_log: str):
             yield
 
         finally:
-            logger.info(f'Asserting regex `{expected_log}` in {filename}')
+            logger.info(f'Asserting regex `{expected_log}` in {path}')
             log = ''  # Only for debugging purposes
 
             for line in f:
