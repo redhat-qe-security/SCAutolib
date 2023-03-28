@@ -1,15 +1,16 @@
-from SCAutolib import run, logger
-
 import os
 from time import sleep, time
+
 import cv2
+import keyboard
 import numpy as np
 import pytesseract
-import keyboard
 import uinput
 
+from SCAutolib import run, logger
 
-class Screen():
+
+class Screen:
     """Captures the screenshots."""
 
     def __init__(self, directory: str):
@@ -23,7 +24,9 @@ class Screen():
     def screenshot(self, timeout: float = 30):
         """Runs ffmpeg to take a screenshot.
 
-        :return: Absolute path to the screenshot
+        :param timeout: Timeout in seconds. If ffmpeg cannot take screenshot
+            before the specified timeout, an exception is raised.
+        :return: Path to the screenshot
         :rtype: str
         """
 
@@ -51,7 +54,7 @@ class Screen():
         return filename
 
 
-class Mouse():
+class Mouse:
     """Controls the mouse of the system under test
     """
 
@@ -90,7 +93,7 @@ class Mouse():
             converted = int(value * self.ABS_MAX)
             self.device.emit(uinput_axis, converted, syn=False)
 
-        # Both axis move at once
+        # Both axes move at once
         self.device.syn()
 
     def click(self, button: str = 'left'):
@@ -117,18 +120,19 @@ class Mouse():
         self.device.emit(uinput_button, 0)
 
 
-def image_to_data(filename):
-    """
-    Convert screenshot into dataframe of words with their coordinates.
-    """
-    UPSCALING_FACTOR = 2
+def image_to_data(path: str):
+    """Convert screenshot into dataframe of words with their coordinates.
 
-    image = cv2.imread(filename)
+    :param path: path to the image to convert.
+    """
+    upscaling_factor = 2
+
+    image = cv2.imread(path)
     grayscale = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     upscaled = cv2.resize(grayscale,
                           dsize=None,
-                          fx=UPSCALING_FACTOR,
-                          fy=UPSCALING_FACTOR,
+                          fx=upscaling_factor,
+                          fy=upscaling_factor,
                           interpolation=cv2.INTER_LANCZOS4)
     _, binary = cv2.threshold(upscaled, 120, 255, cv2.THRESH_BINARY_INV)
     df = pytesseract.image_to_data(binary, output_type='data.frame')
@@ -141,10 +145,18 @@ def image_to_data(filename):
     return df
 
 
-def images_same(filename1: str, filename2: str):
-    """Compare two images, return True if they are completely identical."""
-    im1 = cv2.imread(filename1)
-    im2 = cv2.imread(filename2)
+def images_equal(path1: str, path2: str):
+    """Compare two images, return True if they are completely identical.
+    Images are considered identical, when their resolutions match and
+    all pixel values are equal.
+    Images can be in any format, that can be read using
+    imread function from OpenCV.
+
+    :param path1: Path to the first image.
+    :param path2: Path to the second image.
+    """
+    im1 = cv2.imread(path1)
+    im2 = cv2.imread(path2)
 
     # Is the resolution the same
     if im1.shape != im2.shape:
@@ -157,8 +169,58 @@ def images_same(filename1: str, filename2: str):
     return True
 
 
-class GUI():
-    """Represents the GUI and allows conrolling the system under test."""
+def action_decorator(func):
+    """Decorator for all functions, that change the state of GUI.
+    This decorator takes a screenshot before and after the action.
+    The two screenshots are compared. If they are the same,
+    an exception is raised.
+
+    :param func: The function to be decorated
+    """
+
+    def wrapper(self,
+                *args,
+                wait_time=None,
+                screenshot=True,
+                check_difference=True,
+                **kwargs):
+
+        start_screenshot = self.screen.screenshot() if screenshot else None
+        func(self, *args, **kwargs)
+        sleep(wait_time or self.wait_time)
+        end_screenshot = self.screen.screenshot() if screenshot else None
+
+        if screenshot and check_difference:
+            # If the checking is enabled
+            # the action should change contents of the screen
+            if images_equal(start_screenshot, end_screenshot):
+                # If the screenshot before and after action are the same
+                # an exception is raised
+                raise Exception("Action did not change "
+                                "the contents of the screen")
+
+    return wrapper
+
+
+def log_decorator(func):
+    """Functions decorated with this will be logged when called.
+
+    :param func: The function to be decorated
+    """
+
+    def wrapper(self, *args, **kwargs):
+        # Format the arguments for logging
+        kwargs_list = ["=".join((key, repr(value)))
+                       for key, value in kwargs.items()]
+        args_list = [repr(value) for value in list(args[1:])]
+        all_args = ", ".join(args_list + kwargs_list)
+        logger.info(f'Calling GUI.{func.__name__}({all_args})')
+        func(self, *args, **kwargs)
+    return wrapper
+
+
+class GUI:
+    """Represents the GUI and allows controlling the system under test."""
 
     def __init__(self, wait_time: float = 5):
         """Initializes the GUI of system under test.
@@ -190,60 +252,22 @@ class GUI():
 
     def __exit__(self, type, value, traceback):
         run(['systemctl', 'stop', 'gdm'], check=True)
-        # Gather the screenshots, generate report
-        pass
-
-    def action_decorator(func):
-        """Decorator for all functions, that change the state of GUI.
-        This decorator takes a screenshot before and after the action.
-        The two screenshots are compared. If they are the same,
-        an exception is raised.
-        """
-        def wrapper(*args,
-                    wait_time=None,
-                    screenshot=True,
-                    check_difference=True,
-                    **kwargs):
-            self = args[0]
-
-            start_screenshot = self.screen.screenshot() if screenshot else None
-            func(*args, **kwargs)
-            sleep(wait_time or self.wait_time)
-            end_screenshot = self.screen.screenshot() if screenshot else None
-
-            if screenshot and check_difference:
-                # If the checking is enabled
-                # the action should change contents of the screen
-                if images_same(start_screenshot, end_screenshot):
-                    # If the screenshot before and after action are the same
-                    # an exception is raised
-                    raise Exception("Action did not change" +
-                                    " the contents of the screen")
-
-        return wrapper
-
-    def log_decorator(func):
-        def wrapper(*args, **kwargs):
-            # Format the arguments for logging
-            kwargs_list = ["=".join((key, repr(value)))
-                           for key, value in kwargs.items()]
-            args_list = [repr(value) for value in list(args[1:])]
-            all_args = ", ".join(args_list + kwargs_list)
-            logger.info(f'Calling GUI.{func.__name__}({all_args})')
-            func(*args, **kwargs)
-        return wrapper
 
     @action_decorator
     @log_decorator
     def click_on(self, key: str, timeout: float = 30):
         """Clicks matching word on the screen.
 
+        :param key: String to find in the screenshot.
+        :param timeout: If the key is not found within this timeout,
+            an exception will be raised. Timeout is in seconds.
         """
         logger.info(f"Trying to find key='{key}' to click on.")
 
         end_time = time() + timeout
         item = None
         first_scr = None
+        last_scr = None
 
         # Repeat screenshotting, until the key is found
         while time() < end_time:
@@ -276,11 +300,11 @@ class GUI():
                 break
 
         if item is None:
-            raise Exception(f"Found no key='{key}' in screenshots " +
+            raise Exception(f"Found no key='{key}' in screenshots "
                             f"{first_scr} to {last_scr}")
 
-        x = float(item['left'] + item['width']/2)
-        y = float(item['top'] + item['height']/2)
+        x = float(item['left'] + item['width'] / 2)
+        y = float(item['top'] + item['height'] / 2)
 
         self.mouse.move(x, y)
         sleep(0.5)
@@ -307,6 +331,10 @@ class GUI():
         If the key is not found, exception is raised.
         Zero timeout means that only one screenshot
         will be taken and evaluated.
+
+        :param key: String to find in the screenshot.
+        :param timeout: If the key is not found within this timeout,
+            an exception will be raised. Timeout is in seconds.
         """
 
         logger.info(f"Trying to find key='{key}'")
@@ -335,8 +363,11 @@ class GUI():
 
         Zero timeout means that only one screenshot
         will be taken and evaluated.
+
+        :param key: String that should not be found in the screenshot.
+        :param timeout: Timeout is in seconds.
         """
-        logger.info(f"Trying to find key='{key}'" +
+        logger.info(f"Trying to find key='{key}'"
                     " (it should not be in the screenshot)")
 
         end_time = time() + timeout
@@ -351,5 +382,5 @@ class GUI():
 
             # The key was found, but should not be
             if selection.sum() != 0:
-                raise Exception(f"The key='{key}' was found " +
+                raise Exception(f"The key='{key}' was found "
                                 f"in the screenshot {screenshot}")
