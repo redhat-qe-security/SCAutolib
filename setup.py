@@ -16,11 +16,11 @@ with readme.open() as f:
 
 setup(
     name="SCAutolib",
-    version="1.0.16",
+    version="1.0.17",
     description=description,
     long_description=long_description,
     long_description_content_type='text/markdown',
-    url="https://github.com/x00Pavel/SCAutolib",
+    url="https://github.com/redhat-qe-security/SCAutolib",
     author="Pavel Yadlouski",
     author_email="pyadlous@redhat.com",
     classifiers=[

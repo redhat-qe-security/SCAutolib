@@ -7,16 +7,13 @@ import re
 
 import json
 import os
-import paramiko
 import python_freeipa
 from cryptography import x509
-from fabric.connection import Connection
 from hashlib import md5
-from invoke import Responder
 from pathlib import Path, PosixPath
 from python_freeipa import exceptions
 from python_freeipa.client_meta import ClientMeta
-from shutil import rmtree
+from shutil import rmtree, copy2
 from socket import gethostname
 
 from SCAutolib import TEMPLATES_DIR, logger, run, LIB_DIR, LIB_DUMP_CAS
@@ -316,6 +313,7 @@ class IPAServerCA(BaseCA):
     _ipa_server_realm: str = None
     _ipa_client_hostname: str = None
     _ipa_server_root_passwd: str = None
+    _ipa_client_script = Path(LIB_DIR, "ipa-client-sc.sh")
     meta_client: ClientMeta = None
     dump_file = LIB_DUMP_CAS.joinpath("ipa-server.json")
 
@@ -416,9 +414,18 @@ class IPAServerCA(BaseCA):
             raise
         logger.debug("IPA client is installed")
 
-        ipa_client_script = self._get_sc_setup_script()
+        try:
+            copy2("/tmp/cont-data/config-client-for-smart-card-auth.sh",
+                  self._ipa_client_script)
+            logger.info("Script for setting up IPA client for smart cards was "
+                        f"found and copied to {self._ipa_client_script}")
+        except FileNotFoundError:
+            logger.info("Script for setting up IPA client for smart cards was "
+                        "not found. It will be generated on IPA server and "
+                        "fetched")
+            self._get_sc_setup_script()
         run("kinit admin", input=self._ipa_server_admin_passwd)
-        run(f'bash {ipa_client_script} /etc/ipa/ca.crt', check=True)
+        run(f'bash {self._ipa_client_script} /etc/ipa/ca.crt', check=True)
         logger.debug("Setup of IPA client for smart card is finished")
 
         self._meta_client_login()
@@ -494,15 +501,28 @@ class IPAServerCA(BaseCA):
             logger.info(
                 f"Entry for IPA server {entry} presents in the /etc/hosts")
 
-    def _get_sc_setup_script(self) -> Path:
+    def _get_sc_setup_script(self):
         """
-        Fetch script for smart card setup of IPA client. Script is generated
-        only on IPA server. Fetching is made by connecting to the host via SSH.
+        Fetch script for smart card setup of IPA client and place it to
+        predefined location. Script is generated only on IPA server.
+        Fetching is done by connecting to the host via SSH.
+        """
+        import paramiko
+        from invoke import Responder
+        from fabric.connection import Connection
 
-        :return: Path to script
-        :rtype: patlib.Path
-        """
-        ipa_client_script = Path(LIB_DIR, "ipa-client-sc.sh")
+        class __PKeyChild(paramiko.PKey):
+            """This child class is need to fix SSH connection with MD5 algorithm
+            in FIPS mode
+
+            This is just workaround until PR in paramiko would be accepted
+            https://github.com/paramiko/paramiko/issues/396. After this PR is
+            merged, delete this class
+            """
+
+            def get_fingerprint_improved(self):
+                return md5(self.asbytes(), usedforsecurity=False).digest()
+
         kinitpass = Responder(
             pattern=f"Password for admin@{self._ipa_server_realm}: ",
             response=f"{self._ipa_server_admin_passwd}\n")
@@ -527,17 +547,18 @@ class IPAServerCA(BaseCA):
             result = c.run("ipa-advise config-client-for-smart-card-auth",
                            hide=True, in_stream=False)
             logger.debug("Script is generated on server side")
-            with open(ipa_client_script, "w") as f:
+            with open(self._ipa_client_script, "w") as f:
                 f.write(result.stdout)
-        if os.stat(ipa_client_script).st_size == 0:
+
+        if os.stat(self._ipa_client_script).st_size == 0:
             msg = "Script for IPA client smart card setup is not correctly " \
                   "copied to the host"
             logger.error(result.stdout)
             logger.error(result.stderr)
             raise SCAutolibException(msg)
+
         logger.debug("File for setting up IPA client for smart cards is "
-                     f"copied to {ipa_client_script}")
-        return ipa_client_script
+                     f"copied to {self._ipa_client_script}")
 
     def request_cert(self, csr: Path, username: str, cert_out: Path):
         """
@@ -642,18 +663,6 @@ class IPAServerCA(BaseCA):
         # Return code 2 means that the IPA client is not configured
         run(["ipa-client-install", "--uninstall", "-U"], return_code=[0, 2])
         logger.info("IPA client is removed.")
-
-    class __PKeyChild(paramiko.PKey):
-        """This child class is need to fix SSH connection with MD5 algorithm
-        in FIPS mode
-
-        This is just workaround until PR in paramiko would be accepted
-        https://github.com/paramiko/paramiko/issues/396. After this PR is merged,
-        delete this class
-        """
-
-        def get_fingerprint_improved(self):
-            return md5(self.asbytes(), usedforsecurity=False).digest()
 
     @property
     def ipa_server_hostname(self):
