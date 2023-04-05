@@ -33,7 +33,7 @@ schema_cas = Schema(And(
     Use(dict),
     # Check that CA section contains at least one and maximum
     # two entries
-    lambda l: 1 <= len(l.keys()) <= 2,
+    lambda l: 1 <= len(l.keys()) <= 2,  # noqa: E741
     {Optional("local_ca"): {
         Optional("dir", default=Path("/etc/SCAutolib/ca")): Use(Path)},
         Optional("ipa"): {
