@@ -289,7 +289,7 @@ class GUI:
             # Exactly one word matching, exit the loop
             elif selection.sum() == 1:
                 logger.info('Found exactly one match')
-                item = df[selection]
+                item = df[selection].iloc[0]
                 break
 
             # More than one word matches, choose the first match
