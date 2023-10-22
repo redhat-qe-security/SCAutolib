@@ -63,7 +63,9 @@ class Card:
         card = None
         if cnt["card_type"] == "virtual":
             card = VirtualCard(cnt, softhsm2_conf=Path(cnt["softhsm"]))
-            card.uri = cnt["uri"]
+#            card.uri = cnt["uri"]
+        elif cnt["card_type"] == "physical":
+            card = PhysicalCard(cnt)
         else:
             raise SCAutolibException(
                 f"Unknown card type: {cnt['card_type']}")
@@ -323,3 +325,110 @@ class VirtualCard(Card):
                    csr_path, "-subj", f"/CN={self.cardholder}"]
         run(cmd)
         return csr_path
+
+
+class PhysicalCard(Card):
+    """
+    :TODO PhysicalCard is not yet tested, it's Work In Progress
+        This class provides methods allowing to manipulate physical cards connected
+    via removinator.
+    """
+    _inserted: bool = False
+
+    name: str = None
+    pin: str = None
+    cardholder: str = None
+    CN: str = None
+    UID: str = None
+    expires: str = None
+    card_type: str = None
+    ca_name: str = None
+    slot: str = None
+    uri: str = None
+    card_dir: Path = None
+
+    def __init__(self, card_data: dict = None, card_dir: Path = None):
+        """
+        TODO this is not yet tested, insert and iemove methods need to be
+            implemented with removinator
+        Initialise object for physical smart card. Constructor of the base class
+        is also used.
+        """
+        self.card_data = card_data
+        # Not sure we will need following, let's see later
+        self.name = card_data["name"]
+        self.pin = card_data["pin"]
+        self.cardholder = card_data["cardholder"]
+        self.CN = card_data["CN"]
+        self.UID = card_data["UID"]
+#        self.expires = card_data["expires"]
+#        self.card_type = card_data["card_type"]
+#        self.ca_name = card_data["ca_name"]
+        self.slot = card_data["slot"]
+        self.uri = card_data["uri"]
+        self.card_dir = card_dir
+        assert self.card_dir.exists(), "Card root directory doesn't exists"
+
+        self.dump_file = LIB_DUMP_CARDS.joinpath(f"{self.name}.json")
+
+    def __call__(self, insert: bool):
+        """
+        Call method for physical smart card. It would be used in the context
+        manager.
+
+        :param insert: True if the card should be inserted, False otherwise
+        :type insert: bool
+        """
+        if insert:
+            self.insert()
+        return self.__enter__()
+
+    def __enter__(self):
+        """
+        Start of context manager for physical smart card. The card would be
+        inserted if ``insert`` parameter in constructor is specified.
+
+        :return: self
+        """
+        return self
+
+    def __exit__(self, exp_type, exp_value, exp_traceback):
+        """
+        End of context manager for physical smart card. If any exception was
+        raised in the current context, it would be logged as an error.
+
+        :param exp_type: Type of the exception
+        :param exp_value: Value for the exception
+        :param exp_traceback: Traceback of the exception
+        """
+        if exp_type is not None:
+            logger.error("Exception in virtual smart card context")
+            logger.error(format_exc())
+        if self._inserted:
+            self.remove()
+
+    def to_dict(self):
+        """
+        Customising default property for better serialisation for storing to
+        JSON format.
+
+        :return: dictionary with all values. Path objects are typed to string.
+        :rtype: dict
+        """
+        return self.card_data
+
+    @property
+    def user(self):
+        return self.cardholder
+
+    def insert(self):
+        """
+        Insert physical card using removinator
+        """
+        ...
+
+    def remove(self):
+        """
+        Remove physical card using removinator
+        """
+        ...

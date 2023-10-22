@@ -104,8 +104,13 @@ class Controller:
         # Create cards defined in config. For physical cards only objects will
         # be created while for virtual cards tokens will be created and enrolled
         for token in self.lib_conf["cards"]:
-            c = self.setup_card(token)
-            self.enroll_card(c)
+            # prepare CA objects for physical cards
+            if token["card_type"] == "physical":
+                self.setup_custom_ca(token)
+                self.setup_card(token)
+            else:
+                c = self.setup_card(token)
+                self.enroll_card(c)
 
     def setup_system(self, install_missing: bool, gdm: bool, graphical: bool):
         """
@@ -199,6 +204,11 @@ class Controller:
 
         dump_to_json(self.local_ca)
 
+    def setup_custom_ca(self, card_data: dict):
+        if card_data["card_type"] == "physical":
+            ca = local_ca_factory(create=True, card_data=card_data)
+            dump_to_json(ca)
+
     def setup_ipa_client(self, force: bool = False):
         """
         Configure IPA client for given IPA server on current host. IPA server
@@ -282,7 +292,9 @@ class Controller:
         if force and card_dir.exists():
             rmtree(card_dir)
 
-        if card_dict["card_type"] == "virtual":
+        if card_dict["card_type"] == "physical":
+            new_card = card.PhysicalCard(card_dict, card_dir=card_dir)
+        elif card_dict["card_type"] == "virtual":
             hsm_conf = file.SoftHSM2Conf(card_dir.joinpath("sofhtsm2.conf"),
                                          card_dir=card_dir)
             hsm_conf.create()
@@ -293,9 +305,9 @@ class Controller:
 
             # card needs to know some details of its user, so we add user as
             # card attribute
-            for user in self.users:
-                if user.username == card_dict["cardholder"]:
-                    new_card.user = user
+            for card_user in self.users:
+                if card_user.username == card_dict["cardholder"]:
+                    new_card.user = card_user
 
             if new_card.user.user_type == "local":
                 cnf_path = new_card.card_dir.joinpath(f"{new_card.cardholder}.cnf")
