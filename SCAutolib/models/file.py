@@ -49,7 +49,7 @@ class File:
     _simple_content = None
     _backup: dict = dict()
 
-    def __init__(self, filepath: Union[str, Path], template: str = None):
+    def __init__(self, filepath: Union[str, Path], template: Path = None):
         """
         Init of File
 
@@ -60,7 +60,7 @@ class File:
         """
         self._conf_file = Path(filepath)
         if template is not None:
-            self._template = Path(template)
+            self._template = template
 
     @property
     def path(self):
@@ -492,13 +492,13 @@ class OpensslCnf(File):
     # templates are needed for specific config files types. mapping:
     types = {
         "CA": {"template": Path(TEMPLATES_DIR, 'ca.cnf'),
-               "replace": "{ROOT_DIR}"},
+               "replace": ["{ROOT_DIR}"]},
         "user": {"template": Path(TEMPLATES_DIR, 'user.cnf'),
-                 "replace": "{user}"}
+                 "replace": ["{user}", "{cn}"]}
     }
 
     def __init__(self, filepath: Union[str, Path], conf_type: str,
-                 replace: str):
+                 replace: Union[str, list]):
         """
         Init of opensslCNF
 
@@ -506,13 +506,16 @@ class OpensslCnf(File):
         :type filepath: str or pathlib.Path
         :param conf_type: Identifier of cnf file
         :type conf_type: basestring
-        :param replace: string that will replace specific string from template
-        :type replace: str
+        :param replace: list of strings that will replace specific strings from
+                        template
+        :type replace: list
         """
         self._conf_file = Path(filepath)
         self._template = Path(self.types[conf_type]["template"])
-        self._old_string = self.types[conf_type]["replace"]
-        self._new_string = replace
+        self._old_strings = self.types[conf_type]["replace"]
+        if isinstance(replace, str):
+            replace = [replace]
+        self._new_strings = replace
 
     def create(self):
         """
@@ -520,9 +523,9 @@ class OpensslCnf(File):
         and update specific strings
         """
         with self._template.open('r') as template:
-            template_content = template.read()
-        self._content = template_content.replace(self._old_string,
-                                                 self._new_string)
+            self._content = template.read()
+        for old, new in zip(self._old_strings, self._new_strings):
+            self._content = self._content.replace(old, new)
 
     def save(self):
         """
