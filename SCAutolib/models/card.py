@@ -21,7 +21,6 @@ class Card:
     uri: str = None
     dump_file: Path = None
     type: str = None
-    _user = None
     _pattern: str = None
 
     def _set_uri(self):
@@ -57,26 +56,23 @@ class Card:
         ...
 
     @staticmethod
-    def load(json_file, **kwars):
+    def load(json_file):
         with json_file.open("r") as f:
             cnt = json.load(f)
 
         card = None
-        if cnt["type"] == "virtual":
-            assert "user" in kwars.keys(), \
-                "No user is provided to load the card."
-            card = VirtualCard(user=kwars["user"],
-                               softhsm2_conf=Path(cnt["softhsm"]))
+        if cnt["card_type"] == "virtual":
+            card = VirtualCard(cnt, softhsm2_conf=Path(cnt["softhsm"]))
             card.uri = cnt["uri"]
         else:
             raise SCAutolibException(
-                f"Unknown card type: {cnt['type']}")
+                f"Unknown card type: {cnt['card_type']}")
         return card
 
 
 class VirtualCard(Card):
     """
-    This class provides method for manipulating with virtual smart card. Virtual
+    This class provides methods for operations on virtual smart card. Virtual
     smart card by itself is represented by the systemd service in the system.
     The card relates to some user, so providing the user is essential for
     correct functioning of methods for the virtual smart card.
@@ -92,34 +88,58 @@ class VirtualCard(Card):
     _pattern = r"(pkcs11:model=PKCS%2315%20emulated;" \
                r"manufacturer=Common%20Access%20Card;serial=.*)"
     _inserted: bool = False
-    type = "virtual"
 
-    def __init__(self, user, softhsm2_conf: Path = None):
+    name: str = None
+    pin: str = None
+    cardholder: str = None
+    CN: str = None
+    UID: str = None
+    key: Path = None
+    cert: Path = None
+    card_dir: Path = None
+    card_type: str = None
+    ca_name: str = None
+    slot: str = None
+
+    def __init__(self, card_data, softhsm2_conf: Path = None,
+                 card_dir: Path = None, key: Path = None, cert: Path = None):
         """
         Initialise virtual smart card. Constructor of the base class is also
         used.
 
-        :param user: User of this card
-        :type user: SCAutolib.models.user.User
+        :param card_data: dict containing card details as pin, cardholder etc.
+        :type card_data: dict
         :param softhsm2_conf: path to SoftHSM2 configuration file
         :type softhsm2_conf: pathlib.Path
+        :param card_dir: path to card directory where card files will be saved
+        :type card_dir: pathlib.Path
+        :param key: path to key - if the key exist it will be used with the card
+        :type key: pathlib.Path
+        :param cert: path to certificate. If file exist it will be used with the
+            card
+        :type cert: pathlib.Path
         """
-
-        self.user = user
-        assert self.user.card_dir.exists(), "Card root directory doesn't exists"
-
-        self.dump_file = LIB_DUMP_CARDS.joinpath(f"card-{user.username}.json")
-
-        self._private_key = self.user.key
-        self._cert = self.user.cert
-
-        self._service_name = f"virt-sc-{self.user.username}"
+        self.name = card_data["name"]
+        self.pin = card_data["pin"]
+        self.cardholder = card_data["cardholder"]
+        self.card_type = card_data["card_type"]
+        self.CN = card_data["CN"]
+        self.ca_name = card_data["ca_name"]
+        self.card_dir = card_dir if card_dir is not None \
+            else Path(card_data["card_dir"])
+        assert self.card_dir.exists(), "Card root directory doesn't exists"
+        self.dump_file = LIB_DUMP_CARDS.joinpath(f"{self.name}.json")
+        self.key = key \
+            if key else self.card_dir.joinpath(f"key-{self.name}.pem")
+        self.cert = cert \
+            if cert else self.card_dir.joinpath(f"cert-{self.name}.pem")
+        self._service_name = self.name
         self._service_location = Path(
             f"/etc/systemd/system/{self._service_name}.service")
-        self.dump_file = LIB_DUMP_CARDS.joinpath(
-            f"card-{self._user.username}.json")
+        self._nssdb = self.card_dir.joinpath("db")
+        self.dump_file = LIB_DUMP_CARDS.joinpath(f"{self.name}.json")
         self._softhsm2_conf = softhsm2_conf if softhsm2_conf \
-            else Path("/home", self.user.username, "softhsm2.conf")
+            else Path(self.card_dir, "softhsm2.conf")
 
     def __call__(self, insert: bool):
         """
@@ -161,10 +181,18 @@ class VirtualCard(Card):
 
     def to_dict(self):
         return {
-            "softhsm": str(self._softhsm2_conf),
-            "type": "virtual",
+            "name": self.name,
+            "pin": self.pin,
+            "cardholder": self.cardholder,
+            "card_type": self.card_type,
+            "CN": self.CN,
+            "card_dir": str(self.card_dir),
+            "key": str(self.key),
+            "cert": str(self.cert),
             "uri": self.uri,
-            "username": self.user.username
+            "softhsm": str(self._softhsm2_conf),
+            "ca_name": self.ca_name,
+            "slot": self.slot
         }
 
     @property
@@ -175,15 +203,6 @@ class VirtualCard(Card):
     def softhsm2_conf(self, conf: Path):
         assert conf.exists(), "File doesn't exist"
         self._softhsm2_conf = conf
-
-    @property
-    def user(self):
-        return self._user
-
-    @user.setter
-    def user(self, system_user):
-        self._user = system_user
-        self._nssdb = self.user.card_dir.joinpath("db")
 
     @property
     def service_location(self):
@@ -217,19 +236,19 @@ class VirtualCard(Card):
         NSS database) with pkcs11-tool.
         """
         cmd = ["pkcs11-tool", "--module", "libsofthsm2.so", "--slot-index",
-               '0', "-w", self._user.key, "-y", "privkey", "--label",
-               f"'{self._user.username}'", "-p", self._user.pin, "--set-id", "0",
+               '0', "-w", self.key, "-y", "privkey", "--label",
+               f"'{self.cardholder}'", "-p", self.pin, "--set-id", "0",
                "-d", "0"]
         run(cmd, env={"SOFTHSM2_CONF": self._softhsm2_conf})
         logger.debug(
-            f"User key {self._user.key} is added to virtual smart card")
+            f"User key {self.key} is added to virtual smart card")
 
         cmd = ['pkcs11-tool', '--module', 'libsofthsm2.so', '--slot-index', "0",
-               '-w', self._user.cert, '-y', 'cert', '-p', self._user.pin,
-               '--label', f"'{self._user.username}'", '--set-id', "0", '-d', "0"]
+               '-w', self.cert, '-y', 'cert', '-p', self.pin,
+               '--label', f"'{self.cardholder}'", '--set-id', "0", '-d', "0"]
         run(cmd, env={"SOFTHSM2_CONF": self._softhsm2_conf})
         logger.debug(
-            f"User certificate {self._user.cert} is added to virtual smart card")
+            f"User certificate {self.cert} is added to virtual smart card")
 
         # To get URI of the card, the card has to be inserted
         # Virtual smart card can't be started without a cert and a key uploaded
@@ -248,20 +267,20 @@ class VirtualCard(Card):
         assert self._softhsm2_conf.exists(), \
             "Can't proceed, SoftHSM2 conf doesn't exist"
 
-        self.user.card_dir.joinpath("tokens").mkdir(exist_ok=True)
+        self.card_dir.joinpath("tokens").mkdir(exist_ok=True)
 
         p11lib = "/usr/lib64/pkcs11/libsofthsm2.so"
         # Initialize SoftHSM2 token. An error would be raised if token with same
         # label would be created.
         cmd = ["softhsm2-util", "--init-token", "--free", "--label",
-               self.user.username, "--so-pin", "12345678",
-               "--pin", self.user.pin]
+               self.cardholder, "--so-pin", "12345678",
+               "--pin", self.pin]
         run(cmd, env={"SOFTHSM2_CONF": self._softhsm2_conf}, check=True)
         logger.debug(
-            f"SoftHSM token is initialized with label '{self.user.username}'")
+            f"SoftHSM token is initialized with label '{self.cardholder}'")
 
         # Initialize NSS db
-        self._nssdb = self.user.card_dir.joinpath("db")
+        self._nssdb = self.card_dir.joinpath("db")
         self._nssdb.mkdir(exist_ok=True)
         run(f"modutil -create -dbdir sql:{self._nssdb} -force", check=True)
         logger.debug(f"NSS database is initialized in {self._nssdb}")
@@ -275,11 +294,32 @@ class VirtualCard(Card):
         # Create systemd service
         with self._template.open() as tmp:
             with self._service_location.open("w") as f:
-                f.write(tmp.read().format(username=self.user.username,
+                f.write(tmp.read().format(username=self.cardholder,
                                           softhsm2_conf=self._softhsm2_conf,
-                                          card_dir=self.user.card_dir))
+                                          card_dir=self.card_dir))
 
         logger.debug(f"Service is created in {self._service_location}")
         run("systemctl daemon-reload")
 
         return self
+
+    def gen_csr(self):
+        """
+        Method for generating local user specific CSR file that would be sent to
+        the local CA for generating the certificate. CSR is generated using
+        `openssl` command based on template CNF file.
+        """
+        csr_path = self.card_dir.joinpath(f"csr-{self.cardholder}.csr")
+        if self.user.user_type == "local":
+            cmd = ["openssl", "req", "-new", "-nodes", "-key", self.key,
+                   "-reqexts", "req_exts", "-config", self.cnf,
+                   "-out", csr_path]
+        else:
+            if not self.key:
+                raise SCAutolibException("Can't generate CSR because private "
+                                         "key is not set")
+            cmd = ["openssl", "req", "-new", "-days", "365",
+                   "-nodes", "-key", self.key, "-out",
+                   csr_path, "-subj", f"/CN={self.cardholder}"]
+        run(cmd)
+        return csr_path

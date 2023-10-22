@@ -15,7 +15,7 @@ from SCAutolib.exceptions import SCAutolibException
 from SCAutolib.models.CA import LocalCA, BaseCA, IPAServerCA
 from SCAutolib.models.card import Card
 from SCAutolib.models.file import OpensslCnf, SSSDConf
-from SCAutolib.models.user import BaseUser
+from SCAutolib.models.user import User
 
 
 class OSVersion(Enum):
