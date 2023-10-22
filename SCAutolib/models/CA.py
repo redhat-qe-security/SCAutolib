@@ -111,6 +111,8 @@ class BaseCA:
                              client_hostname=cnt["_ipa_client_hostname"],
                              domain=cnt["_ipa_server_domain"],
                              realm=cnt["_ipa_server_realm"])
+        elif cnt["ca_type"] == "custom":
+            ca = CustomCA(cnt)
         elif cnt["ca_type"] == "local":
             ca = LocalCA(root_dir=cnt["root_dir"])
         else:
@@ -303,6 +305,53 @@ class LocalCA(BaseCA):
             elif file.is_dir():
                 shutil.rmtree(file)
         logger.info(f"Local CA from {self.root_dir} is removed")
+
+
+class CustomCA(BaseCA):
+    """
+    :TODO: CustomCA is not tested yet and it's not functional until physical
+        cards testing with removinator is implemented
+    Represents CA for physical cards. Physical cards are often read-only and
+    rootCA certs or bundles are provided with a card. This class provides
+    methods for manipulation with rootCA certs of physical cards.
+    """
+    ca_type = "custom"
+
+    def __init__(self, card: dict):
+        """
+        Initialize required attributes
+        """
+        self.ca_type = CustomCA.ca_type
+        self.name = card["ca_name"]
+        self.ca_cert = card["ca_cert"]
+        self.dump_file = LIB_DUMP_CAS.joinpath(f"{self.name}.json")
+        self.type = card["type"]
+        self.root_dir: Path = LIB_DIR.joinpath(self.name)
+        self._ca_cert = self.root_dir.joinpath(f"{self.name}.pem")
+        self._ca_pki_db: Path = BaseCA._ca_pki_db
+
+    def setup(self):
+        """
+        Create rootCA file. Actually, copy cert from conf.json
+        """
+        if self.ca_cert is None:
+            raise SCAutolibException(
+                f"CA cerf for {self.name} not found")
+        with self._ca_cert.open('w') as newcert:
+            newcert.write(self.ca_cert)
+        logger.info("Local CA files are prepared")
+
+    def to_dict(self):
+        """
+        Customising default property for better serialisation for storing to
+        JSON format.
+
+        :return: dictionary with all values. Path objects are typed to string.
+        :rtype: dict
+        """
+        dict_ = {k: str(v) if type(v) is PosixPath else v
+                 for k, v in super().__dict__.items()}
+        return dict_
 
 
 class IPAServerCA(BaseCA):

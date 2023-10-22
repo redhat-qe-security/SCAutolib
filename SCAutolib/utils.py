@@ -12,7 +12,7 @@ from pathlib import Path
 from SCAutolib import (run, logger, TEMPLATES_DIR, LIB_DUMP_USERS, LIB_DUMP_CAS,
                        LIB_DUMP_CARDS)
 from SCAutolib.exceptions import SCAutolibException
-from SCAutolib.models.CA import LocalCA, BaseCA, IPAServerCA
+from SCAutolib.models.CA import LocalCA, BaseCA, CustomCA, IPAServerCA
 from SCAutolib.models.card import Card
 from SCAutolib.models.file import OpensslCnf, SSSDConf
 from SCAutolib.models.user import User
@@ -235,6 +235,10 @@ def local_ca_factory(path: Path = None, force: bool = False,
     if not create:
         ca = BaseCA.load(LIB_DUMP_CAS.joinpath(f"{ca_name}.json"))
         return ca
+
+    if not path:            # create CA for physical card
+        ca = CustomCA(card_data)
+        ca.setup()
     else:                   # create new local CA for virt card
         path.mkdir(exist_ok=True, parents=True)
         cnf = OpensslCnf(path.joinpath("ca.cnf"), "CA", str(path))
