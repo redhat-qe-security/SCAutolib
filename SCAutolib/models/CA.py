@@ -23,8 +23,10 @@ from SCAutolib.models.file import OpensslCnf
 
 class BaseCA:
     dump_file: Path = None
+    ca_type: str = None
     _ca_cert: Path = None
     _ca_key: Path = None
+    _ca_pki_db: Path = Path("/etc/sssd/pki/sssd_auth_ca_db.pem")
 
     @property
     def cert(self):
@@ -49,12 +51,33 @@ class BaseCA:
     def setup(self):
         """
         Configure the CA
-
-        :param force: In case if CA is already configured, specifies if it
-            should be reconfigured with force
-        :type force: bool
         """
         ...
+
+    def update_ca_db(self):
+        """
+        Update /etc/sssd/pki/sssd_auth_ca_db.pem with certificate defined in CA
+        object.
+        """
+        with self._ca_cert.open("r") as f_cert:
+            root_cert = f_cert.read()
+
+        if self._ca_pki_db.exists():
+            # Check if current CA cert is already present in the sssd auth db
+            with self._ca_pki_db.open("a+") as f:
+                data = f.read()
+                if root_cert not in data:
+                    f.write(root_cert)
+        else:
+            # Create /etc/sssd/pki directory if it doesn't exist
+            self._ca_pki_db.parents[0].mkdir(exist_ok=True)
+            with self._ca_pki_db.open("w") as f:
+                f.write(root_cert)
+        logger.debug(
+            f"CA certificate {self._ca_cert} is copied to {self._ca_pki_db}")
+        # Restoring SELinux context on the sssd auth db
+        run(f"restorecon -v {self._ca_pki_db}")
+        logger.info("Local CA is updated")
 
     def sign_cert(self):
         """
@@ -80,7 +103,7 @@ class BaseCA:
         with json_file.open("r") as f:
             cnt = json.load(f)
 
-        if "_ipa_server_ip" in cnt.keys():
+        if cnt["ca_type"] == "IPA":
             ca = IPAServerCA(ip_addr=cnt["_ipa_server_ip"],
                              server_hostname=cnt["_ipa_server_hostname"],
                              root_passwd=cnt["_ipa_server_root_passwd"],
@@ -88,15 +111,23 @@ class BaseCA:
                              client_hostname=cnt["_ipa_client_hostname"],
                              domain=cnt["_ipa_server_domain"],
                              realm=cnt["_ipa_server_realm"])
-        else:
+        elif cnt["ca_type"] == "local":
             ca = LocalCA(root_dir=cnt["root_dir"])
-        logger.debug(f"CA {type(ca)} is restored from file {json_file}")
+        else:
+            raise SCAutolibException("CA object not loaded")
+
+        logger.debug(f"CA {cnt['name']} is restored from file {json_file}")
         return ca
 
 
 class LocalCA(BaseCA):
+    """
+    Represents local CA that is created as CA for virtual cards.
+    """
     template = Path(TEMPLATES_DIR, "ca.cnf")
-    dump_file = LIB_DUMP_CAS.joinpath("local-ca.json")
+    ca_type = "local"
+    ca_name = "local_ca"
+    dump_file = LIB_DUMP_CAS.joinpath(f"{ca_name}.json")
 
     def __init__(self, root_dir: Path = None, cnf: OpensslCnf = None):
         """
@@ -106,15 +137,19 @@ class LocalCA(BaseCA):
         :param root_dir: Path to root directory of the CA. By default, is in
             /etc/SCAutolib/ca
         :type: Path
+        :param cnf: object representing openssl cnf file
+        :type cnf: OpensslCnf
         """
+        self.name = LocalCA.ca_name
+        self.ca_type = LocalCA.ca_type
         self.root_dir: Path = Path("/etc/SCAutolib/ca") if root_dir is None \
-            else root_dir
+            else Path(root_dir)
         assert self.root_dir is not None
         self._conf_dir: Path = self.root_dir.joinpath("conf")
         self._newcerts: Path = self.root_dir.joinpath("newcerts")
         self._certs: Path = self.root_dir.joinpath("certs")
         self._crl: Path = self.root_dir.joinpath("crl", "root.pem")
-        self._ca_pki_db: Path = Path("/etc/sssd/pki/sssd_auth_ca_db.pem")
+        self._ca_pki_db = BaseCA._ca_pki_db
 
         self._ca_cnf: OpensslCnf = cnf if cnf else OpensslCnf(
             conf_type="CA",
@@ -177,10 +212,7 @@ class LocalCA(BaseCA):
 
     def setup(self):
         """
-        Creates directory and file structure needed by local CA. If directory
-        already exists and force = True, directory would be recursively deleted
-        and new local CA would be created. Otherwise, configuration would be
-        skipped.
+        Creates directory and file structure needed by local CA.
         """
         if self._ca_cnf is None:
             raise SCAutolibException("CA CNF file is not set")
@@ -211,31 +243,12 @@ class LocalCA(BaseCA):
         run(['openssl', 'ca', '-config', self._ca_cnf.path, '-gencrl',
              '-out', self._crl], check=True)
 
-        with self._ca_cert.open("r") as f_cert:
-            root_cert = f_cert.read()
-
-        if self._ca_pki_db.exists():
-            # Check if current CA cert doesn't present in the sssd auth db
-            with self._ca_pki_db.open("a+") as f:
-                data = f.read()
-                if root_cert not in data:
-                    f.write(root_cert)
-        else:
-            # Create /etc/sssd/pki directory if it doesn't exist
-            self._ca_pki_db.parents[0].mkdir(exist_ok=True)
-            with self._ca_pki_db.open("w") as f:
-                f.write(root_cert)
-        logger.debug(
-            f"CA certificate {self._ca_cert} is copied to {self._ca_pki_db}")
-        # Restoring SELinux context on the sssd auth db
-        run(f"restorecon -v {self._ca_pki_db}")
-
-        logger.info("Local CA is configured")
+        logger.info("Local CA files are prepared")
 
     def request_cert(self, csr: Path, username: str,
                      cert_out: Path = None) -> Path:
         """
-        Create the certificate from CSR and sign it. Certificate is store
+        Create the certificate from CSR and sign it. Certificate is stored
         in the <root ca directory>/ca/newcerts directory with name username.pem
 
         :param csr: path to CSR
@@ -304,7 +317,8 @@ class IPAServerCA(BaseCA):
     connection is made to the server and the script is fetched in frame of
     ``IPAServerCA.create()`` method.
     """
-
+    ca_type = "IPA"
+    ca_name = "IPA"
     _ca_cert: Path = Path("/etc/ipa/ca.crt")
     _ipa_server_ip: str = None
     _ipa_server_hostname: str = None
@@ -343,6 +357,8 @@ class IPAServerCA(BaseCA):
                       be used instead
         :type realm: str
         """
+        self.ca_type = IPAServerCA.ca_type
+        self.name = IPAServerCA.ca_name
         self._ipa_server_ip = ip_addr
         self._ipa_server_hostname = server_hostname
         self._add_to_hosts()  # So we can log in to the IPA before setup
