@@ -70,6 +70,21 @@ class Controller:
         """
         Method for setting up whole system based on configuration file and
         CLI commands
+
+        :param force: Defines if existing objects, files, users, services etc.
+            should be erased or overwritten if they already exist. True stands
+            for erase/overwrite. This parameter is forwarded to several methods
+            and it can have slightly different meaning in each of them.
+            For details see docstrings of the methods.
+        :type force: bool
+
+        :param gdm: If True, GDM package would be installed
+        :type gdm: bool
+        :param install_missing: If True, all missing packages would be
+            installed
+        :type install_missing: bool
+        :param graphical: If True, GUI tests dependencies are installed
+        :type graphical: bool
         """
         self.setup_system(install_missing, gdm, graphical)
 
@@ -82,9 +97,15 @@ class Controller:
             self.setup_ipa_client(force=force)
         except exceptions.SCAutolibWrongConfig as e:
             logger.info(e)
+
         for usr in self.lib_conf["users"]:
-            u = self.setup_user(usr, force=force)
-            self.enroll_card(u)
+            self.setup_user(usr, force=force)
+
+        # Create cards defined in config. For physical cards only objects will
+        # be created while for virtual cards tokens will be created and enrolled
+        for token in self.lib_conf["cards"]:
+            c = self.setup_card(token)
+            self.enroll_card(c)
 
     def setup_system(self, install_missing: bool, gdm: bool, graphical: bool):
         """
@@ -97,6 +118,8 @@ class Controller:
         :type install_missing: bool
         :param gdm: If True, GDM package would be installed
         :type gdm: bool
+        :param graphical: If True, GUI tests dependencies are installed
+        :type graphical: bool
         :return:
         """
         for d in (LIB_DIR, LIB_BACKUP, LIB_DUMP, LIB_DUMP_USERS, LIB_DUMP_CAS,
@@ -112,13 +135,13 @@ class Controller:
             packages += ["tesseract", "ffmpeg-free"]
 
         # Prepare for virtual cards
-        if "virtual" in [u["card_type"] for u in self.lib_conf["users"]]:
+        if "virtual" in [c["card_type"] for c in self.lib_conf["cards"]]:
             packages += ["pcsc-lite-ccid", "pcsc-lite", "virt_cacard",
                          "vpcd", "softhsm"]
             run("dnf -y copr enable jjelen/vsmartcard")
 
         # Add IPA packages if needed
-        if not all([u["local"] for u in self.lib_conf["users"]]):
+        if not all([u["user_type"] == "local" for u in self.lib_conf["users"]]):
             packages += self._general_steps_for_ipa()
 
         # Check for installed packages
@@ -148,16 +171,16 @@ class Controller:
         self.sssd_conf.save()
         self._general_steps_for_virtual_sc()
 
-        base_user = user.BaseUser("base-user", "redhat")
+        base_user = user.User("base-user", "redhat")
         base_user.add_user()
         dump_to_json(base_user)
-        dump_to_json(user.BaseUser(username="root",
-                                   password=self.lib_conf["root_passwd"]))
+        dump_to_json(user.User(username="root",
+                               password=self.lib_conf["root_passwd"]))
 
     def setup_local_ca(self, force: bool = False):
         """
         Setup local CA based on configuration from the configuration file. All
-        necessary file for this operation (e.g. CNF file for self-signed root
+        necessary files for this operation (e.g. CNF file for self-signed root
         certificate) would be created along the way.
 
         :param force: If local CA already exists in given directory, specifies
@@ -171,7 +194,7 @@ class Controller:
             raise exceptions.SCAutolibWrongConfig(msg)
 
         ca_dir: Path = self.lib_conf["ca"]["local_ca"]["dir"]
-        self.local_ca = local_ca_factory(ca_dir, force)
+        self.local_ca = local_ca_factory(path=ca_dir, force=force, create=True)
         logger.info(f"Local CA is configured in {ca_dir}")
 
         dump_to_json(self.local_ca)
@@ -210,8 +233,7 @@ class Controller:
 
     def setup_user(self, user_dict: dict, force: bool = False):
         """
-        Configure the user on the specified system (local machine/CA). The user
-        would be configured along with the card based on configurations.
+        Configure the user on the specified system (local machine/CA).
 
         :param force: specify if the user should be re-created with its
             card directory
@@ -221,41 +243,14 @@ class Controller:
         :return: the user object
         """
         new_user = None
-        card_dir: Path = user_dict["card_dir"]
-        # Card dir is home dir of the user home directory
-        if force and card_dir.exists():
-            rmtree(card_dir)
 
-        if user_dict["local"]:
+        if user_dict["user_type"] == "local":
             new_user = user.User(username=user_dict["name"],
-                                 pin=user_dict["pin"],
-                                 password=user_dict["passwd"],
-                                 card_dir=card_dir,
-                                 cert=user_dict["cert"], key=user_dict["key"],
-                                 local=True)
+                                 password=user_dict["passwd"])
             if force:
-                if new_user.cert and new_user.cert.exists():
-                    self.local_ca.revoke_cert(new_user.cert)
                 new_user.delete_user()
-            user_dict["card_dir"].mkdir(exist_ok=True)
             new_user.add_user()
 
-            csr_path = new_user.card_dir.joinpath(f"csr-{new_user.username}.csr")
-            cnf = file.OpensslCnf(filepath=csr_path, conf_type="user",
-                                  replace=new_user.username)
-            cnf.create()
-            cnf.save()
-
-            new_user.cnf = cnf.path
-            self.sssd_conf.set(
-                section=f"certmap/shadowutils/{new_user.username}",
-                key="matchrule",
-                value=f"<SUBJECT>.*CN={new_user.username}.*")
-            self.sssd_conf.save()
-            self.sssd_conf.update_default_content()
-            run(["systemctl", "restart", "sssd"])
-            logger.debug(f"Match rule for user {new_user.username} is added "
-                         f"to /etc/sssd/sssd.conf")
         else:
             if self.ipa_ca is None:
                 msg = "Can't proceed in configuration of IPA user because no " \
@@ -263,75 +258,96 @@ class Controller:
                 raise exceptions.SCAutolibException(msg)
             new_user = user.IPAUser(ipa_server=self.ipa_ca,
                                     username=user_dict["name"],
-                                    pin=user_dict["pin"],
-                                    password=user_dict["passwd"],
-                                    card_dir=card_dir,
-                                    cert=user_dict["cert"],
-                                    key=user_dict["key"],
-                                    local=False)
+                                    password=user_dict["passwd"])
             if force:
-                if new_user.cert and new_user.cert.exists():
-                    self.ipa_ca.revoke_cert(new_user.cert)
                 new_user.delete_user()
-            user_dict["card_dir"].mkdir(exist_ok=True)
-
             new_user.add_user()
+        self.users.append(new_user)
+        dump_to_json(new_user)
+        return new_user
 
-        if user_dict["card_type"] == "virtual":
-            hsm_conf = file.SoftHSM2Conf(
-                new_user.card_dir.joinpath("sofhtsm2.conf"),
-                new_user.card_dir)
+    def setup_card(self, card_dict: dict, force: bool = False):
+        """
+        Create card object. Card object should contain its root CA cert as it
+        represents general card (i.e. including physical read-only cards).
+
+        :param card_dict: Dictionary containing card attributes
+        :type card_dict: dict
+        :param force: If its true and card directory exists it will be removed
+        :type force: bool
+        """
+        card_dir: Path = Path("/root/cards", card_dict["name"])
+        card_dir.mkdir(parents=True, exist_ok=True)
+
+        if force and card_dir.exists():
+            rmtree(card_dir)
+
+        if card_dict["card_type"] == "virtual":
+            hsm_conf = file.SoftHSM2Conf(card_dir.joinpath("sofhtsm2.conf"),
+                                         card_dir=card_dir)
             hsm_conf.create()
             hsm_conf.save()
 
-            new_user.card = card.VirtualCard(new_user,
-                                             softhsm2_conf=hsm_conf.path)
+            new_card = card.VirtualCard(card_dict, softhsm2_conf=hsm_conf.path,
+                                        card_dir=card_dir)
+
+            # card needs to know some details of its user, so we add user as
+            # card attribute
+            for user in self.users:
+                if user.username == card_dict["cardholder"]:
+                    new_card.user = user
+
+            if new_card.user.user_type == "local":
+                cnf_path = new_card.card_dir.joinpath(f"{new_card.cardholder}.cnf")
+                cnf = file.OpensslCnf(filepath=cnf_path, conf_type="user",
+                                      replace=[new_card.cardholder, new_card.CN])
+                cnf.create()
+                cnf.save()
+
+                new_card.cnf = cnf.path
+
+                if force:
+                    if new_card.cert and new_card.cert.exists():
+                        self.local_ca.revoke_cert(new_card.cert)
+            else:  # IPA user
+                if force:
+                    if new_card.cert and new_card.cert.exists():
+                        self.ipa_ca.revoke_cert(new_card.cert)
         else:
-            raise NotImplementedError("Other card type than 'virtual' does"
-                                      "not supported yet")
+            raise NotImplementedError("Other card types than 'physical' and "
+                                      "'virtual' are not supported")
 
-        new_user.card.create()
-        self.users.append(new_user)
+        new_card.create()
+        dump_to_json(new_card)
+        return new_card
 
-        dump_to_json(new_user)
-
-        return new_user
-
-    def enroll_card(self, user_: user.User, force: bool = False):
+    def enroll_card(self, card: card.VirtualCard):
         """
-        Enroll the card of a given user with configured CA. If private key
-        and/or the certificate do not exists, new one's would be requested
+        Enroll the card - i.e. upload keys and certs to card. If private key
+        and/or the certificate do not exist, new one's would be requested
         from corresponding CA.
 
-        :param force:
-        :param user_: User with a card to be enrolled.
+        :param card: card object
+        :type card: card.VirtualCard
         """
-        logger.debug(f"Starting enrollment of the card for user "
-                     f"{user_.username}")
-        if not user_.card:
+        logger.debug(f"Starting enrollment of the card {card.name}")
+        if not card:
             raise exceptions.SCAutolibException(
-                f"Card for the user {user_.username} is not initialized")
+                f"Card {card.name} is not initialized")
 
-        if not user_.key.exists():
-            _gen_private_key(user_.key)
+        if not card.key.exists():
+            _gen_private_key(card.key)
 
-        if not user_.cert.exists():
-            # Creating a new private key makes sense only if the certificate
-            # doesn't exist yet
-
-            csr = user_.gen_csr()
-
+        if not card.cert.exists():
+            csr = card.gen_csr()
             ca = self.ipa_ca \
-                if isinstance(user_, user.IPAUser) else self.local_ca
-            user_.cert = ca.request_cert(csr, user_.username, user_.cert)
+                if isinstance(card.user, user.IPAUser) else self.local_ca
+            card.cert = ca.request_cert(csr, card.cardholder, card.cert)
 
-        user_.card.enroll()
+        card.enroll()
+        dump_to_json(card)
 
-        dump_to_json(user_.card)
-        # Update the dump for current user to link it with the card
-        dump_to_json(user_)
-
-    def cleanup(self):
+    def cleanup(self):  # FIXME
         """
         Clean the system after setup. This method restores the SSSD config file,
         deletes created users with cards, remove CA's (local and/or IPA Client)
@@ -339,18 +355,18 @@ class Controller:
         self.sssd_conf.clean()
 
         for user_file in LIB_DUMP_USERS.iterdir():
-            usr = user.BaseUser.load(user_file)
-            usr.delete()
-            card_file = LIB_DUMP_CARDS.joinpath(f"card-{usr.username}.json")
+            usr = user.User.load(user_file)
+            usr.delete_user()
+        for card_file in LIB_DUMP_CARDS.iterdir():
             if card_file.exists():
-                card.Card.load(card_file, user=user).delete()
+                card.Card.load(card_file).delete()
 
         if self.local_ca:
             self.local_ca.cleanup()
         if self.ipa_ca:
             self.ipa_ca.cleanup()
 
-        self.authselect.cleanup()
+        self.authselect.cleanup()  # TODO implement authselect.cleanup
 
     @staticmethod
     def _validate_configuration(conf: dict, params: {} = None) -> dict:
