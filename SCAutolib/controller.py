@@ -4,7 +4,7 @@ from schema import Schema, Use
 from shutil import rmtree
 from typing import Union
 
-from SCAutolib import exceptions, schema_cas, schema_user
+from SCAutolib import exceptions, schema_cas, schema_user, schema_card
 from SCAutolib import (logger, run, LIB_DIR, LIB_BACKUP, LIB_DUMP,
                        LIB_DUMP_USERS, LIB_DUMP_CAS, LIB_DUMP_CARDS,
                        TEMPLATES_DIR)
@@ -376,7 +376,8 @@ class Controller:
         # Specify general schema for whole config file
         schema = Schema({"root_passwd": Use(str),
                          "ca": schema_cas,
-                         "users": [schema_user]})
+                         "users": [schema_user],
+                         "cards": [schema_card]})
 
         return schema.validate(conf)
 
