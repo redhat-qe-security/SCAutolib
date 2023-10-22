@@ -49,12 +49,23 @@ schema_cas = Schema(And(
 # Specify validation schema for all users
 schema_user = Schema({'name': Use(str),
                       'passwd': Use(str),
+                      'user_type': Or("local", "ipa")})
+
+# Specify validation schema for all cards
+schema_card = Schema({'name': Use(str),
                       'pin': Use(str),
-                      Optional('card_dir', default=None): Use(Path),
-                      'card_type': Or("virtual", "real", "removinator"),
-                      Optional('cert', default=None): Use(Path),
-                      Optional('key', default=None): Use(Path),
-                      'local': Use(bool)})
+                      Optional('card_details', default=None): Use(str),
+                      'cardholder': Use(str),
+                      'CN': Use(str),
+                      Optional('UID', default=None): Use(str),
+                      Optional('expires', default=None): Use(str),
+                      'card_type': Or("virtual", "physical"),
+                      'ca_name': Use(str),
+                      Optional('ca_cert', default=None): Use(str),
+                      Optional('slot', default=None): Use(str),
+                      Optional('uri', default=None): Use(str),
+                      Optional('cert', default=None): Use(str),
+                      Optional('key', default=None): Use(str)})
 
 
 class ReturnCode(Enum):
@@ -85,7 +96,7 @@ def run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True,
     :type sleep: int
     :param return_code: acceptable return codes from given commands.
         If check=True, and the return code of the cmd is not in the return_code
-        list an subprocess.CalledProcessError exception would be raised.
+        list a subprocess.CalledProcessError exception would be raised.
     :type return_code: list
     :param cmd: Command to be executed
     :type cmd: list or str
