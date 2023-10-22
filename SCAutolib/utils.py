@@ -16,7 +16,7 @@ from SCAutolib.models.card import Card
 from SCAutolib.models.file import OpensslCnf
 from SCAutolib.models.user import BaseUser
 
-
+    
 class OSVersion(Enum):
     """
     Enumeration for Linux versions. Used for more convenient checks.
@@ -183,29 +183,45 @@ def ipa_factory():
     return ca
 
 
-def local_ca_factory(path: Path = None, force: bool = False):
+def local_ca_factory(path: Path = None, force: bool = False,
+                     card_data: dict = None, ca_name: str = None,
+                     create: bool = False):
     """
-    Create a new LocalCA object or load existing one if no path provided.
+    Create LocalCA object. If certain local CA object was created in previous
+    run of SCAutolib .json file with its configuration exists in the system and
+    CA object would be regenerated based on the file. If create param is True
+    regeneration attempt would be skipped and new LocalCA object will be created
 
     :param path: path to the CA directory
     :type path: Path
-    :param force: force creation of new CA
+    :param force: force creation of new CA, if the CA already existed it will be
+        removed
     :type force: bool
+    :param card_data: dictionary with various attributes of the card as PIN,
+        cardholder, slot, etc.
+    :type card_data: dict
+    :param ca_name: name of CA that identifies CA file to be loaded if create
+        parameter is set to False
+    :type ca_name: str
+    :param create: indicator to create new CA. If it's false existing CA files
+        will be loaded
+    :type create: bool
     :return: object of LocalCA
     :rtype: SCAutolib.models.CA.LocalCA
     """
-    if not path:
-        return BaseCA.load(LIB_DUMP_CAS.joinpath("local-ca.json"))
-
-    path.mkdir(exist_ok=True, parents=True)
-    cnf = OpensslCnf(path.joinpath("ca.cnf"), "CA", str(path))
-    ca = LocalCA(root_dir=path, cnf=cnf)
-    if force:
-        logger.warning(f"Removing previous local CA in a directory {path}")
-        ca.cleanup()
-    ca.dump_file = path.joinpath("ca-dump.json")
-    cnf.create()
-    cnf.save()
-    ca.setup()
-    run(["systemctl", "restart", "sssd"], sleep=5)
-    return ca
+    if not create:
+        ca = BaseCA.load(LIB_DUMP_CAS.joinpath(f"{ca_name}.json"))
+        return ca
+    else:                   # create new local CA for virt card
+        path.mkdir(exist_ok=True, parents=True)
+        cnf = OpensslCnf(path.joinpath("ca.cnf"), "CA", str(path))
+        ca = LocalCA(root_dir=path, cnf=cnf)
+        if force:
+            logger.warning(f"Removing previous local CA in a directory {path}")
+            ca.cleanup()
+        cnf.create()
+        cnf.save()
+        ca.setup()
+        ca.update_ca_db()
+        run(["systemctl", "restart", "sssd"], sleep=5)
+        return ca
