@@ -1,7 +1,7 @@
 """
 This module provides a set of additional helping functions that are used
-across the library. These functions are made based on library demands and are
-not attended to cover some general use-cases or specific corner cases.
+across the library. These functions are based on library demands and are
+not aimed to cover some general use-cases or specific corner cases.
 """
 import json
 from cryptography.hazmat.primitives import serialization
@@ -9,14 +9,15 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from enum import Enum
 from pathlib import Path
 
-from SCAutolib import run, logger, TEMPLATES_DIR, LIB_DUMP_USERS, LIB_DUMP_CAS
+from SCAutolib import (run, logger, TEMPLATES_DIR, LIB_DUMP_USERS, LIB_DUMP_CAS,
+                       LIB_DUMP_CARDS)
 from SCAutolib.exceptions import SCAutolibException
 from SCAutolib.models.CA import LocalCA, BaseCA, IPAServerCA
 from SCAutolib.models.card import Card
-from SCAutolib.models.file import OpensslCnf
+from SCAutolib.models.file import OpensslCnf, SSSDConf
 from SCAutolib.models.user import BaseUser
 
-    
+
 class OSVersion(Enum):
     """
     Enumeration for Linux versions. Used for more convenient checks.
@@ -134,8 +135,7 @@ def dump_to_json(obj):
 
 def user_factory(username, **kwargs):
     """
-    Load user with given username from JSON file. If user have the card file
-    linked, then load it as well.
+    Load user with given username from JSON file.
 
     :param username: username of the user
     :type username: str
@@ -145,17 +145,40 @@ def user_factory(username, **kwargs):
     """
     user_file = LIB_DUMP_USERS.joinpath(f"{username}.json")
     logger.debug(f"Loading user {username} from {user_file}")
-    result = None
     user = None
     if user_file.exists():
-        result = BaseUser.load(user_file, **kwargs)
-    if isinstance(result, tuple):
-        user, card_file = result
-        logger.debug(f"Loading card from {card_file}")
-        user.card = Card.load(card_file, user=user)
-    else:
-        user = result
+        user = User.load(user_file, **kwargs)
+    # TODO: add failure statement
     return user
+
+
+def token_factory(card_name: str = None, update_sssd: bool = False):
+    """
+    Load card with given name from JSON file. This function is intended to load
+    card objects to tests during pytest configuration. If update_sssd param is
+    True sssd.conf file will be updated based on card data
+
+    :param card_name: name of the card to be loaded
+    :type card_name: str
+    :param update_sssd: indicates if sssd.conf matchrule should be updated based
+        on card data
+    :type update_sssd bool
+
+    :return: card object
+    :rtype: Card
+    """
+    card_file = LIB_DUMP_CARDS.joinpath(f"{card_name}.json")
+    logger.debug(f"Loading card {card_name} from {card_file}")
+    card = None
+    if card_file.exists():
+        card = Card.load(card_file)
+    if update_sssd:
+        sssd_conf = SSSDConf()
+        sssd_conf.set(section=f"certmap/shadowutils/{card.cardholder}",
+                      key="matchrule",
+                      value=f"<SUBJECT>.*CN={card.CN}.*")
+        sssd_conf.save()
+    return card
 
 
 def ipa_factory():
