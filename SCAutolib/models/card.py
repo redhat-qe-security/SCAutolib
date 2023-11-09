@@ -63,7 +63,7 @@ class Card:
 
         card = None
         if cnt["type"] == "virtual":
-            assert "user" in kwars.keys(),\
+            assert "user" in kwars.keys(), \
                 "No user is provided to load the card."
             card = VirtualCard(user=kwars["user"],
                                softhsm2_conf=Path(cnt["softhsm"]))

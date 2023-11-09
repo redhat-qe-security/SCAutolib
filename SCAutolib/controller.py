@@ -133,7 +133,7 @@ class Controller:
 
         if graphical:
             run(['dnf', 'groupinstall', 'Server with GUI', '-y'])
-            # disable subsription message
+            # disable subscription message
             run(['systemctl', '--global', 'mask',
                  'org.gnome.SettingsDaemon.Subscription.target'])
             # disable welcome message
