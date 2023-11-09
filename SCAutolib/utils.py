@@ -149,7 +149,7 @@ def user_factory(username, **kwargs):
     user = None
     if user_file.exists():
         result = BaseUser.load(user_file, **kwargs)
-    if type(result) == tuple:
+    if isinstance(result, tuple):
         user, card_file = result
         logger.debug(f"Loading card from {card_file}")
         user.card = Card.load(card_file, user=user)

@@ -19,7 +19,7 @@ def test_create_fail(file_test_prepare):
     file_test = file_test_prepare
     with file_test._conf_file.open('w') as config:
         config.write('Test config file')
-    with pytest.raises(FileExistsError, match=f'{file_test._conf_file } '
+    with pytest.raises(FileExistsError, match=f'{file_test._conf_file} '
                                               f'already exists'):
         file_test.create()
 

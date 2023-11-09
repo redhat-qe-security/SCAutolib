@@ -111,7 +111,7 @@ def run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True,
     """
     if return_code is None:
         return_code = [0]
-    if type(cmd) == str:
+    if isinstance(cmd, str):
         cmd = cmd.split(" ")
     logger.debug(f"run: {' '.join([str(i) for i in cmd])}")
     out = subprocess.run(cmd, stdout=stdout, stderr=stderr, encoding="utf-8",
