@@ -6,27 +6,16 @@ not aimed to cover some general use-cases or specific corner cases.
 import json
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
-from enum import Enum
 from pathlib import Path
 
 from SCAutolib import (run, logger, TEMPLATES_DIR, LIB_DUMP_USERS, LIB_DUMP_CAS,
                        LIB_DUMP_CARDS)
+from SCAutolib.enums import OSVersion
 from SCAutolib.exceptions import SCAutolibException
 from SCAutolib.models.CA import LocalCA, BaseCA, CustomCA, IPAServerCA
 from SCAutolib.models.card import Card
 from SCAutolib.models.file import OpensslCnf, SSSDConf
 from SCAutolib.models.user import User
-
-
-class OSVersion(Enum):
-    """
-    Enumeration for Linux versions. Used for more convenient checks.
-    """
-    Fedora = 1
-    RHEL_9 = 2
-    RHEL_8 = 3
-    CentOS_8 = 4
-    CentOS_9 = 5
 
 
 def _check_selinux():
@@ -133,7 +122,7 @@ def dump_to_json(obj):
     logger.debug(f"Object {type(obj)} is stored to the {obj.dump_file} file")
 
 
-def user_factory(username, **kwargs):
+def load_user(username, **kwargs):
     """
     Load user with given username from JSON file.
 
@@ -144,15 +133,16 @@ def user_factory(username, **kwargs):
     :rtype: BaseUser
     """
     user_file = LIB_DUMP_USERS.joinpath(f"{username}.json")
-    logger.debug(f"Loading user {username} from {user_file}")
+    logger.debug(f"User {username} will be loaded from {user_file}")
     user = None
     if user_file.exists():
         user = User.load(user_file, **kwargs)
-    # TODO: add failure statement
+    else:
+        raise SCAutolibException(f"{user_file} does not exist")
     return user
 
 
-def token_factory(card_name: str = None, update_sssd: bool = False):
+def load_token(card_name: str = None, update_sssd: bool = False):
     """
     Load card with given name from JSON file. This function is intended to load
     card objects to tests during pytest configuration. If update_sssd param is
@@ -206,20 +196,19 @@ def ipa_factory():
     return ca
 
 
-def local_ca_factory(path: Path = None, force: bool = False,
-                     card_data: dict = None, ca_name: str = None,
-                     create: bool = False):
+def ca_factory(path: Path = None, cnf: OpensslCnf = None,
+               card_data: dict = None, ca_name: str = None,
+               create: bool = False):
     """
-    Create LocalCA object. If certain local CA object was created in previous
-    run of SCAutolib .json file with its configuration exists in the system and
-    CA object would be regenerated based on the file. If create param is True
-    regeneration attempt would be skipped and new LocalCA object will be created
+    Create CA object. If certain CA object was created in previous run of
+    SCAutolib and it was serialized and saved in .json file, then such CA object
+    would be initialized based on the file. If create param is True new CA
+    object will be created regardless the presence of the .json file.
 
     :param path: path to the CA directory
     :type path: Path
-    :param force: force creation of new CA, if the CA already existed it will be
-        removed
-    :type force: bool
+    :param cnf: object representing openssl cnf file
+    :type cnf: OpensslCnf object
     :param card_data: dictionary with various attributes of the card as PIN,
         cardholder, slot, etc.
     :type card_data: dict
@@ -229,8 +218,8 @@ def local_ca_factory(path: Path = None, force: bool = False,
     :param create: indicator to create new CA. If it's false existing CA files
         will be loaded
     :type create: bool
-    :return: object of LocalCA
-    :rtype: SCAutolib.models.CA.LocalCA
+    :return: CA object
+    :rtype: SCAutolib.models.CA object
     """
     if not create:
         ca = BaseCA.load(LIB_DUMP_CAS.joinpath(f"{ca_name}.json"))
@@ -238,17 +227,7 @@ def local_ca_factory(path: Path = None, force: bool = False,
 
     if not path:            # create CA for physical card
         ca = CustomCA(card_data)
-        ca.setup()
-    else:                   # create new local CA for virt card
-        path.mkdir(exist_ok=True, parents=True)
-        cnf = OpensslCnf(path.joinpath("ca.cnf"), "CA", str(path))
+        return ca
+    else:                   # create new CA object for virtual card
         ca = LocalCA(root_dir=path, cnf=cnf)
-        if force:
-            logger.warning(f"Removing previous local CA in a directory {path}")
-            ca.cleanup()
-        cnf.create()
-        cnf.save()
-        ca.setup()
-        ca.update_ca_db()
-        run(["systemctl", "restart", "sssd"], sleep=5)
         return ca

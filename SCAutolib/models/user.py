@@ -16,6 +16,7 @@ from pathlib import Path, PosixPath
 from SCAutolib import run, logger, LIB_DUMP_USERS
 from SCAutolib.exceptions import SCAutolibException
 from SCAutolib.models.CA import IPAServerCA
+from SCAutolib.enums import UserType
 
 
 class User:
@@ -30,7 +31,7 @@ class User:
     def __init__(self, username, password):
         self.username = username
         self.password = password
-        self.user_type = "local"
+        self.user_type = UserType.local
         self.dump_file = LIB_DUMP_USERS.joinpath(f"{self.username}.json")
 
     def to_dict(self):
@@ -55,18 +56,21 @@ class User:
         with json_file.open("r") as f:
             cnt = json.load(f)
 
-        if cnt["user_type"] == "local":
+        if cnt["user_type"] == UserType.local:
             user = User(username=cnt["username"],
                         password=cnt["password"])
 
-        else:
+        elif cnt["user_type"] == UserType.ipa:
             if "ipa_server" not in kwargs:
-                raise SCAutolibException("IPA Server object does not provided. "
+                raise SCAutolibException("IPA Server object was not provided. "
                                          "Can't load IPA user.")
 
             user = IPAUser(ipa_server=kwargs["ipa_server"],
                            username=cnt["username"],
                            password=cnt["password"])
+
+        else:
+            raise SCAutolibException(f"Unknown user type: {cnt['user_type']}")
 
         logger.debug(f"User {user.__class__} is loaded: {user.__dict__}")
 
@@ -129,7 +133,7 @@ class IPAUser(User):
         """
 
         super().__init__(*args, **kwargs)
-        self.user_type = "ipa"
+        self.user_type = UserType.ipa
         self._meta_client = ipa_server.meta_client
         self._ipa_hostname = ipa_server.ipa_server_hostname
 

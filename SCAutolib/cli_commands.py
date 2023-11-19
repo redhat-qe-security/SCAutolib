@@ -6,8 +6,9 @@ import click
 from pathlib import Path
 from sys import exit
 
-from SCAutolib import logger, exceptions, schema_user, ReturnCode
+from SCAutolib import logger, exceptions, schema_user
 from SCAutolib.controller import Controller
+from SCAutolib.enums import ReturnCode
 
 
 @click.group()
