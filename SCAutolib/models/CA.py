@@ -19,6 +19,7 @@ from socket import gethostname
 from SCAutolib import TEMPLATES_DIR, logger, run, LIB_DIR, LIB_DUMP_CAS
 from SCAutolib.exceptions import SCAutolibException
 from SCAutolib.models.file import OpensslCnf
+from SCAutolib.enums import CAType
 
 
 class BaseCA:
@@ -65,6 +66,7 @@ class BaseCA:
         if self._ca_pki_db.exists():
             # Check if current CA cert is already present in the sssd auth db
             with self._ca_pki_db.open("a+") as f:
+                f.seek(0)
                 data = f.read()
                 if root_cert not in data:
                     f.write(root_cert)
@@ -103,7 +105,7 @@ class BaseCA:
         with json_file.open("r") as f:
             cnt = json.load(f)
 
-        if cnt["ca_type"] == "IPA":
+        if cnt["ca_type"] == CAType.ipa:
             ca = IPAServerCA(ip_addr=cnt["_ipa_server_ip"],
                              server_hostname=cnt["_ipa_server_hostname"],
                              root_passwd=cnt["_ipa_server_root_passwd"],
@@ -111,9 +113,9 @@ class BaseCA:
                              client_hostname=cnt["_ipa_client_hostname"],
                              domain=cnt["_ipa_server_domain"],
                              realm=cnt["_ipa_server_realm"])
-        elif cnt["ca_type"] == "custom":
+        elif cnt["ca_type"] == CAType.custom:
             ca = CustomCA(cnt)
-        elif cnt["ca_type"] == "local":
+        elif cnt["ca_type"] == CAType.local:
             ca = LocalCA(root_dir=cnt["root_dir"])
         else:
             raise SCAutolibException("CA object not loaded")
@@ -127,7 +129,7 @@ class LocalCA(BaseCA):
     Represents local CA that is created as CA for virtual cards.
     """
     template = Path(TEMPLATES_DIR, "ca.cnf")
-    ca_type = "local"
+    ca_type = CAType.local
     ca_name = "local_ca"
     dump_file = LIB_DUMP_CAS.joinpath(f"{ca_name}.json")
 
@@ -146,7 +148,8 @@ class LocalCA(BaseCA):
         self.ca_type = LocalCA.ca_type
         self.root_dir: Path = Path("/etc/SCAutolib/ca") if root_dir is None \
             else Path(root_dir)
-        assert self.root_dir is not None
+        if not self.root_dir.exists():
+            raise FileNotFoundError("Root directory of CA does not exist.")
         self._conf_dir: Path = self.root_dir.joinpath("conf")
         self._newcerts: Path = self.root_dir.joinpath("newcerts")
         self._certs: Path = self.root_dir.joinpath("certs")
@@ -315,7 +318,7 @@ class CustomCA(BaseCA):
     rootCA certs or bundles are provided with a card. This class provides
     methods for manipulation with rootCA certs of physical cards.
     """
-    ca_type = "custom"
+    ca_type = CAType.custom
 
     def __init__(self, card: dict):
         """
@@ -325,7 +328,6 @@ class CustomCA(BaseCA):
         self.name = card["ca_name"]
         self.ca_cert = card["ca_cert"]
         self.dump_file = LIB_DUMP_CAS.joinpath(f"{self.name}.json")
-        self.type = card["type"]
         self.root_dir: Path = LIB_DIR.joinpath(self.name)
         self._ca_cert = self.root_dir.joinpath(f"{self.name}.pem")
         self._ca_pki_db: Path = BaseCA._ca_pki_db
@@ -334,6 +336,7 @@ class CustomCA(BaseCA):
         """
         Create rootCA file. Actually, copy cert from conf.json
         """
+        self.root_dir.mkdir(parents=True, exist_ok=True)
         if self.ca_cert is None:
             raise SCAutolibException(
                 f"CA cerf for {self.name} not found")
@@ -366,7 +369,7 @@ class IPAServerCA(BaseCA):
     connection is made to the server and the script is fetched in frame of
     ``IPAServerCA.create()`` method.
     """
-    ca_type = "IPA"
+    ca_type = CAType.ipa
     ca_name = "IPA"
     _ca_cert: Path = Path("/etc/ipa/ca.crt")
     _ipa_server_ip: str = None
@@ -503,7 +506,8 @@ class IPAServerCA(BaseCA):
         if "365" not in policy["krbmaxpwdlife"]:
             self.meta_client.pwpolicy_mod(a_cn="global_policy",
                                           o_krbmaxpwdlife=365)
-            logger.debug("Maximum kerberos password lifetime is set to 365 days")
+            logger.debug(
+                "Maximum kerberos password lifetime is set to 365 days")
 
         # TODO: add to restore client host name
         logger.info("IPA client is configured on the system.")
@@ -608,7 +612,8 @@ class IPAServerCA(BaseCA):
             # in_stream = False is required because while testing with pytest
             # it collision appears with capturing of the output.
             logger.debug("Running kinit on the IPA server")
-            c.run("kinit admin", pty=True, watchers=[kinitpass], in_stream=False)
+            c.run("kinit admin", pty=True,
+                  watchers=[kinitpass], in_stream=False)
             result = c.run("ipa-advise config-client-for-smart-card-auth",
                            hide=True, in_stream=False)
             logger.debug("Script is generated on server side")

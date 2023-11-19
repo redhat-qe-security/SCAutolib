@@ -89,7 +89,8 @@ class Mouse:
 
         for uinput_axis, value in [(uinput.ABS_X, x), (uinput.ABS_Y, y)]:
             # Check if value between 0 and 1
-            assert ((value >= 0) and (value <= 1))
+            if not (0 <= value <= 1):
+                raise ValueError("Values must be floats between 0 and 1")
             converted = int(value * self.ABS_MAX)
             self.device.emit(uinput_axis, converted, syn=False)
 

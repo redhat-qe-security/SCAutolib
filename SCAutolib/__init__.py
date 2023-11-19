@@ -1,11 +1,11 @@
-from enum import Enum, auto
-
 import coloredlogs
 import logging
 import subprocess
 from pathlib import Path
 import time
 from schema import Schema, Use, Or, And, Optional
+
+from SCAutolib.enums import CardType, UserType
 
 fmt = "%(name)s:%(module)s.%(funcName)s.%(lineno)d [%(levelname)s] %(message)s"
 date_fmt = "%H:%M:%S"
@@ -49,7 +49,7 @@ schema_cas = Schema(And(
 # Specify validation schema for all users
 schema_user = Schema({'name': Use(str),
                       'passwd': Use(str),
-                      'user_type': Or("local", "ipa")})
+                      'user_type': Or(UserType.local, UserType.ipa)})
 
 # Specify validation schema for all cards
 schema_card = Schema({'name': Use(str),
@@ -59,25 +59,13 @@ schema_card = Schema({'name': Use(str),
                       'CN': Use(str),
                       Optional('UID', default=None): Use(str),
                       Optional('expires', default=None): Use(str),
-                      'card_type': Or("virtual", "physical"),
+                      'card_type': Or(CardType.virtual, CardType.physical),
                       'ca_name': Use(str),
                       Optional('ca_cert', default=None): Use(str),
                       Optional('slot', default=None): Use(str),
                       Optional('uri', default=None): Use(str),
                       Optional('cert', default=None): Use(str),
                       Optional('key', default=None): Use(str)})
-
-
-class ReturnCode(Enum):
-    """
-    Enum for return codes
-    """
-    SUCCESS = 0
-    MISSING_CA = auto()
-    FAILURE = auto()
-    ERROR = auto()
-    EXCEPTION = auto()
-    UNKNOWN = auto()
 
 
 def run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True,

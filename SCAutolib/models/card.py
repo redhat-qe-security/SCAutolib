@@ -11,6 +11,7 @@ from traceback import format_exc
 
 from SCAutolib import run, logger, TEMPLATES_DIR, LIB_DUMP_CARDS
 from SCAutolib.exceptions import SCAutolibException
+from SCAutolib.enums import CardType, UserType
 
 
 class Card:
@@ -26,16 +27,22 @@ class Card:
     def _set_uri(self):
         """
         Sets URI for given smart card. Uri is matched from ``p11tool`` command
-        with regular expression. If URI is not matched, assertion exception
-        would be raised
+        with regular expression. If URI is not matched, exception is raised.
 
-        :raise: AssertionError
+        :raise: SCAutolibException
         """
         cmd = ["p11tool", "--list-token-urls"]
         out = run(cmd).stdout
         urls = re.findall(self._pattern, out)
-        assert len(urls) == 1, f"Card URI is not matched. Matched URIs: {urls}"
-        self.uri = urls[0]
+        if len(urls) == 1:
+            self.uri = urls[0]
+            logger.info(f"Card URI is set to {self.uri}")
+        elif len(urls) == 0:
+            logger.warning("URI not set")
+            raise SCAutolibException("URI matching expected pattern not found.")
+        else:
+            logger.warning("URI not set")
+            raise SCAutolibException("Multiple URIs match expected pattern.")
 
     def insert(self):
         """
@@ -61,10 +68,10 @@ class Card:
             cnt = json.load(f)
 
         card = None
-        if cnt["card_type"] == "virtual":
+        if cnt["card_type"] == CardType.virtual:
             card = VirtualCard(cnt, softhsm2_conf=Path(cnt["softhsm"]))
 #            card.uri = cnt["uri"]
-        elif cnt["card_type"] == "physical":
+        elif cnt["card_type"] == CardType.physical:
             card = PhysicalCard(cnt)
         else:
             raise SCAutolibException(
@@ -102,6 +109,8 @@ class VirtualCard(Card):
     card_type: str = None
     ca_name: str = None
     slot: str = None
+    user = None
+    cnf = None
 
     def __init__(self, card_data, softhsm2_conf: Path = None,
                  card_dir: Path = None, key: Path = None, cert: Path = None):
@@ -129,7 +138,8 @@ class VirtualCard(Card):
         self.ca_name = card_data["ca_name"]
         self.card_dir = card_dir if card_dir is not None \
             else Path(card_data["card_dir"])
-        assert self.card_dir.exists(), "Card root directory doesn't exists"
+        if not self.card_dir.exists():
+            raise FileNotFoundError("Card root directory doesn't exists")
         self.dump_file = LIB_DUMP_CARDS.joinpath(f"{self.name}.json")
         self.key = key \
             if key else self.card_dir.joinpath(f"key-{self.name}.pem")
@@ -162,8 +172,8 @@ class VirtualCard(Card):
 
         :return: self
         """
-        assert self._service_location.exists(), \
-            "Service for virtual sc doesn't exists."
+        if not self._service_location.exists():
+            raise FileNotFoundError("Service for virtual sc doesn't exists.")
         return self
 
     def __exit__(self, exp_type, exp_value, exp_traceback):
@@ -203,7 +213,8 @@ class VirtualCard(Card):
 
     @softhsm2_conf.setter
     def softhsm2_conf(self, conf: Path):
-        assert conf.exists(), "File doesn't exist"
+        if not conf.exists():
+            raise FileNotFoundError("File doesn't exist")
         self._softhsm2_conf = conf
 
     @property
@@ -266,8 +277,8 @@ class VirtualCard(Card):
         required for each virtual card.
         """
 
-        assert self._softhsm2_conf.exists(), \
-            "Can't proceed, SoftHSM2 conf doesn't exist"
+        if not self._softhsm2_conf.exists():
+            raise FileNotFoundError("Can't proceed, SoftHSM2 conf not found.")
 
         self.card_dir.joinpath("tokens").mkdir(exist_ok=True)
 
@@ -312,7 +323,7 @@ class VirtualCard(Card):
         `openssl` command based on template CNF file.
         """
         csr_path = self.card_dir.joinpath(f"csr-{self.cardholder}.csr")
-        if self.user.user_type == "local":
+        if self.user.user_type == UserType.local:
             cmd = ["openssl", "req", "-new", "-nodes", "-key", self.key,
                    "-reqexts", "req_exts", "-config", self.cnf,
                    "-out", csr_path]
@@ -330,8 +341,8 @@ class VirtualCard(Card):
 class PhysicalCard(Card):
     """
     :TODO PhysicalCard is not yet tested, it's Work In Progress
-        This class provides methods allowing to manipulate physical cards connected
-    via removinator.
+        This class provides methods allowing to manipulate physical cards
+        connected via removinator.
     """
     _inserted: bool = False
 
@@ -349,7 +360,7 @@ class PhysicalCard(Card):
 
     def __init__(self, card_data: dict = None, card_dir: Path = None):
         """
-        TODO this is not yet tested, insert and iemove methods need to be
+        TODO this is not yet tested, insert and remove methods need to be
             implemented with removinator
         Initialise object for physical smart card. Constructor of the base class
         is also used.
@@ -367,7 +378,8 @@ class PhysicalCard(Card):
         self.slot = card_data["slot"]
         self.uri = card_data["uri"]
         self.card_dir = card_dir
-        assert self.card_dir.exists(), "Card root directory doesn't exists"
+        if not self.card_dir.exists():
+            raise FileNotFoundError("Card root directory doesn't exists")
 
         self.dump_file = LIB_DUMP_CARDS.joinpath(f"{self.name}.json")
 
@@ -402,7 +414,7 @@ class PhysicalCard(Card):
         :param exp_traceback: Traceback of the exception
         """
         if exp_type is not None:
-            logger.error("Exception in virtual smart card context")
+            logger.error("Exception in physical smart card context")
             logger.error(format_exc())
         if self._inserted:
             self.remove()

@@ -9,10 +9,11 @@ from SCAutolib import (logger, run, LIB_DIR, LIB_BACKUP, LIB_DUMP,
                        LIB_DUMP_USERS, LIB_DUMP_CAS, LIB_DUMP_CARDS,
                        TEMPLATES_DIR)
 from SCAutolib.models import CA, file, user, card, authselect as auth
-from SCAutolib.models.file import File
-from SCAutolib.utils import (OSVersion, _check_selinux, _gen_private_key,
+from SCAutolib.models.file import File, OpensslCnf
+from SCAutolib.enums import (OSVersion, CardType, UserType)
+from SCAutolib.utils import (_check_selinux, _gen_private_key,
                              _get_os_version, _install_packages,
-                             _check_packages, dump_to_json, local_ca_factory)
+                             _check_packages, dump_to_json, ca_factory)
 
 
 class Controller:
@@ -68,8 +69,10 @@ class Controller:
     def prepare(self, force: bool, gdm: bool, install_missing: bool,
                 graphical: bool):
         """
-        Method for setting up whole system based on configuration file and
-        CLI commands
+        Prepare system for testing. This method provides complex configuration
+        of system under test for testing including creation of CAs, users and
+        smart cards in the system and objects that represents them in SCAutolib.
+        Configuration is based on config file and CLI options.
 
         :param force: Defines if existing objects, files, users, services etc.
             should be erased or overwritten if they already exist. True stands
@@ -88,7 +91,9 @@ class Controller:
         """
         self.setup_system(install_missing, gdm, graphical)
 
-        # In this method not having section for local CA and/or for IPA CA is OK
+        # Prepare CAs: Virtual cards are populated by certificates that are: a)
+        # created locally and signed by local CA configured on the system under
+        # test, or b) created and signed using FreeIPA.
         try:
             self.setup_local_ca(force=force)
         except exceptions.SCAutolibWrongConfig as e:
@@ -105,10 +110,10 @@ class Controller:
         # be created while for virtual cards tokens will be created and enrolled
         for token in self.lib_conf["cards"]:
             # prepare CA objects for physical cards
-            if token["card_type"] == "physical":
+            if token["card_type"] == CardType.physical:
                 self.setup_custom_ca(token)
                 self.setup_card(token)
-            else:
+            elif token["card_type"] == CardType.virtual:
                 c = self.setup_card(token)
                 self.enroll_card(c)
 
@@ -140,13 +145,15 @@ class Controller:
             packages += ["tesseract", "ffmpeg-free"]
 
         # Prepare for virtual cards
-        if "virtual" in [c["card_type"] for c in self.lib_conf["cards"]]:
+        if any(c["card_type"] == CardType.virtual
+                for c in self.lib_conf["cards"]):
             packages += ["pcsc-lite-ccid", "pcsc-lite", "virt_cacard",
                          "vpcd", "softhsm"]
             run("dnf -y copr enable jjelen/vsmartcard")
 
         # Add IPA packages if needed
-        if not all([u["user_type"] == "local" for u in self.lib_conf["users"]]):
+        if any([u["user_type"] != UserType.local
+                for u in self.lib_conf["users"]]):
             packages += self._general_steps_for_ipa()
 
         # Check for installed packages
@@ -199,14 +206,29 @@ class Controller:
             raise exceptions.SCAutolibWrongConfig(msg)
 
         ca_dir: Path = self.lib_conf["ca"]["local_ca"]["dir"]
-        self.local_ca = local_ca_factory(path=ca_dir, force=force, create=True)
+        ca_dir.mkdir(exist_ok=True, parents=True)
+
+        cnf = OpensslCnf(ca_dir.joinpath("ca.cnf"), "CA", str(ca_dir))
+        self.local_ca = ca_factory(path=ca_dir, cnf=cnf, create=True)
+        if force:
+            logger.warning(f"Removing previous local CA from {ca_dir}")
+            self.local_ca.cleanup()
+        cnf.create()
+        cnf.save()
+        self.local_ca.setup()
+        self.local_ca.update_ca_db()
+        run(["systemctl", "restart", "sssd"], sleep=5)
+
         logger.info(f"Local CA is configured in {ca_dir}")
 
         dump_to_json(self.local_ca)
 
     def setup_custom_ca(self, card_data: dict):
-        if card_data["card_type"] == "physical":
-            ca = local_ca_factory(create=True, card_data=card_data)
+        if card_data["card_type"] == CardType.physical:
+            ca = ca_factory(create=True, card_data=card_data)
+            ca.setup()
+            if not ca._ca_cert.is_file():
+                raise FileNotFoundError(f"File not found: {ca._ca_cert}")
             dump_to_json(ca)
 
     def setup_ipa_client(self, force: bool = False):
@@ -254,7 +276,7 @@ class Controller:
         """
         new_user = None
 
-        if user_dict["user_type"] == "local":
+        if user_dict["user_type"] == UserType.local:
             new_user = user.User(username=user_dict["name"],
                                  password=user_dict["passwd"])
             if force:
@@ -292,46 +314,54 @@ class Controller:
         if force and card_dir.exists():
             rmtree(card_dir)
 
-        if card_dict["card_type"] == "physical":
+        if card_dict["card_type"] == CardType.physical:
             new_card = card.PhysicalCard(card_dict, card_dir=card_dir)
-        elif card_dict["card_type"] == "virtual":
-            hsm_conf = file.SoftHSM2Conf(card_dir.joinpath("sofhtsm2.conf"),
-                                         card_dir=card_dir)
-            hsm_conf.create()
-            hsm_conf.save()
-
+        elif card_dict["card_type"] == CardType.virtual:
+            hsm_conf = self.prepare_softhsm_config(card_dir)
             new_card = card.VirtualCard(card_dict, softhsm2_conf=hsm_conf.path,
                                         card_dir=card_dir)
-
-            # card needs to know some details of its user, so we add user as
-            # card attribute
-            for card_user in self.users:
-                if card_user.username == card_dict["cardholder"]:
-                    new_card.user = card_user
-
-            if new_card.user.user_type == "local":
-                cnf_path = new_card.card_dir.joinpath(f"{new_card.cardholder}.cnf")
-                cnf = file.OpensslCnf(filepath=cnf_path, conf_type="user",
-                                      replace=[new_card.cardholder, new_card.CN])
-                cnf.create()
-                cnf.save()
-
-                new_card.cnf = cnf.path
-
-                if force:
-                    if new_card.cert and new_card.cert.exists():
-                        self.local_ca.revoke_cert(new_card.cert)
-            else:  # IPA user
-                if force:
-                    if new_card.cert and new_card.cert.exists():
-                        self.ipa_ca.revoke_cert(new_card.cert)
+            # card needs to know some details of its user
+            new_card.user = self.link_user_to_card(new_card)
+            if new_card.user.user_type == UserType.local:
+                new_card.cnf = self.prepare_user_cnf(new_card)
+            if force:
+                self.revoke_certs(new_card)
+            new_card.create()
         else:
             raise NotImplementedError("Other card types than 'physical' and "
                                       "'virtual' are not supported")
 
-        new_card.create()
         dump_to_json(new_card)
         return new_card
+
+    def link_user_to_card(self, card: card.VirtualCard):
+        for card_user in self.users:
+            if card_user.username == card.cardholder:
+                return card_user
+
+    def prepare_softhsm_config(self, card_dir: Path = None):
+        """Prepare SoftHSM2 config for virtual card"""
+        filepath = card_dir.joinpath("sofhtsm2.conf")
+        hsm_conf = file.SoftHSM2Conf(filepath, card_dir=card_dir)
+        hsm_conf.create()
+        hsm_conf.save()
+        return hsm_conf
+
+    def prepare_user_cnf(self, card: card.VirtualCard):
+        """Prepare user openssl cnf"""
+        cnf_path = card.card_dir.joinpath(f"{card.cardholder}.cnf")
+        cnf = file.OpensslCnf(filepath=cnf_path, conf_type="user",
+                              replace=[card.cardholder, card.CN])
+        cnf.create()
+        cnf.save()
+        return cnf.path
+
+    def revoke_certs(self, card: card.VirtualCard):
+        if card.cert and card.cert.exists():
+            if card.user.user_type == UserType.local:
+                self.local_ca.revoke_cert(card.cert)
+            else:
+                self.ipa_ca.revoke_cert(card.cert)
 
     def enroll_card(self, card: card.VirtualCard):
         """
@@ -359,7 +389,10 @@ class Controller:
         card.enroll()
         dump_to_json(card)
 
-    def cleanup(self):  # FIXME
+    def cleanup(self):
+        # FIXME Card.delete is not yet implemented, sssd_conf.clean is broken,
+        #  authselect.cleanup is not implemented, local_ca.cleanup is not
+        #  sufficient
         """
         Clean the system after setup. This method restores the SSSD config file,
         deletes created users with cards, remove CA's (local and/or IPA Client)
@@ -371,10 +404,10 @@ class Controller:
             usr.delete_user()
         for card_file in LIB_DUMP_CARDS.iterdir():
             if card_file.exists():
-                card.Card.load(card_file).delete()
+                card.Card.load(card_file).delete()  # TODO implement card.delete
 
         if self.local_ca:
-            self.local_ca.cleanup()
+            self.local_ca.cleanup()  # FIXME restore sssd_auth_ca_db.pem file
         if self.ipa_ca:
             self.ipa_ca.cleanup()
 
