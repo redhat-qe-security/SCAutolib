@@ -250,7 +250,7 @@ class VirtualCard(Card):
         """
         cmd = ["pkcs11-tool", "--module", "libsofthsm2.so", "--slot-index",
                '0', "-w", self.key, "-y", "privkey", "--label",
-               f"'{self.cardholder}'", "-p", self.pin, "--set-id", "0",
+               "test_cert", "-p", self.pin, "--set-id", "0",
                "-d", "0"]
         run(cmd, env={"SOFTHSM2_CONF": self._softhsm2_conf})
         logger.debug(
@@ -258,7 +258,7 @@ class VirtualCard(Card):
 
         cmd = ['pkcs11-tool', '--module', 'libsofthsm2.so', '--slot-index', "0",
                '-w', self.cert, '-y', 'cert', '-p', self.pin,
-               '--label', f"'{self.cardholder}'", '--set-id', "0", '-d', "0"]
+               '--label', "test_key", '--set-id', "0", '-d', "0"]
         run(cmd, env={"SOFTHSM2_CONF": self._softhsm2_conf})
         logger.debug(
             f"User certificate {self.cert} is added to virtual smart card")
@@ -286,7 +286,7 @@ class VirtualCard(Card):
         # Initialize SoftHSM2 token. An error would be raised if token with same
         # label would be created.
         cmd = ["softhsm2-util", "--init-token", "--free", "--label",
-               self.cardholder, "--so-pin", "12345678",
+               self.name, "--so-pin", "12345678",
                "--pin", self.pin]
         run(cmd, env={"SOFTHSM2_CONF": self._softhsm2_conf}, check=True)
         logger.debug(
