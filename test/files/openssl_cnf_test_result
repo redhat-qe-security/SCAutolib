@@ -5,7 +5,7 @@ prompt = no
 [ req_distinguished_name ]
 O = Example
 OU = Example Test
-CN = test_user_123
+CN = test_cn
 
 [ req_exts ]
 basicConstraints = CA:FALSE

@@ -7,7 +7,6 @@ from shutil import copyfile
 from subprocess import check_output, run, CalledProcessError, PIPE
 
 from SCAutolib.models import CA
-from SCAutolib.models.card import VirtualCard
 from SCAutolib.models.file import SSSDConf, File, OpensslCnf
 from SCAutolib.models.user import User
 
@@ -78,11 +77,9 @@ def local_ca_fixture(tmp_path_factory, backup_sssd_ca_db):
 @pytest.fixture
 def local_user(tmp_path, request):
     # In linux useradd command max length of the username is 32 chars
-    username = f"user-{request.node.name}"[0:32]
-    user = User(username, "testpassword", "123456")
-    user.card_dir = tmp_path
+    username = "user-test"
+    user = User(username=username, password="123456")
     user.dump_file = tmp_path.joinpath("test-user-dump-file.json")
-    user.card = VirtualCard(user=user)
     yield user
 
     # Delete the user if it was added during the test phase
