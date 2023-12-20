@@ -133,7 +133,7 @@ def load_user(username, **kwargs):
     :rtype: BaseUser
     """
     user_file = LIB_DUMP_USERS.joinpath(f"{username}.json")
-    logger.debug(f"User {username} will be loaded from {user_file}")
+    logger.debug(f"Loading user {username} from {user_file}")
     user = None
     if user_file.exists():
         user = User.load(user_file, **kwargs)

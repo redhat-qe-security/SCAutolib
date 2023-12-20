@@ -41,7 +41,7 @@ class Card:
             logger.warning("URI not set")
             raise SCAutolibException("URI matching expected pattern not found.")
         else:
-            logger.warning("URI not set")
+            logger.warning("Multiple matching URIs found. URI not set")
             raise SCAutolibException("Multiple URIs match expected pattern.")
 
     def insert(self):
@@ -149,7 +149,6 @@ class VirtualCard(Card):
         self._service_location = Path(
             f"/etc/systemd/system/{self._service_name}.service")
         self._nssdb = self.card_dir.joinpath("db")
-        self.dump_file = LIB_DUMP_CARDS.joinpath(f"{self.name}.json")
         self._softhsm2_conf = softhsm2_conf if softhsm2_conf \
             else Path(self.card_dir, "softhsm2.conf")
 
@@ -214,7 +213,7 @@ class VirtualCard(Card):
     @softhsm2_conf.setter
     def softhsm2_conf(self, conf: Path):
         if not conf.exists():
-            raise FileNotFoundError("File doesn't exist")
+            raise FileNotFoundError(f"File {conf} doesn't exist")
         self._softhsm2_conf = conf
 
     @property
@@ -250,7 +249,7 @@ class VirtualCard(Card):
         """
         cmd = ["pkcs11-tool", "--module", "libsofthsm2.so", "--slot-index",
                '0', "-w", self.key, "-y", "privkey", "--label",
-               "test_cert", "-p", self.pin, "--set-id", "0",
+               "test_key", "-p", self.pin, "--set-id", "0",
                "-d", "0"]
         run(cmd, env={"SOFTHSM2_CONF": self._softhsm2_conf})
         logger.debug(
@@ -258,7 +257,7 @@ class VirtualCard(Card):
 
         cmd = ['pkcs11-tool', '--module', 'libsofthsm2.so', '--slot-index', "0",
                '-w', self.cert, '-y', 'cert', '-p', self.pin,
-               '--label', "test_key", '--set-id', "0", '-d', "0"]
+               '--label', "test_cert", '--set-id', "0", '-d', "0"]
         run(cmd, env={"SOFTHSM2_CONF": self._softhsm2_conf})
         logger.debug(
             f"User certificate {self.cert} is added to virtual smart card")
@@ -318,9 +317,9 @@ class VirtualCard(Card):
 
     def gen_csr(self):
         """
-        Method for generating local user specific CSR file that would be sent to
-        the local CA for generating the certificate. CSR is generated using
-        `openssl` command based on template CNF file.
+        Method for generating user specific CSR file that would be sent to the
+        CA for generating the certificate. CSR is generated using 'openssl`
+        command based on template CNF file.
         """
         csr_path = self.card_dir.joinpath(f"csr-{self.cardholder}.csr")
         if self.user.user_type == UserType.local:
