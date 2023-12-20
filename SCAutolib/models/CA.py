@@ -118,9 +118,11 @@ class BaseCA:
         elif cnt["ca_type"] == CAType.local:
             ca = LocalCA(root_dir=cnt["root_dir"])
         else:
-            raise SCAutolibException("CA object not loaded")
+            raise SCAutolibException("CA object has unknown type. Only ipa, "
+                                     "custom and local types are supported. CA "
+                                     "object not loaded")
 
-        logger.debug(f"CA {cnt['name']} is restored from file {json_file}")
+        logger.debug(f"CA {cnt['name']} is loaded from file {json_file}")
         return ca
 
 
