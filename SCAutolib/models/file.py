@@ -289,7 +289,7 @@ class SSSDConf(File):
                  section: str = None):
         self.set(key, value, section)
         self.save()
-        run("systemctl restart sssd", sleep=5)
+        run("systemctl restart sssd", sleep=10)
         return self
 
     def __enter__(self):
@@ -297,12 +297,17 @@ class SSSDConf(File):
 
     def __exit__(self, exc_type, exc_value, traceback):
         if self._changed:
-            copy2(self._backup_default, self._conf_file)
+            parser = ConfigParser()
+            parser.optionxform = str
+            with self._backup_default.open() as config:
+                parser.read_file(config)
+            with self._conf_file.open("w") as config:
+                parser.write(config)
             self._changed = False
         if exc_type is not None:
             logger.error("Exception in virtual smart card context")
             logger.error(format_exc())
-        run("systemctl restart sssd", sleep=5)
+        run("systemctl restart sssd", sleep=10)
 
     def create(self):
         """
