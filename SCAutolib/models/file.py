@@ -265,6 +265,8 @@ class SSSDConf(File):
     _conf_file = Path("/etc/sssd/sssd.conf")
     _backup_original = None
     _backup_default = LIB_BACKUP.joinpath('default-sssd.conf')
+    _backup_current_cont = None
+    _before_last_change_cont = None
     _changed = False
 
     dump_file: Path = LIB_DUMP_CONFS.joinpath("SSSDConf.json")
@@ -300,19 +302,35 @@ class SSSDConf(File):
 
     def __call__(self, key: str, value: Union[int, str, bool],
                  section: str = None):
+        # We need to save the state of the current unchanged sssd.conf because
+        # __call__ is called before __enter__ in
+        # with SSSDConf(key, value, section):
+        with self._conf_file.open() as config:
+            self._before_last_change_cont = config.read()
+
         self.set(key, value, section)
         self.save()
         run("systemctl restart sssd", sleep=10)
         return self
 
     def __enter__(self):
+        # Check if we changed the file or not and save version before context
+        # manager was called
+        if self._before_last_change_cont:
+            self._backup_current_cont = self._before_last_change_cont
+        else:
+            with self._conf_file.open() as config:
+                self._backup_current_cont = config.read()
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
         if self._changed:
-            with (self._backup_default.open() as default,
-                    self._conf_file.open("w") as config):
-                config.write(default.read())
+            # Restore sssd.conf to the version before context manager was
+            # called
+            with self._conf_file.open("w") as config:
+                config.write(self._backup_current_cont)
+            self._backup_current_cont = None
+            self._before_last_change_cont = None
             self._changed = False
         if exc_type is not None:
             logger.error("Exception in virtual smart card context")
@@ -351,6 +369,9 @@ class SSSDConf(File):
         """
         Modify or add content of config file represented by ConfigParser object
 
+        If a value is set outside of a context manager, it is the user's
+        responsibility to revert it.
+
         :param key: key from section of config file to be updated
         :type key: str
         :param value: new value to be stored in [section][key] of config file
@@ -359,7 +380,8 @@ class SSSDConf(File):
         :type section: str
         """
         if len(self._changes.sections()) == 0:
-            self._changes.read_dict(self._default_parser)
+            with self._conf_file.open() as config:
+                self._changes.read_file(config)
 
         if not self._changes.has_section(section):
             logger.warning(f"Section {section} not present.")
