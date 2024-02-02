@@ -426,16 +426,15 @@ class Controller:
 
         opensc_cache_dir = Path(os.path.expanduser('~') + "/.cache/opensc/")
         if opensc_cache_dir.exists():
-            for file in opensc_cache_dir.iterdir():
-                file.unlink()
-        logger.debug("Removed opesc cache")
+            for cache_file in opensc_cache_dir.iterdir():
+                cache_file.unlink()
+        logger.debug("Removed opensc file cache")
 
         self.sssd_conf.restore()
         pcscd_service = File("/usr/lib/systemd/system/pcscd.service")
         pcscd_service.restore()
         opensc_module = File("/usr/share/p11-kit/modules/opensc.module")
         opensc_module.restore()
-
 
     @staticmethod
     def _validate_configuration(conf: dict, params: {} = None) -> dict:

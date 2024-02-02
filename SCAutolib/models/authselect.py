@@ -87,6 +87,3 @@ class Authselect:
             logger.error("Exception in authselect context")
             logger.error(format_exc())
         self._restore()
-
-    def cleanup():
-        ...
