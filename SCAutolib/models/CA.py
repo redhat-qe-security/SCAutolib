@@ -17,7 +17,7 @@ from shutil import rmtree, copy2
 from socket import gethostname
 
 from SCAutolib import TEMPLATES_DIR, logger, run, LIB_DIR, LIB_DUMP_CAS, \
-                        LIB_BACKUP
+    LIB_BACKUP
 from SCAutolib.exceptions import SCAutolibException
 from SCAutolib.models.file import OpensslCnf
 from SCAutolib.enums import CAType

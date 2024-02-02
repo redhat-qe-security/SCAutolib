@@ -240,11 +240,13 @@ class File:
             f"{name if name else self._conf_file.name}.backup")
 
         if original_path.exists():
-            with (self._conf_file.open("w") as config,
-                    original_path.open() as backup):
+            with self._conf_file.open("w") as config, \
+                    original_path.open() as backup:
                 config.write(backup.read())
             original_path.unlink()
-            logger.debug(f"File {self._conf_file} is restored to {original_path}")
+            logger.debug(
+                f"File {self._conf_file} is restored to {original_path}"
+            )
 
 
 class SSSDConf(File):
@@ -429,8 +431,8 @@ class SSSDConf(File):
         """
 
         if self._backup_original and self._backup_original.exists():
-            with (self._backup_original.open() as original,
-                    self._conf_file.open("w") as config):
+            with self._backup_original.open() as original, \
+                    self._conf_file.open("w") as config:
                 config.write(original.read())
             self._backup_original.unlink()
         else:

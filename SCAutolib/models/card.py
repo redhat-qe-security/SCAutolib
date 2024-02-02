@@ -326,6 +326,7 @@ class VirtualCard(Card):
         logger.info(f"Virtual card dir of {self.name} removed")
 
         self._service_location.unlink()
+        run("systemctl daemon-reload", sleep=3)
         logger.debug(f"Service {self._service_name} was removed")
 
         if self.dump_file.exists():

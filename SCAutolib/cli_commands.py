@@ -153,12 +153,17 @@ def setup_user(ctx, name, card_dir, card_type, passwd, pin, user_type):
         exit(ReturnCode.FAILURE.value)
     exit(ReturnCode.SUCCESS.value)
 
+
 @click.command()
 @click.pass_context
 def cleanup(ctx):
-    """Configure entire system for smart cards based on the config file."""
+    """
+    Cleanup all the configurations and system changes done by the prepare
+    command.
+    """
     ctx.obj["CONTROLLER"].cleanup()
     exit(ReturnCode.SUCCESS.value)
+
 
 cli.add_command(setup_ca)
 cli.add_command(prepare)
