@@ -6,6 +6,7 @@ that we are using in the library. Those types are: virtual smart card, real
 import json
 import re
 import time
+import shutil
 from pathlib import Path
 from traceback import format_exc
 
@@ -314,6 +315,22 @@ class VirtualCard(Card):
         run("systemctl daemon-reload")
 
         return self
+
+    def delete(self):
+        """
+        Deletes the virtual card directory which contains certs, SoftHSM2 token
+        and NSS database. Also removes the systemd service for virtual smart
+        card.
+        """
+        shutil.rmtree(self.card_dir)
+        logger.info(f"Virtual card dir of {self.name} removed")
+
+        self._service_location.unlink()
+        logger.debug(f"Service {self._service_name} was removed")
+
+        if self.dump_file.exists():
+            self.dump_file.unlink()
+            logger.debug(f"Removed {self.dump_file} dump file")
 
     def gen_csr(self):
         """
