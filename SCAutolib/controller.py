@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 from schema import Schema, Use
 from shutil import rmtree
@@ -7,9 +8,10 @@ from typing import Union
 from SCAutolib import exceptions, schema_cas, schema_user, schema_card
 from SCAutolib import (logger, run, LIB_DIR, LIB_BACKUP, LIB_DUMP,
                        LIB_DUMP_USERS, LIB_DUMP_CAS, LIB_DUMP_CARDS,
-                       TEMPLATES_DIR)
+                       LIB_DUMP_CONFS, TEMPLATES_DIR)
 from SCAutolib.models import CA, file, user, card, authselect as auth
 from SCAutolib.models.file import File, OpensslCnf
+from SCAutolib.models.CA import BaseCA
 from SCAutolib.enums import (OSVersion, CardType, UserType)
 from SCAutolib.utils import (_check_selinux, _gen_private_key,
                              _get_os_version, _install_packages,
@@ -63,8 +65,14 @@ class Controller:
         self.lib_conf = self._validate_configuration(tmp_conf, params)
         self.users = []
         for d in (LIB_DIR, LIB_BACKUP, LIB_DUMP, LIB_DUMP_USERS, LIB_DUMP_CAS,
-                  LIB_DUMP_CARDS):
+                  LIB_DUMP_CARDS, LIB_DUMP_CONFS):
             d.mkdir(exist_ok=True)
+
+        if LIB_DUMP_CAS.joinpath("local_ca.json").exists():
+            self.local_ca = BaseCA.load(LIB_DUMP_CAS.joinpath("local_ca.json"))
+
+        if LIB_DUMP_CAS.joinpath("ipa.json").exists():
+            self.ipa_ca = BaseCA.load(LIB_DUMP_CAS.joinpath("ipa.json"))
 
     def prepare(self, force: bool, gdm: bool, install_missing: bool,
                 graphical: bool):
@@ -390,28 +398,44 @@ class Controller:
         dump_to_json(card)
 
     def cleanup(self):
-        # FIXME Card.delete is not yet implemented, sssd_conf.clean is broken,
-        #  authselect.cleanup is not implemented, local_ca.cleanup is not
-        #  sufficient
         """
         Clean the system after setup. This method restores the SSSD config file,
         deletes created users with cards, remove CA's (local and/or IPA Client)
         """
-        self.sssd_conf.clean()
+        users = {}
 
         for user_file in LIB_DUMP_USERS.iterdir():
             usr = user.User.load(user_file)
-            usr.delete_user()
+            users[usr.username] = usr
+            if usr.username != "root":
+                usr.delete_user()
+
         for card_file in LIB_DUMP_CARDS.iterdir():
             if card_file.exists():
-                card.Card.load(card_file).delete()  # TODO implement card.delete
+                card_obj = card.Card.load(card_file)
+                if card_obj.card_type == CardType.virtual:
+                    card_obj.user = users[card_obj.cardholder]
+                    self.revoke_certs(card_obj)
+                    card_obj.delete()
 
         if self.local_ca:
-            self.local_ca.cleanup()  # FIXME restore sssd_auth_ca_db.pem file
+            self.local_ca.cleanup()
+            self.local_ca.restore_ca_db()
         if self.ipa_ca:
             self.ipa_ca.cleanup()
 
-        self.authselect.cleanup()  # TODO implement authselect.cleanup
+        opensc_cache_dir = Path(os.path.expanduser('~') + "/.cache/opensc/")
+        if opensc_cache_dir.exists():
+            for file in opensc_cache_dir.iterdir():
+                file.unlink()
+        logger.debug("Removed opesc cache")
+
+        self.sssd_conf.restore()
+        pcscd_service = File("/usr/lib/systemd/system/pcscd.service")
+        pcscd_service.restore()
+        opensc_module = File("/usr/share/p11-kit/modules/opensc.module")
+        opensc_module.restore()
+
 
     @staticmethod
     def _validate_configuration(conf: dict, params: {} = None) -> dict:

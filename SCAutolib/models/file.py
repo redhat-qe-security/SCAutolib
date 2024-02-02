@@ -22,8 +22,9 @@ from pathlib import Path
 from shutil import copy2
 from traceback import format_exc
 from typing import Union
+import json
 
-from SCAutolib import logger, TEMPLATES_DIR, LIB_BACKUP, run
+from SCAutolib import logger, TEMPLATES_DIR, LIB_BACKUP, LIB_DUMP_CONFS, run
 from SCAutolib.exceptions import SCAutolibException
 
 
@@ -47,7 +48,6 @@ class File:
     _template = None
     _default_parser = None
     _simple_content = None
-    _backup: dict = dict()
 
     def __init__(self, filepath: Union[str, Path], template: Path = None):
         """
@@ -232,13 +232,19 @@ class File:
                         "backup": str(new_path)}
         return new_path
 
-    def restore(self):
+    def restore(self, name: str = None):
         """
         Copies backup file to original file location.
         """
-        copy2(self._backup["backup"], self._backup["original"])
-        logger.debug(f"File {self._backup['backup']} "
-                     f"is restored to {self._backup['original']}")
+        original_path = LIB_BACKUP.joinpath(
+            f"{name if name else self._conf_file.name}.backup")
+
+        if original_path.exists():
+            with (self._conf_file.open("w") as config,
+                    original_path.open() as backup):
+                config.write(backup.read())
+            original_path.unlink()
+            logger.debug(f"File {self._conf_file} is restored to {original_path}")
 
 
 class SSSDConf(File):
@@ -260,6 +266,8 @@ class SSSDConf(File):
     _backup_original = None
     _backup_default = LIB_BACKUP.joinpath('default-sssd.conf')
     _changed = False
+
+    dump_file: Path = LIB_DUMP_CONFS.joinpath("SSSDConf.json")
 
     def __new__(cls):
         if cls.__instance is None:
@@ -285,6 +293,11 @@ class SSSDConf(File):
         self._changes = ConfigParser()
         self._changes.optionxform = str
 
+        if self.dump_file.exists():
+            with self.dump_file.open("r") as f:
+                cnt = json.load(f)
+                self._backup_original = Path(cnt['_backup_original'])
+
     def __call__(self, key: str, value: Union[int, str, bool],
                  section: str = None):
         self.set(key, value, section)
@@ -297,12 +310,9 @@ class SSSDConf(File):
 
     def __exit__(self, exc_type, exc_value, traceback):
         if self._changed:
-            parser = ConfigParser()
-            parser.optionxform = str
-            with self._backup_default.open() as config:
-                parser.read_file(config)
-            with self._conf_file.open("w") as config:
-                parser.write(config)
+            with (self._backup_default.open() as default,
+                    self._conf_file.open("w") as config):
+                config.write(default.read())
             self._changed = False
         if exc_type is not None:
             logger.error("Exception in virtual smart card context")
@@ -318,7 +328,7 @@ class SSSDConf(File):
             with self._conf_file.open() as config:
                 self._default_parser.read_file(config)
             logger.info(f"{self._conf_file} file exists, loading values")
-            self._backup_original = self.backup("original")
+            self._backup_original = self.backup("sssd-conf-original")
 
         except FileNotFoundError:
             logger.warning(f"{self._conf_file} not present")
@@ -331,6 +341,11 @@ class SSSDConf(File):
 
         with self._backup_default.open("w") as bdefault:
             self._default_parser.write(bdefault)
+
+        with self.dump_file.open("w") as f:
+            json.dump({
+                "_backup_original": str(self._backup_original)
+            }, f)
 
     def set(self, key: str, value: Union[int, str, bool], section: str = None):
         """
@@ -391,18 +406,22 @@ class SSSDConf(File):
         .. note: SSSD service restart is caller's responsibility.
         """
 
-        # FIXME: this implementation would not work in real usage. When setup
-        #  runtime would be finished and in test/cleanup runtime this method
-        #  would be called self._backup_original field would not be set. This
-        #  should be fixed by implementing dump() method that would store all
-        #  required attributes in JSON format load() method that would be used
-        #  in other then setup runtimes to restore (load from JSON) all
-        #  attributes of this object
-
-        if self._backup_original:
-            copy2(self._backup_original, self._conf_file)
+        if self._backup_original and self._backup_original.exists():
+            with (self._backup_original.open() as original,
+                    self._conf_file.open("w") as config):
+                config.write(original.read())
+            self._backup_original.unlink()
         else:
             self.clean()
+
+        if self._backup_default.exists():
+            self._backup_default.unlink()
+
+        if self.dump_file.exists():
+            self.dump_file.unlink()
+            logger.debug(f"Removed {self.dump_file} dump file")
+
+        logger.info("Restored sssd.conf to the original version")
         self._changed = False
 
     def update_default_content(self):

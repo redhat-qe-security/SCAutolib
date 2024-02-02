@@ -27,6 +27,7 @@ LIB_DUMP = LIB_DIR.joinpath("dump")
 LIB_DUMP_USERS = LIB_DUMP.joinpath("users")
 LIB_DUMP_CAS = LIB_DUMP.joinpath("cas")
 LIB_DUMP_CARDS = LIB_DUMP.joinpath("cards")
+LIB_DUMP_CONFS = LIB_DUMP.joinpath("confs")
 
 
 schema_cas = Schema(And(

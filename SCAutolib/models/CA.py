@@ -16,7 +16,8 @@ from python_freeipa.client_meta import ClientMeta
 from shutil import rmtree, copy2
 from socket import gethostname
 
-from SCAutolib import TEMPLATES_DIR, logger, run, LIB_DIR, LIB_DUMP_CAS
+from SCAutolib import TEMPLATES_DIR, logger, run, LIB_DIR, LIB_DUMP_CAS, \
+                        LIB_BACKUP
 from SCAutolib.exceptions import SCAutolibException
 from SCAutolib.models.file import OpensslCnf
 from SCAutolib.enums import CAType
@@ -28,6 +29,7 @@ class BaseCA:
     _ca_cert: Path = None
     _ca_key: Path = None
     _ca_pki_db: Path = Path("/etc/sssd/pki/sssd_auth_ca_db.pem")
+    _ca_original_path: Path = LIB_BACKUP.joinpath("ca-db-original.backup")
 
     @property
     def cert(self):
@@ -68,6 +70,8 @@ class BaseCA:
             with self._ca_pki_db.open("a+") as f:
                 f.seek(0)
                 data = f.read()
+                with self._ca_original_path.open('w') as backup:
+                    backup.write(data)
                 if root_cert not in data:
                     f.write(root_cert)
         else:
@@ -80,6 +84,22 @@ class BaseCA:
         # Restoring SELinux context on the sssd auth db
         run(f"restorecon -v {self._ca_pki_db}")
         logger.info("Local CA is updated")
+
+    def restore_ca_db(self):
+        """
+        restores /etc/sssd/pki/sssd_auth_ca_db.pem to the state it was before.
+        """
+        if self._ca_original_path.exists():
+            logger.debug("Found original version of sssd_auth_ca_db.pem")
+            with self._ca_original_path.open() as backup, \
+                    self._ca_pki_db.open("w") as f:
+                f.write(backup.read())
+            self._ca_original_path.unlink()
+        else:
+            logger.debug("Original version of sssd_auth_ca_db.pem not found")
+            if self._ca_pki_db.exists():
+                self._ca_pki_db.unlink()
+        logger.info(f"Restored {self._ca_pki_db} to original version")
 
     def sign_cert(self):
         """
@@ -309,6 +329,11 @@ class LocalCA(BaseCA):
                 file.unlink()
             elif file.is_dir():
                 shutil.rmtree(file)
+
+        if self.dump_file.exists():
+            self.dump_file.unlink()
+            logger.debug(f"Removed {self.dump_file} dump file")
+
         logger.info(f"Local CA from {self.root_dir} is removed")
 
 

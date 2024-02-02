@@ -105,8 +105,11 @@ class User:
             logger.info(f"Deleting the user {self.username}")
             run(['userdel', '-f', self.username], check=True)
         except KeyError:
-            pass
-        logger.info(f"User {self.username} is not present on the system")
+            logger.info(f"User {self.username} is not present on the system")
+
+        if self.dump_file.exists():
+            self.dump_file.unlink()
+            logger.debug(f"Removed {self.dump_file} dump file")
 
 
 class IPAUser(User):
