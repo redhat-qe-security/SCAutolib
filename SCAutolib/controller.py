@@ -71,8 +71,8 @@ class Controller:
         if LIB_DUMP_CAS.joinpath("local_ca.json").exists():
             self.local_ca = BaseCA.load(LIB_DUMP_CAS.joinpath("local_ca.json"))
 
-        if LIB_DUMP_CAS.joinpath("ipa.json").exists():
-            self.ipa_ca = BaseCA.load(LIB_DUMP_CAS.joinpath("ipa.json"))
+        if LIB_DUMP_CAS.joinpath("ipa-server.json").exists():
+            self.ipa_ca = BaseCA.load(LIB_DUMP_CAS.joinpath("ipa-server.json"))
 
     def prepare(self, force: bool, gdm: bool, install_missing: bool,
                 graphical: bool):
@@ -405,7 +405,7 @@ class Controller:
         users = {}
 
         for user_file in LIB_DUMP_USERS.iterdir():
-            usr = user.User.load(user_file)
+            usr = user.User.load(user_file, ipa_server=self.ipa_ca)
             users[usr.username] = usr
             if usr.username != "root":
                 usr.delete_user()
