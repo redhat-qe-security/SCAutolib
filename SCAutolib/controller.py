@@ -144,7 +144,8 @@ class Controller:
                   LIB_DUMP_CARDS):
             d.mkdir(exist_ok=True)
 
-        packages = ["opensc", "httpd", "sssd", "sssd-tools", "gnutls-utils"]
+        packages = ["opensc", "httpd", "sssd", "sssd-tools", "gnutls-utils",
+                    "openssl", "nss-tools"]
         if gdm:
             packages.append("gdm")
 
@@ -174,8 +175,13 @@ class Controller:
             logger.critical(msg)
             raise exceptions.SCAutolibException(msg)
 
+        os_version = _get_os_version()
         if graphical:
-            run(['dnf', 'groupinstall', 'Server with GUI', '-y'])
+            if os_version != OSVersion.Fedora:
+                run(['dnf', 'groupinstall', 'Server with GUI', '-y',
+                     '--allowerasing'])
+            else:
+                run(['dnf', 'install', 'gdm', '-y'])
             # disable subscription message
             run(['systemctl', '--global', 'mask',
                  'org.gnome.SettingsDaemon.Subscription.target'])
@@ -184,8 +190,12 @@ class Controller:
             self.dconf_file.save()
             run('dconf update')
 
-        run(['dnf', 'groupinstall', "Smart Card Support", '-y'])
-        logger.debug("Smart Card Support group in installed.")
+        if os_version != OSVersion.Fedora:
+            run(['dnf', 'groupinstall', "Smart Card Support", '-y',
+                 '--allowerasing'])
+            logger.debug("Smart Card Support group in installed.")
+        else:
+            run(['dnf', 'install', 'opensc', 'pcsc-lite-ccid', '-y'])
 
         self.sssd_conf.create()
         self.sssd_conf.save()
@@ -196,6 +206,13 @@ class Controller:
         dump_to_json(base_user)
         dump_to_json(user.User(username="root",
                                password=self.lib_conf["root_passwd"]))
+
+        # Fedora requires python3-uinput from RPM and rsyslog
+        if os_version == OSVersion.Fedora:
+            run(['dnf', 'install', 'python3-uinput', 'rsyslog', '-y'])
+            run(['systemctl', 'start', 'rsyslog'])
+        else:
+            run(['pip', 'install', 'python-uinput'])
 
     def setup_local_ca(self, force: bool = False):
         """
