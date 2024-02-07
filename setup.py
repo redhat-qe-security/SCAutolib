@@ -15,7 +15,6 @@ with readme.open() as f:
     long_description = f.read()
 
 graphical_reqs = [
-    'python-uinput',
     'opencv-python',
     'pandas',
     'numpy',
@@ -25,7 +24,7 @@ graphical_reqs = [
 
 setup(
     name="SCAutolib",
-    version="3.1.2",
+    version="3.2.0",
     description=description,
     long_description=long_description,
     long_description_content_type='text/markdown',

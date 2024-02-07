@@ -8,6 +8,8 @@ import pytesseract
 import uinput
 
 from SCAutolib import run, logger
+from SCAutolib.enums import OSVersion
+from SCAutolib.utils import _get_os_version
 
 
 class Screen:
@@ -385,3 +387,34 @@ class GUI:
             if selection.sum() != 0:
                 raise Exception(f"The key='{key}' was found "
                                 f"in the screenshot {screenshot}")
+
+    @log_decorator
+    def check_home_screen(self, polarity: bool = True):
+        """
+        Check for the home screen to determine if user is logged in
+
+        If OS version is defined as Fedora, we set the text for which to
+        search to "tosearch" instead of the original "Activities". In later
+        versions of Fedora, "Activities" text is no longer visible. "tosearch"
+        should be visible on the login screen as the search bar is still
+        present.
+
+        After defining polarity and the string to check, run the appropriate
+        function with the string to search for.
+
+        :param polarity: Define whether to search for presence or absence of
+            string indicating home screen is displayed.
+        """
+        if polarity is True:
+            func_str = 'assert_text'
+        else:
+            func_str = 'assert_no_text'
+
+        os_version = _get_os_version()
+        if os_version == OSVersion.Fedora:
+            check_str = 'tosearch'
+        else:
+            check_str = 'Activities'
+
+        func = getattr(self, func_str)
+        func(check_str)
