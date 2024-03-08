@@ -81,6 +81,16 @@ class File:
             with self._template.open() as t:
                 self._default_parser.read_file(t)
 
+    def remove(self):
+        """
+        Removes the file if it exists.
+        """
+        if self._conf_file.exists():
+            self._conf_file.unlink()
+            logger.debug(
+                f"Removed file {self._conf_file}."
+            )
+
     def set(self, key: str, value: Union[int, str, bool], section: str = None,
             separator: str = "="):
         """
@@ -246,6 +256,10 @@ class File:
             original_path.unlink()
             logger.debug(
                 f"File {self._conf_file} is restored to {original_path}"
+            )
+        else:
+            logger.debug(
+                f"File {self._conf_file} was not backed up. Nothing to do."
             )
 
 

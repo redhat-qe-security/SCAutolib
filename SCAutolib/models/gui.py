@@ -57,8 +57,7 @@ class Screen:
 
 
 class Mouse:
-    """Controls the mouse of the system under test
-    """
+    """Controls the mouse of the system under test"""
 
     def __init__(self):
         run(['modprobe', 'uinput'], check=True)

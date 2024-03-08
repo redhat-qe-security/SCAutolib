@@ -66,12 +66,13 @@ class BaseCA:
             root_cert = f_cert.read()
 
         if self._ca_pki_db.exists():
+            with self._ca_pki_db.open() as f:
+                with self._ca_original_path.open('w') as backup:
+                    backup.write(f.read())
             # Check if current CA cert is already present in the sssd auth db
             with self._ca_pki_db.open("a+") as f:
                 f.seek(0)
                 data = f.read()
-                with self._ca_original_path.open('w') as backup:
-                    backup.write(data)
                 if root_cert not in data:
                     f.write(root_cert)
         else:
