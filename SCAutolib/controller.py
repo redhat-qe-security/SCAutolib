@@ -447,6 +447,9 @@ class Controller:
                 cache_file.unlink()
         logger.debug("Removed opensc file cache")
 
+        # file only created in graphical mode that is why it is removed.
+        self.dconf_file.remove()
+
         self.sssd_conf.restore()
         pcscd_service = File("/usr/lib/systemd/system/pcscd.service")
         pcscd_service.restore()
