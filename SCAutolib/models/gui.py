@@ -1,4 +1,7 @@
+import copy
+import inspect
 import os
+from os.path import join
 from time import sleep, time
 
 import cv2
@@ -6,21 +9,45 @@ import keyboard
 import numpy as np
 import pytesseract
 import uinput
+import logging
 
 from SCAutolib import run, logger
 from SCAutolib.enums import OSVersion
 from SCAutolib.utils import _get_os_version
 
 
+class HTMLFileHandler(logging.FileHandler):
+    """Extending FileHandler to work with HTML files."""
+
+    def __init__(
+            self, filename, mode='a', encoding=None, delay=False, errors=None):
+        """
+        A handler class which writes formatted logging records to disk HTML
+        files.
+        """
+        super(HTMLFileHandler, self).__init__(
+            filename, mode, encoding, delay, errors
+        )
+
+    def emit(self, record: logging.LogRecord) -> None:
+        """
+        Do whatever it takes to actually log the specified logging record.
+        """
+        custom_record = copy.deepcopy(record)
+        custom_record.msg = str(record.msg).rstrip().replace("\n", "<br>\n")
+        return super().emit(custom_record)
+
+
 class Screen:
     """Captures the screenshots."""
 
-    def __init__(self, directory: str):
+    def __init__(self, directory: str, html_file: str = None):
         """Init method
         :param directory: Path to directory, where the screenshots
             will be saved.
         """
         self.directory = directory
+        self.html_file = html_file
         self.screenshot_num = 1
 
     def screenshot(self, timeout: float = 30):
@@ -51,6 +78,13 @@ class Screen:
 
         if not captured:
             raise Exception('Could not capture screenshot within timeout.')
+
+        if self.html_file:
+            with open(self.html_file, 'a') as fp:
+                fp.write(
+                    f"<img src=\"screenshots/{self.screenshot_num}.png\" "
+                    f"alt=\"screenshot number {self.screenshot_num}\">"
+                )
 
         self.screenshot_num += 1
         return filename
@@ -224,17 +258,50 @@ def log_decorator(func):
 class GUI:
     """Represents the GUI and allows controlling the system under test."""
 
-    def __init__(self, wait_time: float = 5):
+    def __init__(self, wait_time: float = 5, res_dir_name: str = None):
         """Initializes the GUI of system under test.
 
         :param wait_time: Time to wait after each action
+        :param custom_dir_name: Provide a custom name of the results dir under
+        /tmp/SC-tests/. The default is `timestamp`_`caller func's name`.
         """
 
         self.wait_time = wait_time
         self.gdm_init_time = 10
         # Create the directory for screenshots
-        self.screenshot_directory = '/tmp/SC-tests/' + str(int(time()))
+        if res_dir_name:
+            self.html_directory = '/tmp/SC-tests/' + res_dir_name
+        else:
+            calling_func = inspect.stack()[1][3]
+            self.html_directory = '/tmp/SC-tests/' + str(int(time()))
+            self.html_directory += "_" + calling_func
+
+        self.screenshot_directory = self.html_directory + "/screenshots"
+        # will create both dirs
         os.makedirs(self.screenshot_directory, exist_ok=True)
+
+        self.html_file = join(self.html_directory, "index.html")
+        with open(self.html_file, 'w') as fp:
+            fp.write(
+                "<html lang=\"en\">\n"
+                "<head>\n"
+                "<meta charset=\"UTF-8\">\n"
+                "<meta name=\"viewport\" content=\"width=device-width, "
+                "initial-scale=1.0\">\n"
+                "<title>Test Results</title>\n"
+                "</head>\n"
+                "<body style=\"background-color:#000\">\n"
+            )
+
+        fmt = "<span style=\"color:white;\">"
+        fmt += "%(name)s:%(module)s.%(funcName)s.%(lineno)d </span>"
+        fmt += "<span style=\"color:royalblue;\">[%(levelname)s] </span>"
+        fmt += "<span style=\"color:limegreen;\">%(message)s</span>"
+        self.fileHandler = HTMLFileHandler(self.html_file)
+        self.fileHandler.setLevel(logging.DEBUG)
+        self.fileHandler.setFormatter(
+            logging.Formatter("<p>" + fmt + "</p>")
+        )
 
         self.mouse = Mouse()
 
@@ -243,17 +310,28 @@ class GUI:
         keyboard.send('enter')
 
     def __enter__(self):
-        self.screen = Screen(self.screenshot_directory)
+        self.screen = Screen(self.screenshot_directory, self.html_file)
         # By restarting gdm, the system gets into defined state
         run(['systemctl', 'restart', 'gdm'], check=True)
         # Cannot screenshot before gdm starts displaying
         # This would break the display
         sleep(self.gdm_init_time)
 
+        logger.addHandler(self.fileHandler)
+
         return self
 
     def __exit__(self, type, value, traceback):
         run(['systemctl', 'stop', 'gdm'], check=True)
+
+        with open(self.html_file, 'a') as fp:
+            fp.write(
+                "</body>\n"
+                "</html>\n"
+            )
+
+        logger.removeHandler(self.fileHandler)
+        logger.info(f"HTML file with results created in {self.html_directory}.")
 
     @action_decorator
     @log_decorator
@@ -416,4 +494,4 @@ class GUI:
             check_str = 'Activities'
 
         func = getattr(self, func_str)
-        func(check_str)
+        func(check_str, timeout=20)
