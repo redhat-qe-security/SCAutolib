@@ -180,8 +180,11 @@ class Controller:
             if os_version != OSVersion.Fedora:
                 run(['dnf', 'groupinstall', 'Server with GUI', '-y',
                      '--allowerasing'])
+                run(['pip', 'install', 'python-uinput'])
             else:
-                run(['dnf', 'install', 'gdm', '-y'])
+                # Fedora doesn't have server with GUI group so installed gdm
+                # manually and also python3-uinput should be installed from RPM
+                run(['dnf', 'install', 'gdm', 'python3-uinput', '-y'])
             # disable subscription message
             run(['systemctl', '--global', 'mask',
                  'org.gnome.SettingsDaemon.Subscription.target'])
@@ -195,7 +198,9 @@ class Controller:
                  '--allowerasing'])
             logger.debug("Smart Card Support group in installed.")
         else:
-            run(['dnf', 'install', 'opensc', 'pcsc-lite-ccid', '-y'])
+            # Fedora requires rsyslog as well
+            run(['dnf', 'install', 'opensc', 'pcsc-lite-ccid', 'rsyslog', '-y'])
+            run(['systemctl', 'start', 'rsyslog'])
 
         self.sssd_conf.create()
         self.sssd_conf.save()
@@ -206,13 +211,6 @@ class Controller:
         dump_to_json(base_user)
         dump_to_json(user.User(username="root",
                                password=self.lib_conf["root_passwd"]))
-
-        # Fedora requires python3-uinput from RPM and rsyslog
-        if os_version == OSVersion.Fedora:
-            run(['dnf', 'install', 'python3-uinput', 'rsyslog', '-y'])
-            run(['systemctl', 'start', 'rsyslog'])
-        else:
-            run(['pip', 'install', 'python-uinput'])
 
     def setup_local_ca(self, force: bool = False):
         """
