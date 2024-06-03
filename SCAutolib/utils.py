@@ -60,24 +60,29 @@ def _gen_private_key(key_path: Path):
 
 def _get_os_version():
     """
-    Find Linux version. Available version: RHEL 8, RHEL 9, Fedora.
+    Find Linux version. Available version: RHEL 8, RHEL 9, RHEL 10, Fedora.
     :return: Enum with OS version
     """
     with open('/etc/redhat-release', "r") as f:
         cnt = f.read()
 
-    if "Red Hat Enterprise Linux release 9" in cnt:
-        return OSVersion.RHEL_9
-    elif "Red Hat Enterprise Linux release 8" in cnt:
-        return OSVersion.RHEL_8
-    elif "Fedora" in cnt:
+    os_version = None
+
+    if "Fedora" in cnt:
         return OSVersion.Fedora
-    elif "CentOS Stream release 8" in cnt:
-        return OSVersion.CentOS_8
-    elif "CentOS Stream release 9" in cnt:
-        return OSVersion.CentOS_9
+    elif "Red Hat Enterprise Linux" in cnt:
+        os_version = OSVersion.RHEL_8
+    elif "CentOS Stream" in cnt:
+        os_version = OSVersion.CentOS_8
     else:
         raise SCAutolibException("OS is not detected.")
+
+    if "release 9" in cnt:
+        os_version += 1
+    elif "release 10" in cnt:
+        os_version += 2
+
+    return os_version
 
 
 def _install_packages(packages):

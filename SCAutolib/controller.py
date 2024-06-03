@@ -140,6 +140,8 @@ class Controller:
         :type graphical: bool
         :return:
         """
+        os_version = _get_os_version()
+
         for d in (LIB_DIR, LIB_BACKUP, LIB_DUMP, LIB_DUMP_USERS, LIB_DUMP_CAS,
                   LIB_DUMP_CARDS):
             d.mkdir(exist_ok=True)
@@ -158,7 +160,11 @@ class Controller:
                 for c in self.lib_conf["cards"]):
             packages += ["pcsc-lite-ccid", "pcsc-lite", "virt_cacard",
                          "vpcd", "softhsm"]
-            run("dnf -y copr enable jjelen/vsmartcard")
+            extra_args = ""
+            if os_version in (OSVersion.RHEL_10, OSVersion.CentOS_10):
+                # TODO: use better approach later
+                extra_args = " centos-stream-10-x86_64"
+            run("dnf -y copr enable jjelen/vsmartcard{0}".format(extra_args))
 
         # Add IPA packages if needed
         if any([u["user_type"] != UserType.local
@@ -175,7 +181,7 @@ class Controller:
             logger.critical(msg)
             raise exceptions.SCAutolibException(msg)
 
-        os_version = _get_os_version()
+        print(f"Os version: {os_version}")
         if graphical:
             if os_version != OSVersion.Fedora:
                 run(['dnf', 'groupinstall', 'Server with GUI', '-y',
@@ -533,7 +539,7 @@ class Controller:
         :return: name of the IPA client package for current Linux
         """
         os_version = _get_os_version()
-        if os_version not in (OSVersion.RHEL_9, OSVersion.CentOS_9):
+        if os_version in (OSVersion.RHEL_8, OSVersion.CentOS_8):
             run("dnf module enable -y idm:DL1")
             run("dnf install @idm:DL1 -y")
             logger.debug("idm:DL1 module is installed")
