@@ -1,15 +1,17 @@
 from enum import Enum, auto
 
 
-class OSVersion(Enum):
+class OSVersion(int, Enum):
     """
     Enumeration for Linux versions. Used for more convenient checks.
     """
     Fedora = 1
-    RHEL_9 = 2
-    RHEL_8 = 3
-    CentOS_8 = 4
-    CentOS_9 = 5
+    RHEL_8 = 2
+    RHEL_9 = 3
+    RHEL_10 = 4
+    CentOS_8 = 5
+    CentOS_9 = 6
+    CentOS_10 = 7
 
 
 class CardType(str, Enum):

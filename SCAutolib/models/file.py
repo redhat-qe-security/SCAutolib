@@ -277,7 +277,6 @@ class SSSDConf(File):
     runtimes.
     """
     __instance = None
-    _template = Path(TEMPLATES_DIR, "sssd.conf")
     _conf_file = Path("/etc/sssd/sssd.conf")
     _backup_original = None
     _backup_default = LIB_BACKUP.joinpath('default-sssd.conf')
@@ -297,6 +296,14 @@ class SSSDConf(File):
         if self.__initialized:
             return
         self.__initialized = True
+
+        with open('/etc/redhat-release', "r") as f:
+            release = f.read()
+
+        if "release 8" in release or "release 9" in release:
+            self._template = TEMPLATES_DIR.joinpath("sssd.conf-8or9")
+        else:
+            self._template = TEMPLATES_DIR.joinpath("sssd.conf-10")
 
         # _default_parser object stores default content of config file
         self._default_parser = ConfigParser()
