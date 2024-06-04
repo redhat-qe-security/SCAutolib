@@ -10,7 +10,6 @@ from pathlib import Path
 
 from SCAutolib import (run, logger, TEMPLATES_DIR, LIB_DUMP_USERS, LIB_DUMP_CAS,
                        LIB_DUMP_CARDS)
-from SCAutolib.enums import OSVersion
 from SCAutolib.exceptions import SCAutolibException
 from SCAutolib.models.CA import LocalCA, BaseCA, CustomCA, IPAServerCA
 from SCAutolib.models.card import Card
@@ -56,33 +55,6 @@ def _gen_private_key(key_path: Path):
             encoding=serialization.Encoding.PEM,
             format=serialization.PrivateFormat.TraditionalOpenSSL,
             encryption_algorithm=serialization.NoEncryption()))
-
-
-def _get_os_version():
-    """
-    Find Linux version. Available version: RHEL 8, RHEL 9, RHEL 10, Fedora.
-    :return: Enum with OS version
-    """
-    with open('/etc/redhat-release', "r") as f:
-        cnt = f.read()
-
-    os_version = None
-
-    if "Fedora" in cnt:
-        return OSVersion.Fedora
-    elif "Red Hat Enterprise Linux" in cnt:
-        os_version = OSVersion.RHEL_8
-    elif "CentOS Stream" in cnt:
-        os_version = OSVersion.CentOS_8
-    else:
-        raise SCAutolibException("OS is not detected.")
-
-    if "release 9" in cnt:
-        os_version += 1
-    elif "release 10" in cnt:
-        os_version += 2
-
-    return os_version
 
 
 def _install_packages(packages):

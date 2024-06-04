@@ -12,8 +12,7 @@ import uinput
 import logging
 
 from SCAutolib import run, logger
-from SCAutolib.enums import OSVersion
-from SCAutolib.utils import _get_os_version
+from SCAutolib.isDistro import isDistro
 
 
 class HTMLFileHandler(logging.FileHandler):
@@ -487,8 +486,7 @@ class GUI:
         else:
             func_str = 'assert_no_text'
 
-        os_version = _get_os_version()
-        if os_version == OSVersion.Fedora:
+        if isDistro('fedora'):
             check_str = 'tosearch'
         else:
             check_str = 'Activities'

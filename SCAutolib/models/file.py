@@ -26,6 +26,7 @@ import json
 
 from SCAutolib import logger, TEMPLATES_DIR, LIB_BACKUP, LIB_DUMP_CONFS, run
 from SCAutolib.exceptions import SCAutolibException
+from SCAutolib.isDistro import isDistro
 
 
 class File:
@@ -297,10 +298,8 @@ class SSSDConf(File):
             return
         self.__initialized = True
 
-        with open('/etc/redhat-release', "r") as f:
-            release = f.read()
-
-        if "release 8" in release or "release 9" in release:
+        if isDistro(['rhel', 'centos'], version='<=9') \
+                or isDistro(['fedora'], version='<39'):
             self._template = TEMPLATES_DIR.joinpath("sssd.conf-8or9")
         else:
             self._template = TEMPLATES_DIR.joinpath("sssd.conf-10")
