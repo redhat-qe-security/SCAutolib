@@ -12,10 +12,11 @@ from SCAutolib import (logger, run, LIB_DIR, LIB_BACKUP, LIB_DUMP,
 from SCAutolib.models import CA, file, user, card, authselect as auth
 from SCAutolib.models.file import File, OpensslCnf
 from SCAutolib.models.CA import BaseCA
-from SCAutolib.enums import (OSVersion, CardType, UserType)
+from SCAutolib.enums import (CardType, UserType)
 from SCAutolib.utils import (_check_selinux, _gen_private_key,
-                             _get_os_version, _install_packages,
-                             _check_packages, dump_to_json, ca_factory)
+                             _install_packages, _check_packages,
+                             dump_to_json, ca_factory)
+from SCAutolib.isDistro import isDistro
 
 
 class Controller:
@@ -140,8 +141,6 @@ class Controller:
         :type graphical: bool
         :return:
         """
-        os_version = _get_os_version()
-
         for d in (LIB_DIR, LIB_BACKUP, LIB_DUMP, LIB_DUMP_USERS, LIB_DUMP_CAS,
                   LIB_DUMP_CARDS):
             d.mkdir(exist_ok=True)
@@ -161,7 +160,7 @@ class Controller:
             packages += ["pcsc-lite-ccid", "pcsc-lite", "virt_cacard",
                          "vpcd", "softhsm"]
             extra_args = ""
-            if os_version in (OSVersion.RHEL_10, OSVersion.CentOS_10):
+            if isDistro(['rhel', 'centos'], version='10'):
                 # TODO: use better approach later
                 extra_args = " centos-stream-10-x86_64"
             run("dnf -y copr enable jjelen/vsmartcard{0}".format(extra_args))
@@ -181,9 +180,8 @@ class Controller:
             logger.critical(msg)
             raise exceptions.SCAutolibException(msg)
 
-        print(f"Os version: {os_version}")
         if graphical:
-            if os_version != OSVersion.Fedora:
+            if not isDistro('fedora'):
                 run(['dnf', 'groupinstall', 'Server with GUI', '-y',
                      '--allowerasing'])
                 run(['pip', 'install', 'python-uinput'])
@@ -199,7 +197,7 @@ class Controller:
             self.dconf_file.save()
             run('dconf update')
 
-        if os_version != OSVersion.Fedora:
+        if not isDistro('fedora'):
             run(['dnf', 'groupinstall', "Smart Card Support", '-y',
                  '--allowerasing'])
             logger.debug("Smart Card Support group in installed.")
@@ -538,13 +536,12 @@ class Controller:
 
         :return: name of the IPA client package for current Linux
         """
-        os_version = _get_os_version()
-        if os_version in (OSVersion.RHEL_8, OSVersion.CentOS_8):
+        if isDistro(['rhel', 'centos'], version='8'):
             run("dnf module enable -y idm:DL1")
             run("dnf install @idm:DL1 -y")
             logger.debug("idm:DL1 module is installed")
 
-        if os_version == OSVersion.Fedora:
+        if isDistro('fedora'):
             return ["freeipa-client"]
         else:
             return ["ipa-client"]
