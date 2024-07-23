@@ -7,15 +7,15 @@ import distro
 from typing import Union
 
 
-def isDistro(oses: Union[str, list], version: str = None) -> bool:
+def isDistro(OSes: Union[str, list], version: str = None) -> bool:
     cur_id = distro.id().lower()
     cur_name = distro.name().lower()
 
-    if isinstance(oses, str):
-        results = (oses in cur_id) or (oses in cur_name)
+    if isinstance(OSes, str):
+        results = (OSes in cur_id) or (OSes in cur_name)
     else:
         results = False
-        for item in oses:
+        for item in OSes:
             if not isinstance(item, str):
                 continue
             item = item.lower()
