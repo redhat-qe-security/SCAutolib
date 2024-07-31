@@ -170,10 +170,6 @@ class Controller:
                 for u in self.lib_conf["users"]]):
             packages += self._general_steps_for_ipa()
 
-        # In RHEL-10 we need one extra policy for the pcsc-lite to work
-        if isDistro(['rhel', 'centos'], version='10'):
-            packages += ["sssd-polkit-rules"]
-
         # Check for installed packages
         missing = _check_packages(packages)
         if install_missing and missing:
