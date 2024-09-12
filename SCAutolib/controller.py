@@ -449,6 +449,12 @@ class Controller:
                 cache_file.unlink()
         logger.debug("Removed opensc file cache")
 
+        sssd_cache_dir = Path(os.path.expanduser('~sssd') + "/.cache/opensc/")
+        if sssd_cache_dir.exists():
+            for cache_file in sssd_cache_dir.iterdir():
+                cache_file.unlink()
+        logger.debug("Removed opensc file cache for sssd user")
+
         # file only created in graphical mode that is why it is removed.
         self.dconf_file.remove()
 
