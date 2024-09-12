@@ -145,6 +145,7 @@ def load_token(card_name: str = None, update_sssd: bool = False):
                       key="matchrule",
                       value=f"<SUBJECT>.*CN={card.CN}.*")
         sssd_conf.save()
+        run(["sss_cache", "-E"])
         run(["systemctl", "restart", "sssd"])
     return card
 
