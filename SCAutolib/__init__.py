@@ -7,10 +7,12 @@ from schema import Schema, Use, Or, And, Optional
 
 from SCAutolib.enums import CardType, UserType
 
-fmt = "%(name)s:%(module)s.%(funcName)s.%(lineno)d [%(levelname)s] %(message)s"
+fmt = {"%(asctime)s %(name)s:%(module)s.%(funcName)s.%(lineno)d "
+       "[%(levelname)s] %(message)s"}
 date_fmt = "%H:%M:%S"
 coloredlogs.install(level="DEBUG", fmt=fmt, datefmt=date_fmt,
-                    field_styles={'levelname': {'bold': True, 'color': 'blue'}})
+                    field_styles={'levelname': {'bold': True, 'color': 'blue'},
+                                  'asctime': {'color': 'green'}})
 logger = logging.getLogger(__name__)
 # Disable logs from imported packages
 logging.getLogger("paramiko").setLevel(logging.WARNING)

@@ -292,7 +292,9 @@ class GUI:
                 "<body style=\"background-color:#000\">\n"
             )
 
-        fmt = "<span style=\"color:white;\">"
+        fmt = "<span style=\"color:limegreen;\">"
+        fmt += "%(asctime)s</span> "
+        fmt += "<span style=\"color:white;\">"
         fmt += "%(name)s:%(module)s.%(funcName)s.%(lineno)d </span>"
         fmt += "<span style=\"color:royalblue;\">[%(levelname)s] </span>"
         fmt += "<span style=\"color:limegreen;\">%(message)s</span>"
