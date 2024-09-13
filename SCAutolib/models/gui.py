@@ -1,4 +1,3 @@
-import copy
 import inspect
 import os
 from os.path import join
@@ -13,28 +12,6 @@ import logging
 
 from SCAutolib import run, logger
 from SCAutolib.isDistro import isDistro
-
-
-class HTMLFileHandler(logging.FileHandler):
-    """Extending FileHandler to work with HTML files."""
-
-    def __init__(
-            self, filename, mode='a', encoding=None, delay=False, errors=None):
-        """
-        A handler class which writes formatted logging records to disk HTML
-        files.
-        """
-        super(HTMLFileHandler, self).__init__(
-            filename, mode, encoding, delay, errors
-        )
-
-    def emit(self, record: logging.LogRecord) -> None:
-        """
-        Do whatever it takes to actually log the specified logging record.
-        """
-        custom_record = copy.deepcopy(record)
-        custom_record.msg = str(record.msg).rstrip().replace("\n", "<br>\n")
-        return super().emit(custom_record)
 
 
 class Screen:
@@ -292,7 +269,7 @@ class GUI:
                 "initial-scale=1.0\">\n"
                 "<title>Test Results</title>\n"
                 "</head>\n"
-                "<body style=\"background-color:#000\">\n"
+                "<body style=\"background-color:#000;\">\n"
             )
 
         fmt = "<span style=\"color:limegreen;\">"
@@ -300,8 +277,8 @@ class GUI:
         fmt += "<span style=\"color:white;\">"
         fmt += "%(name)s:%(module)s.%(funcName)s.%(lineno)d </span>"
         fmt += "<span style=\"color:royalblue;\">[%(levelname)s] </span>"
-        fmt += "<span style=\"color:limegreen;\">%(message)s</span>"
-        self.fileHandler = HTMLFileHandler(self.html_file)
+        fmt += "<pre style=\"color:limegreen;\">%(message)s</pre>"
+        self.fileHandler = logging.FileHandler(self.html_file)
         self.fileHandler.setLevel(logging.DEBUG)
         self.fileHandler.setFormatter(
             logging.Formatter("<p>" + fmt + "</p>")
