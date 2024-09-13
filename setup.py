@@ -24,7 +24,7 @@ graphical_reqs = [
 
 setup(
     name="SCAutolib",
-    version="3.3.4",
+    version="3.3.5",
     description=description,
     long_description=long_description,
     long_description_content_type='text/markdown',
