@@ -74,6 +74,9 @@ class Screen:
 
             if out.returncode == 0:
                 captured = True
+            else:
+                logger.debug(f"ffmpeg failed with {out.returncode}. "
+                             f"stdout: {out.stdout}, stderr: {out.stderr}")
 
         if not captured:
             raise Exception('Could not capture screenshot within timeout.')
