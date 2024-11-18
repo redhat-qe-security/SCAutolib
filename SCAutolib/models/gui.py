@@ -290,8 +290,10 @@ class GUI:
         # otherwise the first character is not sent
         keyboard.send('enter')
 
-    def __enter__(self):
+        # create screen object to use from calls
         self.screen = Screen(self.screenshot_directory, self.html_file)
+
+    def __enter__(self):
         # By restarting gdm, the system gets into defined state
         run(['systemctl', 'restart', 'gdm'], check=True)
         # Cannot screenshot before gdm starts displaying
