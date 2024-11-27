@@ -379,7 +379,18 @@ class GUI:
     def kb_write(self, *args, **kwargs):
         # delay is a workaround needed for keyboard library
         kwargs.setdefault('delay', 0.1)
-        keyboard.write(*args, **kwargs)
+
+        word = args[0]
+        last = ""
+        for char in word:
+            if char.isupper():
+                if last != "":
+                    keyboard.write(*[last], **kwargs)
+                    last = ""
+                keyboard.send(f"shift+{char.lower()}")
+            else:
+                last = f"{last}{char}"
+        keyboard.write(*[last], **kwargs)
 
     @action_decorator
     @log_decorator
