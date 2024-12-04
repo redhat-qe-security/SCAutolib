@@ -17,6 +17,9 @@ def check_conf_path(conf):
     return click.Path(exists=True, resolve_path=True)(conf)
 
 
+# In Help output, force the subcommand list to match the order
+# listed in this file.   Solution was found here:
+# https://github.com/pallets/click/issues/513#issuecomment-301046782
 class NaturalOrderGroup(click.Group):
     """
     Command group trying to list subcommands in the order they were added.
@@ -34,8 +37,8 @@ class NaturalOrderGroup(click.Group):
         elif not isinstance(commands, OrderedDict):
             commands = OrderedDict(commands)
         click.Group.__init__(self, name=name,
-                     commands=commands,
-                     **attrs)
+                             commands=commands,
+                             **attrs)
 
     def list_commands(self, ctx):
         """
@@ -64,8 +67,10 @@ def cli(ctx, force, verbose, conf):
     logger.setLevel(verbose)
     ctx.ensure_object(dict)  # Create a dict to store the context
     ctx.obj["FORCE"] = force  # Store the force option in the context
-    if ctx.invoked_subcommand and not gui:
-        ctx.obj["CONTROLLER"] = Controller(check_conf_path(conf))
+    parsed_conf = None
+    if ctx.invoked_subcommand != "gui":
+        parsed_conf = check_conf_path(conf)
+    ctx.obj["CONTROLLER"] = Controller(parsed_conf)
 
 
 @cli.command()
@@ -202,8 +207,13 @@ def cleanup(ctx):
 
 
 @cli.group(cls=NaturalOrderGroup, chain=True)
+@click.option("--install-missing", "-i",
+              required=False,
+              default=False,
+              is_flag=True,
+              help="Install missing packages")
 @click.pass_context
-def gui(ctx):
+def gui(ctx, install_missing):
     """ Run GUI Test commands """
     pass
 
@@ -215,17 +225,17 @@ def init():
 
 
 @gui.command()
+@click.option("--no",
+              required=False,
+              default=False,
+              is_flag=True,
+              help="Reverse the action")
 @click.argument("name")
-def assert_text(name):
+def assert_text(name, no):
     """ Check if a word is found on the screen """
+    if no:
+        return f"assert_no_text:{name}"
     return f"assert_text:{name}"
-
-
-@gui.command()
-@click.argument("name")
-def assert_no_text(name):
-    """ Check that a word is not found on the screen """
-    return f"assert_no_text:{name}"
 
 
 @gui.command()
@@ -236,9 +246,16 @@ def click_on(name):
 
 
 @gui.command()
-def check_home_screen():
+@click.option("--no",
+              required=False,
+              default=False,
+              is_flag=True,
+              help="Reverse the action")
+def check_home_screen(no):
     """ Check if screen appears to be the home screen """
-    return f"check_home_screen"
+    if no:
+        return "check_no_home_screen"
+    return "check_home_screen"
 
 
 @gui.command()
@@ -263,8 +280,9 @@ def done():
 
 @gui.result_callback()
 @click.pass_context
-def run_all(ctx, actions):
-    click.echo(actions)
+def run_all(ctx, actions, install_missing):
+    """ Run all cli actions in order """
+    ctx.obj["CONTROLLER"].setup_graphical(install_missing, True)
 
     from SCAutolib.models.gui import GUI
     gui = GUI()
@@ -272,30 +290,28 @@ def run_all(ctx, actions):
         if "init" in action:
             gui.__enter__()
         if "assert_text" in action:
-            assert_text = action.split(":")[1]
-            click.echo(f"CLICK: assert_text:{assert_text}")
+            assert_text = action.split(":", 1)[1]
             gui.assert_text(assert_text)
         if "assert_no_text" in action:
-            assert_text = action.split(":")[1]
-            click.echo(f"CLICK: assert_text:{assert_text}")
-            gui.assert_text(assert_text)
+            assert_text = action.split(":", 1)[1]
+            gui.assert_no_text(assert_text)
         if "click_on" in action:
-            click_on = action.split(":")[1]
-            click.echo(f"CLICK: click_on:{click_on}")
+            click_on = action.split(":", 1)[1]
             gui.click_on(click_on)
         if "check_home_screen" in action:
-            click.echo("CLICK: check_home_screen")
             gui.check_home_screen()
+        if "check_no_home_screen" in action:
+            gui.check_home_screen(False)
         if "kb_send" in action:
-            params = action.split(":")[1].split()
-            click.echo(f"CLICK: kb_send:{params}")
-            gui.kb_send(*params)
+            params = action.split(":", 1)[1].split()[0]
+            gui.kb_send(params)
         if "kb_write" in action:
-            params = action.split(":")[1].split()
-            click.echo(f"CLICK: kb_write:{params}")
-            gui.kb_write(*params)
+            params = action.split(":", 1)[1].split()[0]
+            gui.kb_write(params)
+            gui.kb_send('enter')
         if "done" in action:
             gui.__exit__(None, None, None)
+            ctx.obj["CONTROLLER"].cleanup()
 
 
 if __name__ == "__main__":

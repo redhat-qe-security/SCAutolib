@@ -34,7 +34,7 @@ class Controller:
     def conf_path(self):
         return self._lib_conf_path
 
-    def __init__(self, config: Union[Path, str], params: {} = None):
+    def __init__(self, config: Union[Path, str] = None, params: {} = None):
         """
         Constructor will parse and check input configuration file. If some
         required fields in the configuration are missing, CLI parameters
@@ -55,15 +55,18 @@ class Controller:
         # Check params
 
         # Parse config file
-        self._lib_conf_path = config.absolute() if isinstance(config, Path) \
-            else Path(config).absolute()
+        self.lib_conf = None
+        if config:
+            self._lib_conf_path = config.absolute() if isinstance(config, Path) \
+                else Path(config).absolute()
 
-        with self._lib_conf_path.open("r") as f:
-            tmp_conf = json.load(f)
-            if tmp_conf is None:
-                raise exceptions.SCAutolibException(
-                    "Data are not loaded correctly.")
-        self.lib_conf = self._validate_configuration(tmp_conf, params)
+            with self._lib_conf_path.open("r") as f:
+                tmp_conf = json.load(f)
+                if tmp_conf is None:
+                    raise exceptions.SCAutolibException(
+                        "Data are not loaded correctly.")
+            self.lib_conf = self._validate_configuration(tmp_conf, params)
+
         self.users = []
         for d in (LIB_DIR, LIB_BACKUP, LIB_DUMP, LIB_DUMP_USERS, LIB_DUMP_CAS,
                   LIB_DUMP_CARDS, LIB_DUMP_CONFS):
@@ -147,12 +150,6 @@ class Controller:
 
         packages = ["opensc", "httpd", "sssd", "sssd-tools", "gnutls-utils",
                     "openssl", "nss-tools"]
-        if gdm:
-            packages.append("gdm")
-
-        if graphical:
-            # ffmpeg-free is in EPEL repo
-            packages += ["tesseract", "ffmpeg-free"]
 
         # Prepare for virtual cards
         if any(c["card_type"] == CardType.virtual
@@ -181,21 +178,7 @@ class Controller:
             raise exceptions.SCAutolibException(msg)
 
         if graphical:
-            if not isDistro('fedora'):
-                run(['dnf', 'groupinstall', 'Server with GUI', '-y',
-                     '--allowerasing'])
-                run(['pip', 'install', 'python-uinput'])
-            else:
-                # Fedora doesn't have server with GUI group so installed gdm
-                # manually and also python3-uinput should be installed from RPM
-                run(['dnf', 'install', 'gdm', 'python3-uinput', '-y'])
-            # disable subscription message
-            run(['systemctl', '--global', 'mask',
-                 'org.gnome.SettingsDaemon.Subscription.target'])
-            # disable welcome message
-            self.dconf_file.create()
-            self.dconf_file.save()
-            run('dconf update')
+            self.setup_graphical(install_missing, gdm)
 
         if not isDistro('fedora'):
             run(['dnf', 'groupinstall', "Smart Card Support", '-y',
@@ -215,6 +198,38 @@ class Controller:
         dump_to_json(base_user)
         dump_to_json(user.User(username="root",
                                password=self.lib_conf["root_passwd"]))
+
+    def setup_graphical(self, install_missing: bool, gdm: bool):
+        packages = ["gcc", "tesseract", "ffmpeg-free"]
+
+        if gdm:
+            packages.append("gdm")
+
+        missing = _check_packages(packages)
+        if install_missing and missing:
+            _install_packages(missing)
+        elif missing:
+            msg = "Can't continue with graphical. Some packages are missing: " \
+                  f"{', '.join(missing)}"
+            logger.critical(msg)
+            raise exceptions.SCAutolibException(msg)
+
+        if not isDistro('fedora'):
+            run(['dnf', 'groupinstall', 'Server with GUI', '-y',
+                '--allowerasing'])
+            run(['pip', 'install', 'python-uinput'])
+        else:
+            # Fedora doesn't have server with GUI group so installed gdm
+            # manually and also python3-uinput should be installed from RPM
+            run(['dnf', 'install', 'gdm', 'python3-uinput', '-y'])
+        # disable subscription message
+        run(['systemctl', '--global', 'mask',
+            'org.gnome.SettingsDaemon.Subscription.target'])
+        # disable welcome message
+        if not self.dconf_file.exists():
+            self.dconf_file.create()
+            self.dconf_file.save()
+            run('dconf update')
 
     def setup_local_ca(self, force: bool = False):
         """
