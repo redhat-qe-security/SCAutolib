@@ -285,7 +285,7 @@ def run_all(ctx, actions, install_missing):
     ctx.obj["CONTROLLER"].setup_graphical(install_missing, True)
 
     from SCAutolib.models.gui import GUI
-    gui = GUI()
+    gui = GUI(from_cli=True)
     for action in actions:
         if "init" in action:
             gui.__enter__()
