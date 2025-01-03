@@ -92,6 +92,12 @@ class File:
                 f"Removed file {self._conf_file}."
             )
 
+    def exists(self):
+        """
+        Checks if a file exists. Returns boolean.
+        """
+        return self._conf_file.exists()
+
     def set(self, key: str, value: Union[int, str, bool], section: str = None,
             separator: str = "="):
         """

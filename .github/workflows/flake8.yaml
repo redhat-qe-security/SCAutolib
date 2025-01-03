@@ -21,6 +21,13 @@ jobs:
       with:
         python-version: 3
 
+    - name: Install krb5-config deps
+      run: sudo apt-get update -y
+           && sudo apt-get upgrade -y
+           && sudo apt-get install -y
+           libkrb5-dev
+           gcc
+
     - name: Install dependencies
       run: python3 -m pip install tox
 

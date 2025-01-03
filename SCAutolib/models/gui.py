@@ -1,7 +1,6 @@
 import inspect
-import os
-from os.path import join
 from time import sleep, time
+from pathlib import Path
 
 import cv2
 import keyboard
@@ -24,7 +23,14 @@ class Screen:
         """
         self.directory = directory
         self.html_file = html_file
+
+        taken_images = [str(image).split('/')[-1]
+                        for image in Path(directory).iterdir()]
+        taken_images.sort(reverse=True)
+
         self.screenshot_num = 1
+        if len(taken_images) > 0:
+            self.screenshot_num = int(taken_images[0].split('.')[0]) + 1
 
     def screenshot(self, timeout: float = 30):
         """Runs ffmpeg to take a screenshot.
@@ -237,7 +243,8 @@ def log_decorator(func):
 class GUI:
     """Represents the GUI and allows controlling the system under test."""
 
-    def __init__(self, wait_time: float = 5, res_dir_name: str = None):
+    def __init__(self, wait_time: float = 5, res_dir_name: str = None,
+                 from_cli: bool = False):
         """Initializes the GUI of system under test.
 
         :param wait_time: Time to wait after each action
@@ -247,30 +254,52 @@ class GUI:
 
         self.wait_time = wait_time
         self.gdm_init_time = 10
+        self.from_cli = from_cli
         # Create the directory for screenshots
+        self.html_directory = Path("/tmp/SC-tests")
+        if not self.html_directory.exists():
+            self.html_directory.mkdir()
         if res_dir_name:
-            self.html_directory = '/tmp/SC-tests/' + res_dir_name
+            self.html_directory = self.html_directory.joinpath(res_dir_name)
+        elif from_cli:
+            run_dirs = [str(run_dir).split('/')[-1]
+                        for run_dir in self.html_directory.iterdir()
+                        if "cli_gui" in str(run_dir)]
+            run_dirs.sort(reverse=True)
+
+            last_run_dir = Path(run_dirs[0]) if len(run_dirs) > 0 else None
+            if last_run_dir and not last_run_dir.joinpath('done').exists():
+                # Use the old run directory
+                logger.debug("Using HTML logging file from last time.")
+                self.html_directory = self.html_directory.joinpath(
+                    last_run_dir)
+            else:
+                # Create new run directory
+                logger.debug("Creating new HTML logging file.")
+                self.html_directory = self.html_directory.joinpath(
+                    str(int(time())) + '_cli_gui')
         else:
             calling_func = inspect.stack()[1][3]
-            self.html_directory = '/tmp/SC-tests/' + str(int(time()))
-            self.html_directory += "_" + calling_func
+            self.html_directory = self.html_directory.joinpath(
+                str(int(time())) + '_' + calling_func)
 
-        self.screenshot_directory = self.html_directory + "/screenshots"
+        self.screenshot_directory = self.html_directory.joinpath("screenshots")
         # will create both dirs
-        os.makedirs(self.screenshot_directory, exist_ok=True)
+        self.screenshot_directory.mkdir(parents=True, exist_ok=True)
 
-        self.html_file = join(self.html_directory, "index.html")
-        with open(self.html_file, 'w') as fp:
-            fp.write(
-                "<html lang=\"en\">\n"
-                "<head>\n"
-                "<meta charset=\"UTF-8\">\n"
-                "<meta name=\"viewport\" content=\"width=device-width, "
-                "initial-scale=1.0\">\n"
-                "<title>Test Results</title>\n"
-                "</head>\n"
-                "<body style=\"background-color:#000;\">\n"
-            )
+        self.html_file = self.html_directory.joinpath("index.html")
+        if not self.html_file.exists():
+            with open(self.html_file, 'w') as fp:
+                fp.write(
+                    "<html lang=\"en\">\n"
+                    "<head>\n"
+                    "<meta charset=\"UTF-8\">\n"
+                    "<meta name=\"viewport\" content=\"width=device-width, "
+                    "initial-scale=1.0\">\n"
+                    "<title>Test Results</title>\n"
+                    "</head>\n"
+                    "<body style=\"background-color:#000;\">\n"
+                )
 
         fmt = "<span style=\"color:limegreen;\">"
         fmt += "%(asctime)s</span> "
@@ -284,25 +313,36 @@ class GUI:
             logging.Formatter("<p>" + fmt + "</p>")
         )
 
+        if self.from_cli:
+            logger.addHandler(self.fileHandler)
+
         self.mouse = Mouse()
 
         # workaround for keyboard library
         # otherwise the first character is not sent
         keyboard.send('enter')
 
-    def __enter__(self):
+        # create screen object to use from calls
         self.screen = Screen(self.screenshot_directory, self.html_file)
+
+    def __enter__(self):
         # By restarting gdm, the system gets into defined state
         run(['systemctl', 'restart', 'gdm'], check=True)
         # Cannot screenshot before gdm starts displaying
         # This would break the display
         sleep(self.gdm_init_time)
 
-        logger.addHandler(self.fileHandler)
+        if not self.from_cli:
+            logger.addHandler(self.fileHandler)
 
         return self
 
     def __exit__(self, type, value, traceback):
+        done_file = self.html_directory.joinpath('done')
+        print(done_file)
+        if done_file.exists():
+            return
+
         run(['systemctl', 'stop', 'gdm'], check=True)
 
         with open(self.html_file, 'a') as fp:
@@ -311,7 +351,13 @@ class GUI:
                 "</html>\n"
             )
 
-        logger.removeHandler(self.fileHandler)
+        print(done_file)
+        with open(done_file, 'w') as fp:
+            fp.write("done")
+
+        if not self.from_cli:
+            logger.removeHandler(self.fileHandler)
+
         logger.info(f"HTML file with results created in {self.html_directory}.")
 
     @action_decorator
@@ -377,7 +423,18 @@ class GUI:
     def kb_write(self, *args, **kwargs):
         # delay is a workaround needed for keyboard library
         kwargs.setdefault('delay', 0.1)
-        keyboard.write(*args, **kwargs)
+
+        word = args[0]
+        last = ""
+        for char in word:
+            if char.isupper():
+                if last != "":
+                    keyboard.write(*[last], **kwargs)
+                    last = ""
+                keyboard.send(f"shift+{char.lower()}")
+            else:
+                last = f"{last}{char}"
+        keyboard.write(*[last], **kwargs)
 
     @action_decorator
     @log_decorator
