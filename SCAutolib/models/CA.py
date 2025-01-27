@@ -9,7 +9,7 @@ import json
 import os
 import python_freeipa
 from cryptography import x509
-from hashlib import md5
+from hashlib import sha256
 from pathlib import Path, PosixPath
 from python_freeipa import exceptions
 from python_freeipa.client_meta import ClientMeta
@@ -578,8 +578,6 @@ class IPAServerCA(BaseCA):
                 f.write(cnt)
             logger.info(
                 "IPA server is added to /etc/resolv.conf as first nameserver")
-            run("chattr -i /etc/resolv.conf")
-            logger.info("File /etc/resolv.conf is blocked for editing")
 
         with open("/etc/resolv.conf", "r") as f:
             logger.debug(f"New resolv.conf\n{f.read()}")
@@ -608,18 +606,6 @@ class IPAServerCA(BaseCA):
         from invoke import Responder
         from fabric.connection import Connection
 
-        class __PKeyChild(paramiko.PKey):
-            """This child class is need to fix SSH connection with MD5 algorithm
-            in FIPS mode
-
-            This is just workaround until PR in paramiko would be accepted
-            https://github.com/paramiko/paramiko/issues/396. After this PR is
-            merged, delete this class
-            """
-
-            def get_fingerprint_improved(self):
-                return md5(self.asbytes(), usedforsecurity=False).digest()
-
         kinitpass = Responder(
             pattern=f"Password for admin@{self._ipa_server_realm}: ",
             response=f"{self._ipa_server_admin_passwd}\n")
@@ -628,11 +614,11 @@ class IPAServerCA(BaseCA):
         with Connection(self._ipa_server_ip, user="root",
                         connect_kwargs={
                             "password": self._ipa_server_root_passwd}) as c:
-            # Delete this block when PR in paramiko will be accepted
+            # TODO Delete this block when PR in paramiko will be accepted
             # https://github.com/paramiko/paramiko/issues/396
             #### noqa:E266
             paramiko.PKey.get_fingerprint = \
-                self.__PKeyChild.get_fingerprint_improved
+                lambda x: sha256(x.asbytes()).digest()
             c.client = paramiko.SSHClient()
             c.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             #### noqa:E266
