@@ -163,7 +163,7 @@ class Controller:
             run("dnf -y copr enable jjelen/vsmartcard{0}".format(extra_args))
 
         # Add IPA packages if needed
-        if any([u["user_type"] != UserType.local
+        if any([u["user_type"] == UserType.ipa
                 for u in self.lib_conf["users"]]):
             packages += self._general_steps_for_ipa()
 
@@ -563,9 +563,9 @@ class Controller:
             logger.debug("idm:DL1 module is installed")
 
         if isDistro('fedora'):
-            return ["freeipa-client"]
+            return ["e2fsprogs", "freeipa-client"]
         else:
-            return ["ipa-client"]
+            return ["e2fsprogs", "ipa-client"]
 
     def get_user_dict(self, name):
         """
