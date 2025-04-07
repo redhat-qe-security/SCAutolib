@@ -156,11 +156,7 @@ class Controller:
                 for c in self.lib_conf["cards"]):
             packages += ["pcsc-lite-ccid", "pcsc-lite", "virt_cacard",
                          "vpcd", "softhsm"]
-            extra_args = ""
-            if isDistro(['rhel', 'centos'], version='10'):
-                # TODO: use better approach later
-                extra_args = " centos-stream-10-x86_64"
-            run("dnf -y copr --hub fedora enable jjelen/vsmartcard{0}".format(extra_args))
+            run("dnf -y copr --hub fedora enable jjelen/vsmartcard")
 
         # Add IPA packages if needed
         if any([u["user_type"] == UserType.ipa
