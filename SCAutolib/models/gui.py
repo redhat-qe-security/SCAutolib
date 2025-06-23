@@ -26,11 +26,12 @@ class Screen:
 
         taken_images = [str(image).split('/')[-1]
                         for image in Path(directory).iterdir()]
-        taken_images.sort(reverse=True)
+        taken_image_ids = [int(image.split('.')[0]) for image in taken_images]
+        taken_image_ids.sort(reverse=True)
 
         self.screenshot_num = 1
         if len(taken_images) > 0:
-            self.screenshot_num = int(taken_images[0].split('.')[0]) + 1
+            self.screenshot_num = taken_image_ids[0] + 1
 
     def screenshot(self, timeout: float = 30):
         """Runs ffmpeg to take a screenshot.
