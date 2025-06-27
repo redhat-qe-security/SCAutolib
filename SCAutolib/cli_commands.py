@@ -1,6 +1,13 @@
 """
 Implementation of CLI commands for SCAutolib.
+
+This module defines the command-line interface (CLI) for the ``scauto``
+tool, utilizing the ``click`` library. It provides a
+user-friendly interface for system preparation, CA configuration, user setup
+with smart cards, and cleanup operations. Additionally,
+it includes a specialized command group for automated GUI testing.
 """
+
 
 import click
 from pathlib import Path
@@ -14,6 +21,15 @@ from SCAutolib.enums import ReturnCode
 
 
 def check_conf_path(conf):
+    """
+    Validates and resolves the path to the JSON configuration file.
+
+    :param conf: The path string to the configuration file.
+    :type conf: str
+    :return: A resolved ``Path`` object if the file exists.
+    :rtype: pathlib.Path
+    :raises click.BadParameter: If the path does not exist.
+    """
     return click.Path(exists=True, resolve_path=True)(conf)
 
 
@@ -22,16 +38,22 @@ def check_conf_path(conf):
 # https://github.com/pallets/click/issues/513#issuecomment-301046782
 class NaturalOrderGroup(click.Group):
     """
-    Command group trying to list subcommands in the order they were added.
-    Example use::
-
-    @click.group(cls=NaturalOrderGroup)
-
-    If passing dict of commands from other sources, ensure they are of type
-    OrderedDict and properly ordered, otherwise order of them will be random
-    and newly added will come to the end.
+    A custom ``click.Group`` subclass that ensures subcommands are listed in the
+    help output in the order they were defined in the code.
+    This overrides ``click``'s default alphabetical sorting for subcommands.
     """
     def __init__(self, name=None, commands=None, **attrs):
+        """
+        Initializes the NaturalOrderGroup, ensuring the commands dictionary
+        is an ``OrderedDict`` to maintain insertion order.
+
+        :param name: The name of the command group.
+        :type name: str, optional
+        :param commands: A dictionary of commands belonging to this group.
+        :type commands: OrderedDict or dict, optional
+        :param attrs: Additional attributes for the ``click.Group``.
+        :type attrs: dict
+        """
         if commands is None:
             commands = OrderedDict()
         elif not isinstance(commands, OrderedDict):
@@ -42,10 +64,12 @@ class NaturalOrderGroup(click.Group):
 
     def list_commands(self, ctx):
         """
-        List command names as they are in commands dict.
+        Lists the command names in their defined order.
 
-        If the dict is OrderedDict, it will preserve the order commands
-        were added.
+        :param ctx: The Click context object.
+        :type ctx: click.Context
+        :return: A list of command names in their defined order.
+        :rtype: list
         """
         return self.commands.keys()
 
@@ -61,9 +85,26 @@ class NaturalOrderGroup(click.Group):
               type=click.Choice(
                   ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
                   case_sensitive=False),
-              help="Verbosity level.")
+              help="Set the verbosity level of the output.")
 @click.pass_context
 def cli(ctx, force, verbose, conf):
+    """
+    The main entry point for the SCAutolib CLI.
+    It initializes global settings and the Controller instance based on
+    the configuration.
+
+    :param ctx: The Click context object, used to pass data to subcommands.
+    :type ctx: click.Context
+    :param force: A flag indicating whether operations should force overwrites
+                  of existing configurations or files.
+    :type force: bool
+    :param verbose: The logging verbosity level for the entire CLI execution.
+    :type verbose: str (``DEBUG``, ``INFO``, ``WARNING``, ``ERROR``, or
+                   ``CRITICAL``)
+    :param conf: The path to the JSON configuration file used by the library.
+    :type conf: str
+    :return: None
+    """
     logger.setLevel(verbose)
     ctx.ensure_object(dict)  # Create a dict to store the context
     ctx.obj["FORCE"] = force  # Store the force option in the context
@@ -91,7 +132,26 @@ def cli(ctx, force, verbose, conf):
               help="Install missing packages")
 @click.pass_context
 def prepare(ctx, gdm, install_missing, graphical):
-    """Configure entire system for smart cards based on the config file."""
+    """
+    Configures the entire system for smart card operations and testing
+    based on the configuration file. This includes
+    installing packages and setting up CAs, users, and smart cards.
+
+    :param ctx: The Click context object.
+    :type ctx: click.Context
+    :param gdm: If ``True``, the GNOME Display Manager (GDM) package will be
+                installed.
+    :type gdm: bool
+    :param install_missing: If ``True``, instructs the command to automatically
+                            install any prerequisite packages detected as
+                            missing on the system.
+    :type install_missing: bool
+    :param graphical: If ``True``, ensures that all dependencies specifically
+                      required for the GUI testing module are installed.
+    :type graphical: bool
+    :return: The command exits with a success code upon completion.
+    :rtype: No return (exits the process).
+    """
     ctx.obj["CONTROLLER"].prepare(
         ctx.obj["FORCE"],
         gdm,
@@ -112,8 +172,17 @@ def prepare(ctx, gdm, install_missing, graphical):
 @click.pass_context
 def setup_ca(ctx, ca_type):
     """
-    Configure the CA's in the config file. If more than one CA is
-    specified, specified CA type would be configured.
+    Configures Certificate Authorities (CAs) on the system from the
+    configuration file. Can target 'all', 'local',
+    or 'ipa' CAs.
+
+    :param ctx: The Click context object.
+    :type ctx: click.Context
+    :param ca_type: Specifies the type of CA to configure. If 'all', both local
+                    and IPA CAs from the configuration will be set up.
+    :type ca_type: str
+    :return: The command exits with a success code upon completion.
+    :rtype: No return (exits the process).
     """
     cnt = ctx.obj["CONTROLLER"]
     if ca_type == 'all':
@@ -159,7 +228,35 @@ def setup_ca(ctx, ca_type):
               help="Type of the user to be created")
 @click.pass_context
 def setup_user(ctx, name, card_dir, card_type, passwd, pin, user_type):
-    """Configure user with smart cards (if set) based on the config file."""
+    """
+    Configures a user, optionally with smart card integration, from config
+    or CLI arguments. Handles CA initialization and user/card setup.
+
+    :param ctx: The Click context object.
+    :type ctx: click.Context
+    :param name: The username for the user to be configured or created.
+    :type name: str
+    :param card_dir: The file system path where the smart card's related files
+                     will be stored. Required if creating a new user via CLI
+                     without a config entry.
+    :type card_dir: str or None
+    :param card_type: The type of smart card to associate with the user.
+                      Options include ``virtual``, ``real`` (physical), or
+                      ``removinator``.
+    :type card_type: str
+    :param passwd: The password for the user. Required if creating a new user
+                   via CLI without a config entry.
+    :type passwd: str or None
+    :param pin: The PIN for the smart card associated with the user. Required
+                if creating a new user via CLI without a config entry.
+    :type pin: str or None
+    :param user_type: The type of user account to create: ``local`` system user
+                      or an ``ipa`` (Identity Management for Linux) user.
+    :type user_type: str
+    :return: The command exits with a success code or an error code upon
+             failure.
+    :rtype: No return (exits the process).
+    """
     cnt = ctx.obj["CONTROLLER"]
     logger.info(f"Start setup user {name}")
     try:
@@ -199,8 +296,14 @@ def setup_user(ctx, name, card_dir, card_type, passwd, pin, user_type):
 @click.pass_context
 def cleanup(ctx):
     """
-    Cleanup all the configurations and system changes done by the prepare
-    command.
+    Cleans up all configurations and system changes made by SCAutolib commands,
+    particularly from ``prepare``. Restores the system to a clean state (as
+    much as possible).
+
+    :param ctx: The Click context object, containing the ``CONTROLLER`` instance.
+    :type ctx: click.Context
+    :return: The command exits with a success code upon completion.
+    :rtype: No return (exits the process).
     """
     ctx.obj["CONTROLLER"].cleanup()
     exit(ReturnCode.SUCCESS.value)
@@ -214,13 +317,30 @@ def cleanup(ctx):
               help="Install missing packages")
 @click.pass_context
 def gui(ctx, install_missing):
-    """ Run GUI Test commands """
+    """
+    Command group for running chained GUI test commands.
+    Manages graphical environment dependencies.
+
+    :param ctx: The Click context object.
+    :type ctx: click.Context
+    :param install_missing: If ``True``, ensures that all necessary packages for
+                            GUI testing are installed.
+    :type install_missing: bool
+    :return: None
+    """
     pass
 
 
 @gui.command()
 def init():
-    """ Initialize GUI for testing """
+    """
+    Initializes the GUI environment for automated testing.
+    Restarts the display manager for a clean state.
+
+    :return: A string literal ``"init"`` that signals the execution of the
+             GUI initialization action within the ``run_all`` callback.
+    :rtype: str
+    """
     return "init"
 
 
@@ -232,7 +352,20 @@ def init():
               help="Reverse the action")
 @click.argument("name")
 def assert_text(name, no):
-    """ Check if a word is found on the screen """
+    """
+    Asserts the presence or absence of a specific text string on the
+    currently displayed GUI screen.
+
+    :param name: The text string to search for on the screen.
+    :type name: str
+    :param no: If ``True``, this reverses the assertion, checking that the text
+               is *not* found on the screen.
+    :type no: bool
+    :return: A string representing the assertion action to be performed by the
+             ``run_all`` callback (e.g., ``"assert_text:ExpectedText"`` or
+             ``"assert_no_text:UnexpectedText"``).
+    :rtype: str
+    """
     if no:
         return f"assert_no_text:{name}"
     return f"assert_text:{name}"
@@ -241,7 +374,17 @@ def assert_text(name, no):
 @gui.command()
 @click.argument("name")
 def click_on(name):
-    """ Click on object containing word """
+    """
+    Simulates a mouse click action on a GUI object or area that contains the
+    specified text.
+
+    :param name: The string text content of the GUI object that should be
+                 clicked.
+    :type name: str
+    :return: A string representing the click action to be performed by the
+             ``run_all`` callback (e.g., ``"click_on:ButtonLabel"``).
+    :rtype: str
+    """
     return f"click_on:{name}"
 
 
@@ -252,7 +395,19 @@ def click_on(name):
               is_flag=True,
               help="Reverse the action")
 def check_home_screen(no):
-    """ Check if screen appears to be the home screen """
+    """
+    Verifies if the currently displayed graphical screen is (or is not) the
+    expected "home screen" environment. Currently the Gnome Shell home screen
+    from RHEL, CentOS and Fedora is detected.
+
+    :param no: If ``True``, reverses the check to verify that the current screen
+               is *not* the home screen.
+    :type no: bool
+    :return: A string representing the home screen check action to be performed
+             by the ``run_all`` callback (e.g., `"check_home_screen"` or
+             `"check_no_home_screen"`).
+    :rtype: str
+    """
     if no:
         return "check_no_home_screen"
     return "check_home_screen"
@@ -261,27 +416,72 @@ def check_home_screen(no):
 @gui.command()
 @click.argument("keys")
 def kb_send(keys):
-    """ Send key(s) to keyboard """
+    """
+    Sends one or more specific key press events to the active GUI window.
+
+    :param keys: A string representing the key or sequence of keys to simulate
+                 pressing (e.g., ``enter``, ``alt+f4``).
+    :type keys: str
+    :return: A string representing the keyboard send action to be performed by
+             the ``run_all`` callback (e.g., `"kb_send:enter"`).
+    :rtype: str
+    """
     return f"kb_send:{keys}"
 
 
 @gui.command()
 @click.argument("keys")
 def kb_write(keys):
-    """ Send string to keyboard """
+    """
+    Simulates typing a literal string of characters into the active GUI input
+    field or window. After the string is sent, an 'enter' key press is
+    automatically appended.
+
+    :param keys: The string of text to be written or typed into the GUI.
+    :type keys: str
+    :return: A string representing the keyboard write action to be performed by
+             the ``run_all`` callback (e.g., `"kb_write:myusername"`).
+    :rtype: str
+    """
     return f"kb_write:{keys}"
 
 
 @gui.command()
 def done():
-    """ cleanup after testing """
+    """
+    Serves as a finalization step for a sequence of GUI test commands.
+    It triggers cleanup actions after all preceding GUI test operations have
+    completed.
+
+    :return: A string literal `"done"` that signals the execution of the
+             GUI cleanup action within the ``run_all`` callback.
+    :rtype: str
+    """
     return "done"
 
 
 @gui.result_callback()
 @click.pass_context
 def run_all(ctx, actions, install_missing):
-    """ Run all cli actions in order """
+    """
+    Executes all chained GUI test actions in the order they were provided on
+    the command line. It initializes the graphical
+    environment and performs specified GUI automation steps.
+
+    :param ctx: The Click context object.
+    :type ctx: click.Context
+    :param actions: A list of strings, where each string is a representation
+                    of a GUI test action to be performed (e.g., `"init"`,
+                    `"assert_text:ExpectedText"`).
+    :type actions: list of str
+    :param install_missing: A boolean flag indicating whether any missing
+                            packages required for the graphical setup should be
+                            installed prior to running the GUI actions.
+    :type install_missing: bool
+    :return: This function does not explicitly return a value. It executes
+             the GUI test workflow.
+    :rtype: None
+    """
     ctx.obj["CONTROLLER"].setup_graphical(install_missing, True)
 
     from SCAutolib.models.gui import GUI

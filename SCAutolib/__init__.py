@@ -1,3 +1,23 @@
+"""
+This module serves as the initialization point for the SCAutolib package.
+
+It sets up the package-wide logging configuration using ``coloredlogs``.
+It defines global constants for directory paths used throughout the library for
+templates, backup files, and data dumps.
+
+Additionally, it establishes validation schemas using the ``schema`` library
+for various configuration sections, including CAs (Certificate Authorities),
+users, and smart cards. These schemas ensure that input data conforms to
+expected structures and types, facilitating robust data handling across
+SCAutolib's components.
+
+The module also provides a generalized ``run`` function, acting as a wrapper
+for ``subprocess.run``. This wrapper standardizes command execution,
+logging, error checking, and offers options for controlling standard
+output/error, return code validation, and post-execution delays.
+"""
+
+
 import coloredlogs
 import logging
 import subprocess
@@ -75,40 +95,49 @@ def run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True,
         print_=True, return_code: list = None, sleep: int = 0, **kwargs) \
         -> subprocess.CompletedProcess:
     """
-    Wrapper for subrpocess.run function. This function explicitly set several
-    parameter of original function and also provides similar thing as
-    subprocess.check_output do. But with having this wrapper, functionality
-    of this two functions is generalized and can be changed by setting
-    corresponding parameters. If there are any specific parameter of
-    subprocess.run function needed to be passed to this wrapper, you can do
-    it by adding same parameters names in key=value format.
+    Executes an external command as a subprocess, providing a controlled
+    wrapper around ``subprocess.run``. This function
+    standardizes command execution, capturing and optionally printing output,
+    performing robust error checking based on expected return codes, and
+    provides consistent logging of what is being executed.
 
-    :param sleep: time to sleep after command is executed
-    :type sleep: int
-    :param return_code: acceptable return codes from given commands.
-        If check=True, and the return code of the cmd is not in the return_code
-        list a subprocess.CalledProcessError exception would be raised.
-    :type return_code: list
-    :param cmd: Command to be executed
+    :param cmd: The command to be executed, provided as a list of strings
+                (preferred) or a single space-separated string.
     :type cmd: list or str
-    :param stdout: Redirection of stdout. Default is subprocess.PIPE
+    :param stdout: Redirects the standard output of the command.
+                   Accepts an int representing a file descriptor, or an
+                   `IO object <https://docs.python.org/3/library/io.html>`__.
+                   Defaults to ``subprocess.PIPE`` to capture output.
     :type stdout: None or int or IO
-    :param stderr: Redirection of stderr. Default is subprocess.PIPE
+    :param stderr: Redirects the standard error of the command.
+                   Accepts an int representing a file descriptor, or an
+                   `IO object <https://docs.python.org/3/library/io.html>`__.
+                   Defaults to ``subprocess.PIPE`` to capture output.
     :type stderr: None or int or IO
-    :param check: Specifies it return code of the command would be checked for
-        0 (if return code == 0). If True and return code is not 0, then
-        subprocess.CalledProcessError exception would be risen. Default is
-        False.
+    :param check: If ``True``, the function will raise a
+                  ``subprocess.CalledProcessError`` exception if the command's
+                  return code is not in the ``return_code`` list. Defaults to
+                  ``True``.
     :type check: bool
-    :param print_: Specifies it stdout and stderr should be printed to the
-        terminal. Log message with stdout would have debug type and stderr
-        log message would have error type. Default is True.
+    :param print_: If ``True``, the command's standard output will be logged at
+                   DEBUG level and standard error at WARNING level. Defaults to
+                   ``True``.
     :type print_: bool
-    :param kwargs: Other parameters to subprocess.run function
-
-    :exception subprocess.CalledProcessError:
-
-    :return: Completed process from subprocess.run
+    :param return_code: A list of acceptable return codes for the command. If
+                        ``check`` is ``True`` and the command's return code is
+                        not in this list, an exception is raised. Defaults to
+                        ``[0]``.
+    :type return_code: list
+    :param sleep: The duration in seconds to pause execution after the command
+                  completes. Defaults to ``0``.
+    :type sleep: int
+    :param kwargs: Additional keyword arguments are passed directly to the
+                   ``subprocess.run`` function.
+    :raises subprocess.CalledProcessError: If ``check`` is ``True`` and the
+                                           command's return code is not among
+                                           the expected ``return_code`` values.
+    :return: An object representing the completed process, including stdout,
+             stderr, and return code.
     :rtype: subprocess.CompletedProcess
     """
     if return_code is None:

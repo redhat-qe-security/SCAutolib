@@ -1,21 +1,15 @@
 """
-This module contains classes that represent configuration files. Each class
-contains information and methods to manipulate specific config file except
-the parent (File) class that is supposed to operate on general config file.
-
-Basic operations on config files defined in this module:
-    * create
-        creates content of config file usually based on template.
-        Note, that some child classes may also update content of config
-        file if it already existed and backup original file.
-    * set
-        modify values of config files, add keys or sections if necessary
-    * save
-        save modified content to config file
-    * clean
-        remove config file; note that some child classes may also restore
-        original config file if backup exists.
+This module contains classes that represent and facilitate the manipulation of
+various configuration files used within SCAutolib's operations.
+It defines a generic ``File`` class for common file operations and specialized
+subclasses like ``SSSDConf``, ``SoftHSM2Conf``, and ``OpensslCnf`` for managing
+specific configuration file types.
+These classes provide methods for creating, modifying (setting values), saving,
+and cleaning (removing) configuration files, with some supporting backup and
+restore functionalities.
 """
+
+
 import os
 from configparser import ConfigParser
 from pathlib import Path
@@ -31,7 +25,8 @@ from SCAutolib.isDistro import isDistro
 
 class File:
     """
-    This class defines an interface for generic operations on config files
+    This class serves as an interface and base implementation for generic
+    operations on various configuration files.
 
     * create: create content of config file based on template file
     * set:    modify content of config files, add keys or sections if necessary
@@ -52,25 +47,50 @@ class File:
 
     def __init__(self, filepath: Union[str, Path], template: Path = None):
         """
-        Init of File
+        Initializes a ``File`` object, setting the path to the configuration
+        file and an optional template file for content creation.
 
-        :param filepath: Path of config file
-        :type filepath: str or pathlib.Path
-        :param template: Path of template file
-        :type template: str
+        :param filepath: The path to the configuration file that this object
+                         will manage. Can be a string or a ``pathlib.Path``
+                         object.
+        :type filepath: Union[str, pathlib.Path]
+        :param template: The path to a template file from which the
+                         configuration file's content can be generated.
+        :type template: pathlib.Path, optional
+        :return: None
+        :rtype: None
         """
+
         self._conf_file = Path(filepath)
         if template is not None:
             self._template = template
 
     @property
     def path(self):
+        """
+        Returns the ``pathlib.Path`` object representing the configuration file
+        managed by this object.
+
+        :return: The path of the configuration file.
+        :rtype: pathlib.Path
+        """
+
         return self._conf_file
 
     def create(self):
         """
-        Populate internal parser object with content based on template.
+        Populates the internal parser object  with content read from the
+        template file. This method is typically called
+        when the configuration file does not yet exist on the system.
+
+        :return: None
+        :rtype: None
+        :raises FileExistsError: If the configuration file already exists on
+                                 the file system.
+        :raises ValueError: If no template file was provided during object
+                            initialization when ``create`` is called.
         """
+
         if self._conf_file.exists():
             logger.warning(f"Create error: {self._conf_file} already exists.")
             raise FileExistsError(f'{self._conf_file} already exists')
@@ -78,14 +98,18 @@ class File:
             self._default_parser = ConfigParser()
             self._default_parser.optionxform = str
             if self._template is None:
-                raise FileNotFoundError("Template file was not provided.")
+                raise ValueError("Template file was not provided.")
             with self._template.open() as t:
                 self._default_parser.read_file(t)
 
     def remove(self):
         """
-        Removes the file if it exists.
+        Removes the configuration file from the file system if it exists.
+
+        :return: None
+        :rtype: None
         """
+
         if self._conf_file.exists():
             self._conf_file.unlink()
             logger.debug(
@@ -94,33 +118,44 @@ class File:
 
     def exists(self):
         """
-        Checks if a file exists. Returns boolean.
+        Checks if the configuration file managed by this object exists on the
+        file system.
+
+        :return: ``True`` if the file exists; ``False`` otherwise.
+        :rtype: bool
         """
+
         return self._conf_file.exists()
 
     def set(self, key: str, value: Union[int, str, bool], section: str = None,
             separator: str = "="):
         """
-        Modify value in config file. Modification is made through the
+        Modifies a specific key-value pair within the configuration file.
+        Modification is made through the
         ConfigParser object if it is defined. If not, then key value pair
         would be written to the file through normal :code:`write()` method with
         composed string in the following form :code:`<key><separator><value>`
 
-        .. note::
-            spaces around key has to be specified as a part of the
-            :code:`separator` parameter.
-
-        :param key: value for this key will be updated
+        :param key: The key whose value will be updated.
         :type key: str
-        :param value: new value to be stored in [section][key] of config file
-        :type value: int or str or bool
-        :param section: section of config file that will be modified
-        :type section: str
-        :param separator: Character to be used as a separator between key and
-            value in files that are not supported by ConfigParser object.
+        :param value: The new value to be stored for the specified key.
+        :type value: Union[int, str, bool]
+        :param section: The name of the section within the config file where
+                        the key is located. If ``None``, the file is treated as
+                        a simple key-value file without sections.
+        :type section: str, optional
+        :param separator: The character used to separate the key and value in
+                          simple (non-``ConfigParser``) config files.
+                          Defaults to ``=``. Spaces around the key should be
+                          included as part of the separator if needed.
         :type separator: str
+        :return: None
+        :rtype: None
+        :raises ValueError: If a line in a simple config file is not in an
+                            expected ``key=value`` format.
 
         """
+
         if section is None:
             # simple config files without sections
             if self._simple_content is None:
@@ -173,22 +208,29 @@ class File:
         returned.
 
         If section is provided and the file can be parsed by the
-        :code:`ConfigParser`, then this object would be used to look for the
+        ``ConfigParser``, then this object would be used to look for the
         key.
 
-        :param key: required key
-        :param section: section where the key should be found
-        :param separator: applicable only for non-configparser file. Separator
-            that would be used to so split a line from the file. By default
-            separator is '='
-        :raise SCAutolib.SCAutolibException: if the key is not found the
-            non-ConfigParser file
-        :raise configparser.NoSectionError: if the section is not found in
-            ConfigParser-supported file
-        :raise KeyError: if the key is not present in ConfigParser-supported
-            file
-        :return: value of the key in section (if set)
+        :param key: The key whose value is to be retrieved.
+        :type key: str
+        :param section: The name of the section where the key is expected to be
+                        found. If ``None``, the file is parsed line by line.
+        :type section: str, optional
+        :param separator: The character used to split lines into key-value
+                          pairs for simple (non-``ConfigParser``) files.
+                          Defaults to ``=``.
+        :type separator: str
+        :return: The string value associated with the key.
+        :rtype: str
+        :raises SCAutolibException: If the key is not found in a simple
+                                    (non-``ConfigParser``) file.
+        :raises configparser.NoSectionError: If the specified section is not
+                                             found in a
+                                             ``ConfigParser``-supported file.
+        :raises KeyError: If the key is not present within the specified
+                          section in a ``ConfigParser``-supported file.
         """
+
         if section is None:
             # simple config files without sections
             if self._simple_content is None:
@@ -212,8 +254,13 @@ class File:
 
     def save(self):
         """
-        Save content of config file stored in parser object to config file.
+        Saves the current content of the configuration file, as stored in
+        the internal parser objects to the file system.
+
+        :return: None
+        :rtype: None
         """
+
         if self._simple_content is None:
             with self._conf_file.open("w") as config:
                 self._default_parser.write(config)
@@ -223,8 +270,12 @@ class File:
 
     def clean(self):
         """
-        Removes config file
+        Removes the configuration file from the file system if it exists.
+
+        :return: None
+        :rtype: None
         """
+
         try:
             self._conf_file.unlink()
             logger.info(f"Removing {self._conf_file}.")
@@ -233,12 +284,16 @@ class File:
 
     def backup(self, name: str = None):
         """
-        Save original file to the backup directory with given name. If name is
-        None, default name is :code:`<filename>.<extension>.backup`
+        Saves a copy of the original configuration file to a designated backup
+        directory. The backup file's name can be customized
+        or defaults to ``<filename>.<extension>.backup``.
 
-        :param name: custom file name to be set for the file
-        :type name: str
-        :return: path where the file is stored
+        :param name: An optional custom file name to be used for the backup
+                     file.
+        :type name: str, optional
+        :return: The ``pathlib.Path`` object indicating where the backup file
+                 is stored.
+        :rtype: pathlib.Path
         """
 
         new_path = LIB_BACKUP.joinpath(
@@ -251,8 +306,18 @@ class File:
 
     def restore(self, name: str = None):
         """
-        Copies backup file to original file location.
+        Restores the configuration file by copying a previously created backup
+        file back to the original file's location.
+        After restoration, the backup file is removed.
+
+        :param name: The custom name of the backup file to restore from. If
+                     ``None``, it defaults to
+                     ``<filename>.<extension>.backup``.
+        :type name: str, optional
+        :return: None
+        :rtype: None
         """
+
         original_path = LIB_BACKUP.joinpath(
             f"{name if name else self._conf_file.name}.backup")
 
@@ -272,12 +337,14 @@ class File:
 
 class SSSDConf(File):
     """
-    This class contains information and methods to create and modify
-    /etc/sssd/sssd.conf file.
+    This class manages the ``/etc/sssd/sssd.conf`` file, providing methods to
+    create, modify, save, and restore its content.
 
-    It is implemented as singleton, which allows to use class object
-    :code:`_default_parser` as representation of content of sssd.conf file
-    during runtime.
+    It is implemented as a singleton, ensuring a single representation of the
+    SSSD configuration during runtime.
+
+    It also acts as a context manager to temporarily apply and then revert SSSD
+    configuration changes.
 
     Intended use is to create/update and save config file in first runtime
     and load content of config file to internal parser object in following
@@ -294,12 +361,27 @@ class SSSDConf(File):
     dump_file: Path = LIB_DUMP_CONFS.joinpath("SSSDConf.json")
 
     def __new__(cls):
+        """
+        Ensures that only a single instance of ``SSSDConf`` is created
+        (singleton pattern).
+
+        :return: The singleton instance of ``SSSDConf``.
+        :rtype: SCAutolib.models.file.SSSDConf
+        """
+
         if cls.__instance is None:
             cls.__instance = super(SSSDConf, cls).__new__(cls)
             cls.__instance.__initialized = False
         return cls.__instance
 
     def __init__(self):
+        """
+        Initializes the ``SSSDConf`` instance, setting up its configuration
+        file paths and internal parsers. It loads default
+        content and checks for existing backup files to maintain state across
+        runs.
+        """
+
         if self.__initialized:
             return
         self.__initialized = True
@@ -330,6 +412,24 @@ class SSSDConf(File):
 
     def __call__(self, key: str, value: Union[int, str, bool],
                  section: str = None):
+        """
+        Allows the ``SSSDConf`` object to be called directly, similar to a
+        context manager for setting and saving a single configuration change.
+        It updates the SSSD configuration, saves it,
+        and then restarts the SSSD service.
+
+        :param key: The key from a section of the config file to be updated.
+        :type key: str
+        :param value: The new value to be stored in the specified section and
+                      key.
+        :type value: Union[int, str, bool]
+        :param section: The section of the config file to be created or
+                        updated.
+        :type section: str, optional
+        :return: The ``SSSDConf`` instance itself.
+        :rtype: SCAutolib.models.file.SSSDConf
+        """
+
         # We need to save the state of the current unchanged sssd.conf because
         # __call__ is called before __enter__ in
         # with SSSDConf(key, value, section):
@@ -342,6 +442,15 @@ class SSSDConf(File):
         return self
 
     def __enter__(self):
+        """
+        Enters the context manager for ``SSSDConf``.
+        It saves the current content of ``sssd.conf`` to an internal backup
+        to enable restoration upon exiting the context.
+
+        :return: The ``SSSDConf`` instance.
+        :rtype: SCAutolib.models.file.SSSDConf
+        """
+
         # Check if we changed the file or not and save version before context
         # manager was called
         if self._before_last_change_cont:
@@ -352,6 +461,23 @@ class SSSDConf(File):
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
+        """
+        Exits the context manager for ``SSSDConf``.
+        If any changes were made within the context, it restores ``sssd.conf``
+        to the version saved upon entry.
+        It then restarts the SSSD service and logs any exceptions that occurred
+        within the context.
+
+        :param exc_type: The type of the exception that caused the context to be
+                         exited, or ``None`` if no exception occurred.
+        :param exc_value: The exception instance that caused the context to be
+                          exited, or ``None``.
+        :param traceback: The traceback object associated with the exception,
+                          or ``None``.
+        :return: None
+        :rtype: None
+        """
+
         if self._changed:
             # Restore sssd.conf to the version before context manager was
             # called
@@ -367,9 +493,18 @@ class SSSDConf(File):
 
     def create(self):
         """
-        Populate internal parser object with content from existing config file
-        and update it with values from config template. Back up original files.
+        Populates the internal parser object with content from the existing
+        ``sssd.conf`` file, then updates it with values from a predefined
+        template. It also backs up the original ``sssd.conf`` file.
+        This method handles cases where the file might not initially exist.
+
+        :return: None
+        :rtype: None
+        :raises FileExistsError: If internal backup files already exist,
+                                 suggesting ``create`` was executed multiple
+                                 times.
         """
+
         try:
             with self._conf_file.open() as config:
                 self._default_parser.read_file(config)
@@ -395,18 +530,22 @@ class SSSDConf(File):
 
     def set(self, key: str, value: Union[int, str, bool], section: str = None):
         """
-        Modify or add content of config file represented by ConfigParser object
+        Modifies or adds a key-value pair within the SSSD configuration file
+        represented by the internal ``ConfigParser`` object.
 
-        If a value is set outside of a context manager, it is the user's
-        responsibility to revert it.
-
-        :param key: key from section of config file to be updated
+        :param key: The key from a section of the config file to be updated.
         :type key: str
-        :param value: new value to be stored in [section][key] of config file
-        :type value: int or bool or str
-        :param section: section of config file to be created/updated
+        :param value: The new value to be stored in the specified section and
+                      key.
+        :type value: Union[int, str, bool]
+        :param section: The section of the config file to be created or
+                        updated. This parameter is required for SSSDConf
+                        operations.
         :type section: str
+        :return: None
+        :rtype: None
         """
+
         if len(self._changes.sections()) == 0:
             with self._conf_file.open() as config:
                 self._changes.read_file(config)
@@ -431,10 +570,16 @@ class SSSDConf(File):
 
     def save(self):
         """
-        Save content of config file stored in parser object to config file.
+        Saves the current content of the SSSD configuration file, which is
+        managed by the internal parser objects.
+        The file permissions are set to ``0o600``.
 
         .. note: SSSD service restart is caller's responsibility.
+
+        :return: None
+        :rtype: None
         """
+
         with self._conf_file.open("w") as config:
             if len(self._changes.sections()) == 0:
                 # after create; _changes is empty; content is in _default_parser
@@ -450,10 +595,15 @@ class SSSDConf(File):
 
     def restore(self):
         """
-        Removes sssd.conf file in case it was created by this package or
-        restore original sssd.conf in case the file was modified.
+        Restores the ``sssd.conf`` file to its original version before any
+        modifications by SCAutolib. If a backup exists, it is copied back;
+        otherwise, the file is simply removed if it was created by SCAutolib.
+        It also removes internal backup files.
 
         .. note: SSSD service restart is caller's responsibility.
+
+        :return: None
+        :rtype: None
         """
 
         if self._backup_original and self._backup_original.exists():
@@ -476,8 +626,14 @@ class SSSDConf(File):
 
     def update_default_content(self):
         """
-        Populate internal parser object with content from current config file.
+        Populates the internal parser with the content from the
+        current ``sssd.conf`` file on the system. It then
+        backs up this current state.
+
+        :return: None
+        :rtype: None
         """
+
         self._default_parser = ConfigParser()
         self._default_parser.optionxform = str
         with self._conf_file.open() as config:
@@ -487,8 +643,16 @@ class SSSDConf(File):
 
     def check_backups(self):
         """
-        Raises an exception if internal backup files already exists
+        Checks if internal backup files for ``sssd.conf`` already exist.
+        If any backup file is found, it raises an exception, suggesting that
+        the ``create`` method might have been executed multiple times
+        unintentionally.
+
+        :return: None
+        :rtype: None
+        :raises FileExistsError: If an internal backup file already exists.
         """
+
         backup_files = (self._backup_default, self._backup_original)
         for file in backup_files:
             if file.exists():
@@ -501,8 +665,10 @@ class SSSDConf(File):
 
 class SoftHSM2Conf(File):
     """
-    This class provide information and methods to create and modify
-    softhsm2.conf file.
+    This class manages the ``softhsm2.conf`` file, providing methods to
+    create its content based on a template and save it.
+    It's specifically designed for SoftHSM2 configuration, which does not
+    use traditional sections.
     """
     _template = Path(TEMPLATES_DIR, "softhsm2.conf")
     _conf_file = None
@@ -511,13 +677,21 @@ class SoftHSM2Conf(File):
 
     def __init__(self, filepath: Union[str, Path], card_dir: Union[str, Path]):
         """
-        Init of SoftHSM2Conf
+        Initializes a ``SoftHSM2Conf`` object, setting the path for the
+        configuration file and the card directory, which is used to format
+        the template content.
 
-        :param filepath: path where config file should be saved
-        :type filepath: str
-        :param card_dir: parameter to be updated in config file
-        :type card_dir: str
+        :param filepath: The path where the ``softhsm2.conf`` file should be
+                         saved.
+        :type filepath: Union[str, pathlib.Path]
+        :param card_dir: The path to the card's directory, which will be
+                         inserted into the ``softhsm2.conf`` template
+                         (e.g., for ``directories.tokendir``).
+        :type card_dir: Union[str, pathlib.Path]
+        :return: None
+        :rtype: None
         """
+
         self._conf_file = filepath if isinstance(filepath, Path) else \
             Path(filepath)
         self._card_dir = card_dir if isinstance(card_dir, Path) else \
@@ -525,8 +699,14 @@ class SoftHSM2Conf(File):
 
     def create(self):
         """
-        Populate internal file object with content based on template.
+        Populates the internal content attribute by reading the
+        ``softhsm2.conf`` template and formatting it with the provided
+        ``card_dir``.
+
+        :return: None
+        :rtype: None
         """
+
         with self._template.open('r') as template:
             self._content = template.read().format(card_dir=self._card_dir)
 
@@ -535,17 +715,28 @@ class SoftHSM2Conf(File):
 
     def set(self, *args):
         """
-        :raise NotImplementedError: if this method is called on SoftHSM2Conf.
+        This method is not implemented for ``SoftHSM2Conf`` as ``softhsm2.conf``
+        does not use sections in a way that ``File.set`` can handle.
+
+        :param args: Positional arguments (not used).
+        :type args: tuple
+        :return: None
+        :rtype: None
+        :raises NotImplementedError: Always raised when this method is called.
         """
-        # parent class set method does not work as softHSM2 conf does not have
-        # sections. Method do modify softHSM2 conf is not implemented
+
         logger.warning("softhsm2.conf does not contain sections.")
         raise NotImplementedError("softHSM2conf.set method not implemented")
 
     def save(self):
         """
-        Save content stored in internal file object to config file.
+        Saves the content stored in the internal content attribute to the
+        ``softhsm2.conf`` file on the file system.
+
+        :return: None
+        :rtype: None
         """
+
         with self._conf_file.open("w") as config:
             config.write(self._content)
         logger.debug(f"Config file {self._conf_file} is created")
@@ -553,8 +744,10 @@ class SoftHSM2Conf(File):
 
 class OpensslCnf(File):
     """
-    This class provides information and methods to create and modify
-    openssl cnf files.
+    This class manages OpenSSL configuration files (``.cnf`` files), providing
+    methods to create and modify their content. It supports
+    different types of configuration files (e.g., for CAs, for users) by
+    utilizing specific templates and performing string replacements.
     """
     _template = None
     _conf_file = None
@@ -562,8 +755,8 @@ class OpensslCnf(File):
     _old_string = None
     _new_string = None
 
-    # openssl cnf content depends substantially on its purpose and separate
-    # templates are needed for specific config files types. mapping:
+    # openssl configuration content depends substantially on its purpose and
+    # separate templates are needed for specific config files types. mapping:
     types = {
         "CA": {"template": Path(TEMPLATES_DIR, 'ca.cnf'),
                "replace": ["{ROOT_DIR}"]},
@@ -574,16 +767,26 @@ class OpensslCnf(File):
     def __init__(self, filepath: Union[str, Path], conf_type: str,
                  replace: Union[str, list]):
         """
-        Init of opensslCNF
+        Initializes an ``OpensslCnf`` object, setting up the paths for the
+        configuration file and its corresponding template.
+        It also prepares the strings that will be used for replacement within
+        the template based on the `conf_type`.
 
-        :param filepath: Path of config file
-        :type filepath: str or pathlib.Path
-        :param conf_type: Identifier of cnf file
-        :type conf_type: basestring
-        :param replace: list of strings that will replace specific strings from
-                        template
-        :type replace: list
+        :param filepath: The path where the OpenSSL configuration file will be
+                         saved.
+        :type filepath: Union[str, pathlib.Path]
+        :param conf_type: An identifier string indicating the type of
+                          configuration file (e.g., `"CA"` or `"user"`), which
+                          determines the template and replacement patterns.
+        :type conf_type: str
+        :param replace: A string or list of strings that will replace specific
+                        placeholder strings (e.g., `"{ROOT_DIR}"`, `"{user}"`)
+                        from the template.
+        :type replace: Union[str, list]
+        :return: None
+        :rtype: None
         """
+
         self._conf_file = Path(filepath)
         self._template = Path(self.types[conf_type]["template"])
         self._old_strings = self.types[conf_type]["replace"]
@@ -593,9 +796,15 @@ class OpensslCnf(File):
 
     def create(self):
         """
-        Populate internal file object with content based on template
-        and update specific strings
+        Populates the internal content attribute by reading the template
+        file and performing string replacements based on the initialized
+        old and new strings. This prepares the
+        content to be written to the actual configuration file.
+
+        :return: None
+        :rtype: None
         """
+
         with self._template.open('r') as template:
             self._content = template.read()
         for old, new in zip(self._old_strings, self._new_strings):
@@ -603,8 +812,14 @@ class OpensslCnf(File):
 
     def save(self):
         """
-        Save content stored in internal file object to config file.
+        Saves the content stored in the internal content attribute (or
+        parser if ``set`` was used) to the OpenSSL configuration file on the
+        file system.
+
+        :return: None
+        :rtype: None
         """
+
         with self._conf_file.open("w") as config:
             if self._default_parser is None:
                 config.write(self._content)

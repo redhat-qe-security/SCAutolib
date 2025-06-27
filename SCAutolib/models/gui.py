@@ -1,3 +1,15 @@
+"""
+This module provides a comprehensive set of tools for automating graphical user
+interface (GUI) interactions and assertions within the SCAutolib framework.
+It defines classes for capturing screenshots
+(``Screen``), controlling mouse movements and clicks (``Mouse``), and managing
+keyboard input (through ``keyboard`` python module).
+The central ``GUI`` class orchestrates these interactions, allowing for the
+creation of automated GUI test sequences with logging and visual verification
+capabilities.
+"""
+
+
 import inspect
 from time import sleep, time
 from pathlib import Path
@@ -14,13 +26,27 @@ from SCAutolib.isDistro import isDistro
 
 
 class Screen:
-    """Captures the screenshots."""
-
+    """
+    Captures screenshots of the system's display.
+    It manages the naming and numbering of screenshots and can integrate them
+    into an HTML report.
+    """
     def __init__(self, directory: str, html_file: str = None):
-        """Init method
-        :param directory: Path to directory, where the screenshots
-            will be saved.
         """
+        Initializes the ``Screen`` object, setting up the directory where
+        screenshots will be saved and tracking the next screenshot number.
+        Optionally links to an HTML file for report generation.
+
+        :param directory: Path to the directory where the screenshots will be
+                          saved.
+        :type directory: str
+        :param html_file: Path to an HTML file where image tags for screenshots
+                          will be appended.
+        :type html_file: str, optional
+        :return: None
+        :rtype: None
+        """
+
         self.directory = directory
         self.html_file = html_file
 
@@ -34,12 +60,19 @@ class Screen:
             self.screenshot_num = taken_image_ids[0] + 1
 
     def screenshot(self, timeout: float = 30):
-        """Runs ffmpeg to take a screenshot.
+        """
+        Captures a screenshot of the display using the ``ffmpeg`` command with
+        `kmsgrab` input. It repeatedly tries to capture
+        until successful or a specified timeout is reached.
+        The screenshot is saved as a PNG file and its path is returned.
 
-        :param timeout: Timeout in seconds. If ffmpeg cannot take screenshot
-            before the specified timeout, an exception is raised.
-        :return: Path to the screenshot
+        :param timeout: The maximum time in seconds to wait for ``ffmpeg`` to
+                        successfully capture a screenshot.
+        :type timeout: float
+        :return: The string path to the captured screenshot file.
         :rtype: str
+        :raises Exception: If ``ffmpeg`` cannot capture a screenshot within the
+                           specified timeout period.
         """
 
         logger.debug(f"Taking screenshot number {self.screenshot_num}")
@@ -77,9 +110,16 @@ class Screen:
 
 
 class Mouse:
-    """Controls the mouse of the system under test"""
-
+    """
+    Controls the mouse cursor and clicks on the system under test using the
+    ``uinput`` kernel module.
+    """
     def __init__(self):
+        """
+        Initializes the ``Mouse`` object by loading the ``uinput`` kernel
+        module and creating a virtual ``uinput`` device for mouse events.
+        """
+
         run(['modprobe', 'uinput'], check=True)
 
         # Maximum coordinate for both axis
@@ -98,12 +138,21 @@ class Mouse:
         self.CLICK_HOLD_TIME = 0.1
 
     def move(self, x: float, y: float):
-        """Moves the mouse cursor to specified absolute coordinate.
-        Both coordinates are float numbers in range from 0 to 1.
-        These get mapped to the screen resolution in the compositor.
+        """
+        Moves the mouse cursor to a specified absolute coordinate on the
+        screen. Coordinates are provided as float numbers
+        between 0 and 1, which are then mapped to the screen's resolution.
 
-        :param x: X coordinate of the cursor
-        :param y: Y coordinate of the cursor
+        :param x: The X-coordinate of the cursor, a float between 0 and 1
+                  (inclusive).
+        :type x: float
+        :param y: The Y-coordinate of the cursor, a float between 0 and 1
+                  (inclusive).
+        :type y: float
+        :return: None
+        :rtype: None
+        :raises ValueError: If either X or Y coordinate is not within the 0 to
+                            1 range.
         """
 
         logger.info(f'Moving mouse to {x, y})')
@@ -119,10 +168,15 @@ class Mouse:
         self.device.syn()
 
     def click(self, button: str = 'left'):
-        """Clicks any button of the mouse.
+        """
+        Simulates a click of a specified mouse button.
 
-        :param button: mouse button to click, defaults to 'left'
-            Possible values 'left', 'right' or 'middle'.
+        :param button: The mouse button to click. Possible values are ``left``,
+                       ``right``, or ``middle``. Defaults to ``left``.
+        :type button: str
+        :return: None
+        :rtype: None
+        :raises KeyError: If button is not ``left``, ``right``, or ``middle``.
         """
 
         button_map = {
@@ -143,9 +197,16 @@ class Mouse:
 
 
 def image_to_data(path: str):
-    """Convert screenshot into dataframe of words with their coordinates.
+    """
+    Converts a screenshot image into a DataFrame of words with their
+    normalized coordinates and dimensions. This process
+    involves image preprocessing (grayscale, upscaling, binarization)
+    and OCR (Optical Character Recognition) using `pytesseract`.
 
-    :param path: path to the image to convert.
+    :param path: The string path to the image file (screenshot) to convert.
+    :type path: str
+    :return: A DataFrame containing detected words, their bounding box
+             coordinates, and other OCR-related data.
     """
     upscaling_factor = 2
 
@@ -168,14 +229,17 @@ def image_to_data(path: str):
 
 
 def images_equal(path1: str, path2: str):
-    """Compare two images, return True if they are completely identical.
-    Images are considered identical, when their resolutions match and
-    all pixel values are equal.
-    Images can be in any format, that can be read using
-    imread function from OpenCV.
+    """
+    Compares two images to determine if they are pixel-perfectly identical.
+    Images are considered identical if they have the same
+    resolution and all pixel values are exactly equal.
 
-    :param path1: Path to the first image.
-    :param path2: Path to the second image.
+    :param path1: The string path to the first image file.
+    :type path1: str
+    :param path2: The string path to the second image file.
+    :type path2: str
+    :return: ``True`` if the images are identical; ``False`` otherwise.
+    :rtype: bool
     """
     im1 = cv2.imread(path1)
     im2 = cv2.imread(path2)
@@ -192,12 +256,20 @@ def images_equal(path1: str, path2: str):
 
 
 def action_decorator(func):
-    """Decorator for all functions, that change the state of GUI.
-    This decorator takes a screenshot before and after the action.
-    The two screenshots are compared. If they are the same,
-    an exception is raised.
+    """
+    A decorator for GUI automation functions that change the state of the GUI.
+    This decorator captures a screenshot before and after
+    the decorated function's execution. If both screenshots
+    are identical and `check_difference` is enabled, an exception is raised,
+    indicating that the action did not produce a visible change.
 
-    :param func: The function to be decorated
+    :param func: The function to be decorated.
+    :type func: callable
+    :return: The wrapper function that adds pre- and post-action screenshot
+             and comparison logic.
+    :rtype: callable
+    :raises Exception: If `check_difference` is enabled and that the action did
+                       not produce a visible change
     """
 
     def wrapper(self,
@@ -225,9 +297,15 @@ def action_decorator(func):
 
 
 def log_decorator(func):
-    """Functions decorated with this will be logged when called.
+    """
+    A decorator that logs the invocation of the decorated function, including
+    its name and arguments. This provides a clear
+    record of GUI actions being performed.
 
-    :param func: The function to be decorated
+    :param func: The function to be decorated.
+    :type func: callable
+    :return: The wrapper function that adds logging functionality.
+    :rtype: callable
     """
 
     def wrapper(self, *args, **kwargs):
@@ -242,15 +320,35 @@ def log_decorator(func):
 
 
 class GUI:
-    """Represents the GUI and allows controlling the system under test."""
-
+    """
+    Represents the Graphical User Interface (GUI) of the system under test
+    and provides methods for controlling it. It integrates
+    screenshot capture, mouse control, and keyboard input to automate GUI
+    interactions and perform visual assertions.
+    The class is designed to be used as a context manager for proper setup
+    and cleanup of the GUI testing environment.
+    """
     def __init__(self, wait_time: float = 5, res_dir_name: str = None,
                  from_cli: bool = False):
-        """Initializes the GUI of system under test.
+        """
+        Initializes the GUI automation environment. This includes
+        setting up directories for screenshots and HTML reports, configuring
+        logging to file, and initializing mouse and screen control objects.
 
-        :param wait_time: Time to wait after each action
-        :param custom_dir_name: Provide a custom name of the results dir under
-        /tmp/SC-tests/. The default is `timestamp`_`caller func's name`.
+        :param wait_time: The default time in seconds to wait after each GUI
+                          action to allow the system to respond.
+        :type wait_time: float
+        :param res_dir_name: An optional custom name for the results directory
+                             under ``/tmp/SC-tests/``. If not provided, a
+                             default name based on timestamp and caller
+                             function name (or "cli_gui" for CLI runs) is used.
+        :type res_dir_name: str, optional
+        :param from_cli: A boolean flag indicating if the ``GUI`` instance is
+                         being created from a CLI command. This affects
+                         logging setup and directory naming.
+        :type from_cli: bool
+        :return: None
+        :rtype: None
         """
 
         self.wait_time = wait_time
@@ -327,6 +425,17 @@ class GUI:
         self.screen = Screen(self.screenshot_directory, self.html_file)
 
     def __enter__(self):
+        """
+        Enters the context manager for GUI testing.
+        It restarts the GDM (GNOME Display Manager) service to ensure a defined
+        system state and waits for it to initialize before GUI interactions
+        begin. It also adds the file handler for logging
+        if not initialized from CLI.
+
+        :return: The ``GUI`` instance.
+        :rtype: SCAutolib.models.gui.GUI
+        """
+
         # By restarting gdm, the system gets into defined state
         run(['systemctl', 'restart', 'gdm'], check=True)
         # Cannot screenshot before gdm starts displaying
@@ -339,6 +448,23 @@ class GUI:
         return self
 
     def __exit__(self, type, value, traceback):
+        """
+        Exits the context manager for GUI testing.
+        It stops the GDM service to clean up the graphical environment and
+        finalizes the HTML logging file.
+        A "done" file is created in the results directory to indicate
+        completion.
+
+        :param type: The type of the exception that caused the context to be
+                     exited, or ``None`` if no exception occurred.
+        :param value: The exception instance that caused the context to be
+                      exited, or ``None``.
+        :param traceback: The traceback object associated with the exception,
+                          or ``None``.
+        :return: None
+        :rtype: None
+        """
+
         done_file = self.html_directory.joinpath('done')
         print(done_file)
         if done_file.exists():
@@ -364,12 +490,25 @@ class GUI:
     @action_decorator
     @log_decorator
     def click_on(self, key: str, timeout: float = 30):
-        """Clicks matching word on the screen.
-
-        :param key: String to find in the screenshot.
-        :param timeout: If the key is not found within this timeout,
-            an exception will be raised. Timeout is in seconds.
         """
+        Simulates a mouse click on a GUI object containing the specified text.
+        It repeatedly captures screenshots and
+        performs OCR to locate the text until it is found or a timeout is
+        reached. Once found, the mouse cursor is moved to
+        the center of the detected text and a click is performed.
+
+        :param key: The string to find on the screenshot, identifying the
+                    object to click.
+        :type key: str
+        :param timeout: The maximum time in seconds to wait for the ``key`` to
+                        be found on the screen before raising an exception.
+        :type timeout: float
+        :return: None
+        :rtype: None
+        :raises Exception: If the ``key`` is not found in screenshots within
+                           the specified timeout.
+        """
+
         logger.info(f"Trying to find key='{key}' to click on.")
 
         end_time = time() + timeout
@@ -422,6 +561,21 @@ class GUI:
     @action_decorator
     @log_decorator
     def kb_write(self, *args, **kwargs):
+        """
+        Simulates typing a literal string of characters into the active GUI
+        input field or window. It handles uppercase
+        characters by sending a shift key press.
+
+        :param args: Positional arguments. The first argument is expected to be
+                     the string to write.
+        :type args: tuple
+        :param kwargs: Additional keyword arguments are passed to
+                       ``keyboard.write`` (e.g., ``delay``).
+        :type kwargs: dict
+        :return: None
+        :rtype: None
+        """
+
         # delay is a workaround needed for keyboard library
         kwargs.setdefault('delay', 0.1)
 
@@ -440,20 +594,40 @@ class GUI:
     @action_decorator
     @log_decorator
     def kb_send(self, *args, **kwargs):
+        """
+        Sends specific key(s) or key combinations to the keyboard.
+        This method wraps the ``keyboard.send`` function.
+
+        :param args: Positional arguments representing the key(s) to send
+                     (e.g., ``enter``, ``alt+f4``).
+        :type args: tuple
+        :param kwargs: Additional keyword arguments passed directly to
+                      ``keyboard.send``.
+        :type kwargs: dict
+        :return: None
+        :rtype: None
+        """
+
         keyboard.send(*args, **kwargs)
 
     @log_decorator
     def assert_text(self, key: str, timeout: float = 0):
         """
-        Given key must be found in a screenshot before the timeout.
+        Asserts that a given text string (``key``) is found on the screen
+        within a specified timeout. It repeatedly captures
+        screenshots and performs OCR until the text is detected or the timeout
+        expires.
 
-        If the key is not found, exception is raised.
-        Zero timeout means that only one screenshot
-        will be taken and evaluated.
-
-        :param key: String to find in the screenshot.
-        :param timeout: If the key is not found within this timeout,
-            an exception will be raised. Timeout is in seconds.
+        :param key: The string to find in the screenshots.
+        :type key: str
+        :param timeout: The maximum time in seconds to wait for the ``key`` to
+                        be found. A zero timeout means only one screenshot
+                        will be taken and evaluated.
+        :type timeout: float
+        :return: None
+        :rtype: None
+        :raises Exception: If the ``key`` is not found in any screenshot within
+                           the specified timeout.
         """
 
         logger.info(f"Trying to find key='{key}'")
@@ -477,15 +651,22 @@ class GUI:
     @log_decorator
     def assert_no_text(self, key: str, timeout: float = 0):
         """
-        If the given key is found in any screenshot before the timeout,
-        an exception is raised.
+        Asserts that a given text string (`key`) is *not* found on the screen
+        within a specified timeout. If the key is found in any screenshot
+        during the monitoring period, an exception is raised.
 
-        Zero timeout means that only one screenshot
-        will be taken and evaluated.
-
-        :param key: String that should not be found in the screenshot.
-        :param timeout: Timeout is in seconds.
+        :param key: The string that should not be found in the screenshots.
+        :type key: str
+        :param timeout: The maximum time in seconds to monitor for the absence
+                        of the ``key``. A zero timeout means only one
+                        screenshot will be taken and evaluated.
+        :type timeout: float
+        :return: None
+        :rtype: None
+        :raises Exception: If the ``key`` is found in any screenshot within the
+                           specified timeout.
         """
+
         logger.info(f"Trying to find key='{key}'"
                     " (it should not be in the screenshot)")
 
@@ -507,20 +688,22 @@ class GUI:
     @log_decorator
     def check_home_screen(self, polarity: bool = True):
         """
-        Check for the home screen to determine if user is logged in
+        Checks for the presence or absence of a specific string on the screen
+        to determine if the displayed GUI is the system's "home screen" or
+        desktop. It adapts the text to search for based
+        on the detected Linux distribution (e.g., "tosearch" for Fedora,
+        "Activities" for CentOS and RHEL).
 
-        If OS version is defined as Fedora, we set the text for which to
-        search to "tosearch" instead of the original "Activities". In later
-        versions of Fedora, "Activities" text is no longer visible. "tosearch"
-        should be visible on the login screen as the search bar is still
-        present.
-
-        After defining polarity and the string to check, run the appropriate
-        function with the string to search for.
-
-        :param polarity: Define whether to search for presence or absence of
-            string indicating home screen is displayed.
+        :param polarity: If ``True``, it asserts that the home screen indicator
+                         text is present. If ``False``, it asserts that the
+                         text is *not* present.
+        :type polarity: bool
+        :return: None
+        :rtype: None
+        :raises Exception: If the assertion (presence or absence of text) fails
+                           within the timeout.
         """
+
         if polarity is True:
             func_str = 'assert_text'
         else:
