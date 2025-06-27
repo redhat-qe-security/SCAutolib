@@ -1,13 +1,37 @@
 """
-This module provides a function (isDistro) that helps us identify the os
-of the system and configure the system accordingly.
+This module provides a utility function, ``isDistro``, designed to identify
+the operating system distribution and its version.
+This functionality helps SCAutolib to dynamically configure
+system settings or install packages based on the specific Linux distribution
+it's running on.
 """
+
 
 import distro
 from typing import Union
 
 
 def isDistro(OSes: Union[str, list], version: str = None) -> bool:
+    """
+    Identifies if the current operating system matches a specified distribution
+    and, optionally, its version. This function leverages the ``distro`` library
+    to determine the system's ID, name, and version details.
+
+    :param OSes: The ID or name of the operating system(s) to check against.
+                 Can be a single string (e.g., "fedora", "rhel") or a list of
+                 strings. Case-insensitive comparison is performed.
+    :type OSes: Union[str, list]
+    :param version: An optional string specifying the version to check. It can
+                    include comparison operators
+                    (``<``, ``<=``, ``==``, ``>``, ``>=``).
+                    If no operator is specified, ``==`` is assumed.
+                    Examples: "8", ">=9", "<39".
+    :type version: str, optional
+    :return: ``True`` if the current operating system matches the specified
+             distribution(s) and version criteria; ``False`` otherwise.
+    :rtype: bool
+    """
+
     cur_id = distro.id().lower()
     cur_name = distro.name().lower()
 

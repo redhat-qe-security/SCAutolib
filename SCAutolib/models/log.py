@@ -1,3 +1,12 @@
+"""
+This module provides a context manager, ``assert_log``, designed for verifying
+the presence of specific log entries in a file during test execution.
+
+It allows for asserting that a given regular expression matches a newly
+generated log line within a specified log file.
+"""
+
+
 from SCAutolib import logger
 from contextlib import contextmanager
 import re
@@ -5,19 +14,30 @@ import re
 
 @contextmanager
 def assert_log(path: str, expected_log: str):
-    """Asserts, that a new line in log is created, that matches given regex.
+    """
+    A context manager that asserts the creation of a new log line in a
+    specified file that matches a given regular expression.
 
-    :param path: Path to the file, that will be checked for added logs.
-    :param expected_log: Regular expression
-        that has to match one of the new logs.
+    When entering the context, the log file's pointer is moved to its end to
+    ignore any existing logs. The code block within the
+    ``with`` statement is then executed. Upon exiting the context (either
+    normally or due to an exception), the function reads new log entries and
+    attempts to find a match for the ``expected_log`` regular expression.
 
-    When the context manager starts, the log file is skipped until the end
-    to ignore any previous logs.
-    Then the action inside the context manager is run.
-    This action should generate some logs.
-    When the context manager exits,
-    newly generated logs are matched to the regular expression.
-    In case none of the logs match, an exception is raised.
+    If no matching log is found among the newly generated entries, an exception
+    is raised.
+
+    :param path: The string path to the log file that will be monitored
+                 for new log entries.
+    :type path: str
+    :param expected_log: The regular expression string that is expected to
+                         match one of the new log lines generated within the
+                         context.
+    :type expected_log: str
+    :yield: None. This is a context manager, so it yields control to the
+            ``with`` block.
+    :raises Exception: If no new log line matches the ``expected_log`` regular
+                       expression by the time the context is exited.
     """
     logger.info(f'Opening log file {path}')
     with open(path) as f:
