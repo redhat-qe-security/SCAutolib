@@ -13,13 +13,13 @@
 import sphinx_rtd_theme
 
 project = 'SCAutolib'
-copyright = '2022, Pavel Yadlouski'
+copyright = '2022, Pavel Yadlouski - 2025, George Pantelakis'
 author = 'Pavel Yadlouski'
 
 # The master toctree document.
 master_doc = "index"
 # The full version, including alpha/beta/rc tags
-release = '1.0.9'
+release = '1.1.0'
 
 
 # -- General configuration ---------------------------------------------------
@@ -67,7 +67,6 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 #
 
 html_theme = "sphinx_rtd_theme"
-html_theme_path = [sphinx_rtd_theme.get_html_theme_path()]
 html_css_files = ["readthedocs-custom.css"]
 # Override some CSS settings
 
