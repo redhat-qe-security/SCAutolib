@@ -1,8 +1,14 @@
 """
-This module provides a set of additional helping functions that are used
-across the library. These functions are based on library demands and are
-not aimed to cover some general use-cases or specific corner cases.
+This module provides a collection of utility and helper functions utilized
+across the SCAutolib library. These functions are
+specifically designed to support various internal demands of the library,
+including system checks, package management, key/certificate handling,
+and data serialization. They are not intended as
+general-purpose utilities but as specialized aids tailored to SCAutolib's
+operations.
 """
+
+
 import json
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -19,11 +25,13 @@ from SCAutolib.models.user import User
 
 def _check_selinux():
     """
-    Checks if specific SELinux module for virtual smart card is installed.
-    This is implemented be checking the hardcoded name for the module
-    (virtcacard) to be present in the list of SELinux modules. If this name is
-    not present in the list, then virtcacard.cil file would be created in conf
-    or subdirectory in the CA directory specified by the configuration file.
+    Checks if a specific SELinux module, 'virtcacard' (for virtual smart cards),
+    is currently installed and active on the system.
+    If the module is not found, this function attempts to install it from
+    a predefined template file (``virtcacard.cil``) and then restarts the
+    ``pcscd`` service.
+
+    :return: None
     """
     result = run("semodule -l", print_=False)
     if "virtcacard" not in result.stdout:
@@ -36,19 +44,27 @@ def _check_selinux():
         run(["systemctl", "restart", "pcscd"])
         logger.debug("pcscd service is restarted")
 
-    logger.debug(
-        "SELinux module for virtual smart cards is installed")
+    logger.debug("SELinux module for virtual smart cards is installed")
 
 
-def _gen_private_key(key_path: Path):
+def _gen_private_key(key_path: Path, size: int = 2048):
     """
-    Generate RSA private key to specified location.
+    Generates an RSA private key and saves it to the specified file path in PEM
+    format without encryption.
+    This function is used when a private key is needed for a user's smart card
+    or certificate request and doesn't already exist.
 
-    :param key_path: path to output certificate
+    :param key_path: The ``pathlib.Path`` object specifying the full path
+                     (including filename) where the generated private key
+                     should be saved.
+    :type key_path: pathlib.Path
+    :param size: The size of the key in bits to be created.
+    :type size: int
+    :return: None
     """
     # CAC specification do not specify key size specifies key size
     # up to 2048 bits, so keys greater than 2048 bits is not supported
-    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    key = rsa.generate_private_key(public_exponent=65537, key_size=size)
 
     with key_path.open("wb") as f:
         f.write(key.private_bytes(
@@ -59,9 +75,14 @@ def _gen_private_key(key_path: Path):
 
 def _install_packages(packages):
     """
-    Install given packages and log package version
+    Installs a list of specified RPM packages on the system.
+    After installation, it logs the installed version of each package for
+    verification.
 
-    :param packages: list of packages to be installed
+    :param packages: A list of strings, where each string is the name of a
+                     package to be installed (e.g., ``["opensc", "sssd"]``).
+    :type packages: list
+    :return: None
     """
     run(f"dnf install -y {' '.join(packages)}")
     for pkg in packages:
@@ -71,11 +92,16 @@ def _install_packages(packages):
 
 def _check_packages(packages):
     """
-    Find missing packages
+    Identifies and returns a list of packages that are required for SCAutolib
+    but are not currently installed on the system.
+    It uses ``rpm -q`` to query each package's installation status.
 
-    :param packages: list of required packages
+    :param packages: A list of strings, where each string is the name of a
+                     package to check for.
     :type packages: list
-    :return: list of missing packages
+    :return: A list of strings, containing the names of packages that were
+             found to be missing on the system.
+    :rtype: list
     """
     missing = []
     for pkg in packages:
@@ -92,7 +118,16 @@ def _check_packages(packages):
 
 def dump_to_json(obj):
     """
-    Store serialised object to the JSON file.
+    Serializes a given object into a JSON file, using the object's
+    ``to_dict()`` method for serialization and its ``dump_file`` attribute to
+    determine the output path. This is used to persist
+    the state of SCAutolib's internal objects (like users, CAs, and cards)
+    across different runs.
+
+    :param obj: The object to be serialized. It must have a ``to_dict()``
+                method and a ``dump_file`` attribute.
+    :type obj: object
+    :return: None
     """
     with obj.dump_file.open("w") as f:
         json.dump(obj.to_dict(), f)
@@ -101,13 +136,20 @@ def dump_to_json(obj):
 
 def load_user(username, **kwargs):
     """
-    Load user with given username from JSON file.
+    Loads a ``User`` object from a JSON dump file corresponding to the given
+    username. The file is expected to be located in ``LIB_DUMP_USERS``
+    directory.
 
-    :param username: username of the user
+    :param username: The username of the user to load.
     :type username: str
-
-    :return: user object
-    :rtype: BaseUser
+    :param kwargs: Additional keyword arguments that might be required by the
+                   ``User.load`` static method, particularly for ``IPAUser``
+                   objects (e.g., ``ipa_server`` object).
+    :type kwargs: dict
+    :return: The loaded ``User`` object (either ``User`` or ``IPAUser``
+             instance).
+    :rtype: SCAutolib.models.user.User
+    :raises SCAutolibException: If the user's JSON dump file does not exist.
     """
     user_file = LIB_DUMP_USERS.joinpath(f"{username}.json")
     logger.debug(f"Loading user {username} from {user_file}")
@@ -121,18 +163,19 @@ def load_user(username, **kwargs):
 
 def load_token(card_name: str = None, update_sssd: bool = False):
     """
-    Load card with given name from JSON file. This function is intended to load
-    card objects to tests during pytest configuration. If update_sssd param is
-    True sssd.conf file will be updated based on card data
+    Loads a ``Card`` object from a JSON dump file based on the provided card
+    name. This function is primarily intended for use
+    in pytest configurations to set up card objects for tests.
+    Optionally, it can update the SSSD configuration file (``sssd.conf``)
+    with a ``shadowutils`` rule for the user of the loaded card.
 
-    :param card_name: name of the card to be loaded
-    :type card_name: str
-    :param update_sssd: indicates if sssd.conf matchrule should be updated based
-        on card data
-    :type update_sssd bool
-
-    :return: card object
-    :rtype: Card
+    :param card_name: The name of the card object to load.
+    :type card_name: str, optional
+    :param update_sssd: If ``True``, the SSSD configuration file will be
+                        updated with a ``shadowutils`` rule for the user of the
+                        loaded card.
+    :return: The loaded ``Card`` object
+    :rtype: SCAutolib.models.card.Card
     """
     card_file = LIB_DUMP_CARDS.joinpath(f"{card_name}.json")
     logger.debug(f"Loading card {card_name} from {card_file}")
@@ -152,12 +195,18 @@ def load_token(card_name: str = None, update_sssd: bool = False):
 
 def ipa_factory():
     """
-    Create a new IPAServerCA object.
+    Creates and returns an ``IPAServerCA`` object. This function
+    loads the IPA server CA configuration from its JSON dump file.
+    It specifically asserts that the loaded CA is an instance of
+    ``IPAServerCA``.
 
     .. note: Creating new IPA server with CA is not supported.
 
-    :return: object of IPAServerCA
+    :return: An initialized ``IPAServerCA`` object.
     :rtype: SCAutolib.models.CA.IPAServerCA
+    :raises SCAutolibException: If the IPA server CA dump file is not found
+                                or if the loaded object is not a valid
+                                ``IPAServerCA`` instance.
     """
     json_file = LIB_DUMP_CAS.joinpath("ipa-server.json")
     if not json_file.exists():
@@ -179,26 +228,31 @@ def ca_factory(path: Path = None, cnf: OpensslCnf = None,
                card_data: dict = None, ca_name: str = None,
                create: bool = False):
     """
-    Create CA object. If certain CA object was created in previous run of
-    SCAutolib and it was serialized and saved in .json file, then such CA object
-    would be initialized based on the file. If create param is True new CA
-    object will be created regardless the presence of the .json file.
+    A factory function to create or load Certificate Authority (CA) objects
+    based on the provided parameters. It can initialize
+    a new CA instance or load an existing one from a JSON dump file.
 
-    :param path: path to the CA directory
-    :type path: Path
-    :param cnf: object representing openssl cnf file
-    :type cnf: OpensslCnf object
-    :param card_data: dictionary with various attributes of the card as PIN,
-        cardholder, slot, etc.
-    :type card_data: dict
-    :param ca_name: name of CA that identifies CA file to be loaded if create
-        parameter is set to False
-    :type ca_name: str
-    :param create: indicator to create new CA. If it's false existing CA files
-        will be loaded
+    :param path: The ``pathlib.Path`` object to the CA's root directory. This is
+                 used when creating a new ``LocalCA`` instance.
+    :type path: pathlib.Path, optional
+    :param cnf: An ``OpensslCnf`` object representing the OpenSSL configuration
+                file for the CA. Used when creating a new ``LocalCA``.
+    :type cnf: SCAutolib.models.file.OpensslCnf, optional
+    :param card_data: A dictionary containing various attributes of the card
+                      (e.g., PIN, cardholder, slot). This data is used when
+                      creating a new ``CustomCA`` for physical cards.
+    :type card_data: dict, optional
+    :param ca_name: The name of the CA to load. This parameter is used when
+                    ``create`` is ``False`` to identify the specific CA JSON dump
+                    file.
+    :type ca_name: str, optional
+    :param create: If ``True``, a new CA object will be created
+                   (either ``LocalCA`` or ``CustomCA``). If ``False``,
+                   an existing CA object will be loaded from a dump file.
     :type create: bool
-    :return: CA object
-    :rtype: SCAutolib.models.CA object
+    :return: An initialized CA object (either ``LocalCA``, ``CustomCA``, or
+             ``IPAServerCA`` instance).
+    :rtype: SCAutolib.models.CA.BaseCA
     """
     if not create:
         ca = BaseCA.load(LIB_DUMP_CAS.joinpath(f"{ca_name}.json"))

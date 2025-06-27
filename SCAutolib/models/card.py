@@ -1,8 +1,14 @@
 """
-This module implements classes for communication with different types of cards
-that we are using in the library. Those types are: virtual smart card, real
-(physical) smart card in standard reader, cards in the removinator.
+This module implements classes for interacting with different types of smart
+cards used within the SCAutolib library. These include
+``VirtualCard`` (software-emulated smart cards), ``PhysicalCard`` (real
+smart cards in standard readers), and potentially cards connected via
+specialized hardware like Removinator. The module provides a
+common ``Card`` interface and specialized methods for operations like
+inserting/removing cards, and enrolling (uploading keys and certificates).
 """
+
+
 import json
 import re
 import time
@@ -17,8 +23,11 @@ from SCAutolib.enums import CardType, UserType
 
 class Card:
     """
-    Interface for child classes. All child classes will rewrite common methods
-    based on the type of the card.
+    An interface class for different types of smart cards.
+    It defines common attributes and abstract methods that child classes
+    are expected to implement based on the
+    specific card type. It also includes a static method
+    for loading card objects from JSON dump files.
     """
     uri: str = None
     dump_file: Path = None
@@ -27,11 +36,17 @@ class Card:
 
     def _set_uri(self):
         """
-        Sets URI for given smart card. Uri is matched from ``p11tool`` command
-        with regular expression. If URI is not matched, exception is raised.
+        Sets the URI for the given smart card by matching it from the output
+        of the ``p11tool --list-token-urls`` command using a regular expression
+        (``self._pattern``). An exception is raised if
+        no URI is matched, or if multiple URIs are found.
 
-        :raise: SCAutolibException
+        :return: None
+        :rtype: None
+        :raises SCAutolibException: If a matching URI is not found or if
+                                    multiple matching URIs are detected.
         """
+
         cmd = ["p11tool", "--list-token-urls"]
         out = run(cmd).stdout
         urls = re.findall(self._pattern, out)
@@ -47,24 +62,58 @@ class Card:
 
     def insert(self):
         """
-        Insert the card.
+        Inserts the smart card.
+        This is an abstract method that must be implemented by concrete card
+        type subclasses.
+
+        :return: None
+        :rtype: None
         """
+
         ...
 
     def remove(self):
         """
-        Remove the card.
+        Removes the smart card.
+        This is an abstract method that must be implemented by concrete card
+        type subclasses.
+
+        :return: None
+        :rtype: None
         """
+
         ...
 
     def enroll(self):
         """
-        Enroll the card (upload a certificate and a key on it)
+        Enrolls the card, typically by uploading a certificate and a key onto
+        it.
+        This is an abstract method that must be implemented by concrete card
+        type subclasses.
+
+        :return: None
+        :rtype: None
         """
+
         ...
 
     @staticmethod
     def load(json_file):
+        """
+        Loads a ``Card`` object from a specified JSON dump file.
+        It reads the JSON content, determines the card type, and then
+        instantiates the appropriate card subclass with the loaded data.
+
+        :param json_file: The ``pathlib.Path`` object pointing to the JSON file
+                          containing the serialized card data.
+        :type json_file: pathlib.Path
+        :return: An instance of the specific card class loaded with data from
+                 the JSON file.
+        :rtype: SCAutolib.models.card.Card
+        :raises SCAutolibException: If an unknown card type is encountered in
+                                    the JSON data.
+        """
+
         with json_file.open("r") as f:
             cnt = json.load(f)
 
@@ -82,14 +131,13 @@ class Card:
 
 class VirtualCard(Card):
     """
-    This class provides methods for operations on virtual smart card. Virtual
-    smart card by itself is represented by the systemd service in the system.
-    The card relates to some user, so providing the user is essential for
-    correct functioning of methods for the virtual smart card.
-
-    Card root directory has to be created before calling any method
+    Represents a virtual smart card, which is implemented as a systemd service
+    on the system. This class provides methods
+    for managing the lifecycle of a virtual smart card, including its creation,
+    insertion (starting the service), removal (stopping the service), and
+    enrollment (uploading keys and certificates to its NSS database via
+    SoftHSM2). It is designed to be used as a context manager.
     """
-
     _service_name: str = None
     _service_location: Path = None
     _softhsm2_conf: Path = None
@@ -116,20 +164,30 @@ class VirtualCard(Card):
     def __init__(self, card_data, softhsm2_conf: Path = None,
                  card_dir: Path = None, key: Path = None, cert: Path = None):
         """
-        Initialise virtual smart card. Constructor of the base class is also
-        used.
+        Initializes a ``VirtualCard`` object. It sets up
+        card-specific attributes and paths for its files, service, and NSS
+        database. The card's root directory must
+        exist prior to calling any methods that interact with it.
 
-        :param card_data: dict containing card details as pin, cardholder etc.
+        :param card_data: A dictionary containing details about the card,
+                          such as ``pin``, ``cardholder``, ``name``, etc.
         :type card_data: dict
-        :param softhsm2_conf: path to SoftHSM2 configuration file
-        :type softhsm2_conf: pathlib.Path
-        :param card_dir: path to card directory where card files will be saved
-        :type card_dir: pathlib.Path
-        :param key: path to key - if the key exist it will be used with the card
-        :type key: pathlib.Path
-        :param cert: path to certificate. If file exist it will be used with the
-            card
-        :type cert: pathlib.Path
+        :param softhsm2_conf: The ``pathlib.Path`` object to the SoftHSM2
+                              configuration file used by this virtual card.
+        :type softhsm2_conf: pathlib.Path, optional
+        :param card_dir: The ``pathlib.Path`` object to the card's root
+                         directory where its files will be saved.
+        :type card_dir: pathlib.Path, optional
+        :param key: The ``pathlib.Path`` object to the private key file. If
+                    it exists, it will be used with the card.
+        :type key: pathlib.Path, optional
+        :param cert: The ``pathlib.Path`` object to the certificate file. If
+                     it exists, it will be used with the card.
+        :type cert: pathlib.Path, optional
+        :return: None
+        :rtype: None
+        :raises FileNotFoundError: If the specified ``card_dir`` does not exist
+                                   upon initialization.
         """
         self.name = card_data["name"]
         self.pin = card_data["pin"]
@@ -155,36 +213,54 @@ class VirtualCard(Card):
 
     def __call__(self, insert: bool):
         """
-        Call method for virtual smart card. It would be used in the context
-        manager.
+        Allows the ``VirtualCard`` object to be called directly, enabling its
+        use as part of a context manager.
 
-        :param insert: True if the card should be inserted, False otherwise
+        :param insert: If ``True``, the card's service will be
+                       started (card inserted) upon calling the object.
         :type insert: bool
+        :return: The ``VirtualCard`` instance itself, allowing context manager
+                 entry.
+        :rtype: SCAutolib.models.card.VirtualCard
         """
+
         if insert:
             self.insert()
         return self.__enter__()
 
     def __enter__(self):
         """
-        Start of context manager for virtual smart card. The card would be
-        inserted if ``insert`` parameter in constructor is specified.
+        Enters the context manager for the virtual smart card.
+        It verifies that the virtual card's systemd service file exists
+        before proceeding.
 
-        :return: self
+        :return: The ``VirtualCard`` instance.
+        :rtype: SCAutolib.models.card.VirtualCard
+        :raises FileNotFoundError: If the systemd service file for the virtual
+                                   card does not exist.
         """
+
         if not self._service_location.exists():
             raise FileNotFoundError("Service for virtual sc doesn't exists.")
         return self
 
     def __exit__(self, exp_type, exp_value, exp_traceback):
         """
-        End of context manager for virtual smart card. If any exception was
-        raised in the current context, it would be logged as an error.
+        Exits the context manager for the virtual smart card.
+        If the card was inserted (its service started) upon entering the
+        context, this method ensures it is removed (service stopped).
+        Any exceptions raised within the context are logged.
 
-        :param exp_type: Type of the exception
-        :param exp_value: Value for the exception
-        :param exp_traceback: Traceback of the exception
+        :param exp_type: The type of the exception that caused the context to
+                         be exited, or ``None`` if no exception occurred.
+        :param exp_value: The exception instance that caused the context to be
+                          exited, or ``None``.
+        :param exp_traceback: The traceback object associated with the
+                              exception, or ``None``.
+        :return: None
+        :rtype: None
         """
+
         if exp_type is not None:
             logger.error("Exception in virtual smart card context")
             logger.error(format_exc())
@@ -192,6 +268,16 @@ class VirtualCard(Card):
             self.remove()
 
     def to_dict(self):
+        """
+        Converts the ``VirtualCard`` object's attributes into a dictionary
+        suitable for JSON serialization. It converts
+        ``pathlib.Path`` objects to string representations for compatibility.
+
+        :return: A dictionary representation of the virtual card object's
+                 attributes.
+        :rtype: dict
+        """
+
         return {
             "name": self.name,
             "pin": self.pin,
@@ -209,22 +295,57 @@ class VirtualCard(Card):
 
     @property
     def softhsm2_conf(self):
+        """
+        Returns the path to the SoftHSM2 configuration file used by this
+        virtual card.
+
+        :return: A ``pathlib.Path`` object to the SoftHSM2 configuration file.
+        :rtype: pathlib.Path
+        """
+
         return self._softhsm2_conf
 
     @softhsm2_conf.setter
     def softhsm2_conf(self, conf: Path):
+        """
+        Sets the path to the SoftHSM2 configuration file for this virtual card.
+
+        :param conf: The ``pathlib.Path`` object to the SoftHSM2 configuration
+                     file.
+        :type conf: pathlib.Path
+        :return: None
+        :rtype: None
+        :raises FileNotFoundError: If the provided configuration file path does
+                                   not exist.
+        """
+
         if not conf.exists():
             raise FileNotFoundError(f"File {conf} doesn't exist")
         self._softhsm2_conf = conf
 
     @property
     def service_location(self):
+        """
+        Returns the ``pathlib.Path`` object to the systemd service file
+        location for this virtual smart card.
+
+        :return: The service file path.
+        :rtype: pathlib.Path
+        """
+
         return self._service_location
 
     def insert(self):
         """
-        Insert virtual smart card by starting the corresponding service.
+        Inserts the virtual smart card by starting its corresponding systemd
+        service. A short delay is included to prevent
+        errors with fast service restarts.
+
+        :return: The ``subprocess.CompletedProcess`` object from the systemctl
+                 command.
+        :rtype: subprocess.CompletedProcess
         """
+
         cmd = ["systemctl", "start", self._service_name]
         out = run(cmd, check=True)
         time.sleep(2)  # to prevent error with fast restarting of the service
@@ -234,8 +355,14 @@ class VirtualCard(Card):
 
     def remove(self):
         """
-        Remove the virtual card by stopping the service
+        Removes the virtual smart card by stopping its systemd service.
+        A short delay is included to prevent errors with fast service restarts.
+
+        :return: The ``subprocess.CompletedProcess`` object from the systemctl
+                 command.
+        :rtype: subprocess.CompletedProcess
         """
+
         cmd = ["systemctl", "stop", self._service_name]
         out = run(cmd, check=True)
         time.sleep(2)  # to prevent error with fast restarting of the service
@@ -245,9 +372,14 @@ class VirtualCard(Card):
 
     def enroll(self):
         """
-        Upload certificate and private key to the virtual smart card (upload to
-        NSS database) with pkcs11-tool.
+        Uploads a certificate and private key to the virtual smart card's
+        internal NSS database via ``pkcs11-tool`` and SoftHSM2.
+        After enrollment, the card is temporarily inserted to set its URI.
+
+        :return: None
+        :rtype: None
         """
+
         cmd = ["pkcs11-tool", "--module", "libsofthsm2.so", "--slot-index",
                '0', "-w", self.key, "-y", "privkey", "--label",
                "test_key", "-p", self.pin, "--set-id", "0",
@@ -272,9 +404,14 @@ class VirtualCard(Card):
 
     def create(self):
         """
-        Creates SoftHSM2 token and systemd service for virtual smart card.
-        Directory for NSS database is created in this method as separate DB is
-        required for each virtual card.
+        Creates the necessary components for a virtual smart card, including
+        initializing a SoftHSM2 token, setting up its NSS database, and
+        creating the corresponding systemd service file.
+
+        :return: The ``VirtualCard`` instance.
+        :rtype: SCAutolib.models.card.VirtualCard
+        :raises FileNotFoundError: If the SoftHSM2 configuration file is not
+                                   found.
         """
 
         if not self._softhsm2_conf.exists():
@@ -318,9 +455,12 @@ class VirtualCard(Card):
 
     def delete(self):
         """
-        Deletes the virtual card directory which contains certs, SoftHSM2 token
-        and NSS database. Also removes the systemd service for virtual smart
-        card.
+        Deletes the virtual card, including its dedicated directory (which
+        contains certificates, SoftHSM2 token data, and NSS database), and
+        removes its systemd service file.
+
+        :return: None
+        :rtype: None
         """
         shutil.rmtree(self.card_dir)
         logger.info(f"Virtual card dir of {self.name} removed")
@@ -335,9 +475,15 @@ class VirtualCard(Card):
 
     def gen_csr(self):
         """
-        Method for generating user specific CSR file that would be sent to the
-        CA for generating the certificate. CSR is generated using 'openssl`
-        command based on template CNF file.
+        Generates a user-specific CSR (Certificate Signing Request) file using
+        OpenSSL, based on a template CNF file and the user's private key.
+        This CSR is then sent to a CA for certificate generation.
+
+        :return: The ``pathlib.Path`` object to the generated CSR file.
+        :rtype: pathlib.Path
+        :raises SCAutolibException: If the private key is not set when
+                                    attempting to generate a CSR for an IPA
+                                    user.
         """
         csr_path = self.card_dir.joinpath(f"csr-{self.cardholder}.csr")
         if self.user.user_type == UserType.local:
@@ -357,9 +503,12 @@ class VirtualCard(Card):
 
 class PhysicalCard(Card):
     """
-    :TODO PhysicalCard is not yet tested, it's Work In Progress
-        This class provides methods allowing to manipulate physical cards
-        connected via removinator.
+    Represents a physical smart card.
+    This class is intended to provide methods for manipulating physical cards,
+    potentially connected via specialized hardware like a Removinator.
+
+    Note: As of the provided code, this class is noted as 'Work In Progress'
+    and not yet fully tested. Needs to be implemented with removinator.
     """
     _inserted: bool = False
 
@@ -377,11 +526,22 @@ class PhysicalCard(Card):
 
     def __init__(self, card_data: dict = None, card_dir: Path = None):
         """
-        TODO this is not yet tested, insert and remove methods need to be
-            implemented with removinator
-        Initialise object for physical smart card. Constructor of the base class
-        is also used.
+        Initializes a ``PhysicalCard`` object.
+        It sets up card attributes based on provided data and verifies the
+        card's root directory exists.
+
+        :param card_data: A dictionary containing details about the physical
+                          card.
+        :type card_data: dict, optional
+        :param card_dir: The ``pathlib.Path`` object to the card's root
+                         directory.
+        :type card_dir: pathlib.Path, optional
+        :return: None
+        :rtype: None
+        :raises FileNotFoundError: If the specified ``card_dir`` does not exist
+                                   upon initialization.
         """
+
         self.card_data = card_data
         # Not sure we will need following, let's see later
         self.name = card_data["name"]
@@ -402,34 +562,48 @@ class PhysicalCard(Card):
 
     def __call__(self, insert: bool):
         """
-        Call method for physical smart card. It would be used in the context
-        manager.
+        Allows the ``PhysicalCard`` object to be called directly, enabling its
+        use as part of a context manager.
 
-        :param insert: True if the card should be inserted, False otherwise
+        :param insert: If ``True``, the card will be inserted upon calling the
+                       object.
         :type insert: bool
+        :return: The ``PhysicalCard`` instance itself, allowing context manager
+                 entry.
+        :rtype: SCAutolib.models.card.PhysicalCard
         """
+
         if insert:
             self.insert()
         return self.__enter__()
 
     def __enter__(self):
         """
-        Start of context manager for physical smart card. The card would be
-        inserted if ``insert`` parameter in constructor is specified.
+        Enters the context manager for the physical smart card.
 
-        :return: self
+        :return: The ``PhysicalCard`` instance.
+        :rtype: SCAutolib.models.card.PhysicalCard
         """
+
         return self
 
     def __exit__(self, exp_type, exp_value, exp_traceback):
         """
-        End of context manager for physical smart card. If any exception was
-        raised in the current context, it would be logged as an error.
+        Exits the context manager for the physical smart card.
+        If the card was marked as inserted, this method ensures it is removed
+        upon exiting the context. Any exceptions raised
+        within the context are logged.
 
-        :param exp_type: Type of the exception
-        :param exp_value: Value for the exception
-        :param exp_traceback: Traceback of the exception
+        :param exp_type: The type of the exception that caused the context to
+                         be exited, or ``None`` if no exception occurred.
+        :param exp_value: The exception instance that caused the context to be
+                          exited, or ``None``.
+        :param exp_traceback: The traceback object associated with the
+                              exception, or ``None``.
+        :return: None
+        :rtype: None
         """
+
         if exp_type is not None:
             logger.error("Exception in physical smart card context")
             logger.error(format_exc())
@@ -438,26 +612,47 @@ class PhysicalCard(Card):
 
     def to_dict(self):
         """
-        Customising default property for better serialisation for storing to
-        JSON format.
+        Converts the ``PhysicalCard`` object's attributes into a dictionary
+        suitable for JSON serialization.
 
-        :return: dictionary with all values. Path objects are typed to string.
+        :return: A dictionary representation of the physical card object's
+                 attributes.
         :rtype: dict
         """
+
         return self.card_data
 
     @property
     def user(self):
+        """
+        Returns the cardholder's username associated with this physical card.
+
+        :return: The cardholder's username.
+        :rtype: str
+        """
+
         return self.cardholder
 
     def insert(self):
         """
-        Insert physical card using removinator
+        Inserts the physical card.
+        Note: This method is a placeholder and needs to be implemented
+        to interact with Removinator.
+
+        :return: None
+        :rtype: None
         """
+
         ...
 
     def remove(self):
         """
-        Remove physical card using removinator
+        Removes the physical card.
+        Note: This method is a placeholder and needs to be implemented
+        to interact with Removinator.
+
+        :return: None
+        :rtype: None
         """
+
         ...

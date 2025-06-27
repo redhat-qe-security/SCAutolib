@@ -1,12 +1,18 @@
 """
-This module implements classes that represents Certification Authorities (CA).
+This module implements classes that represent Certificate Authorities (CA)
+within the SCAutolib framework.
+It provides a foundational ``BaseCA`` class and specialized subclasses
+for ``LocalCA`` (local OpenSSL-based CAs), ``CustomCA`` (for physical cards),
+and ``IPAServerCA`` (for FreeIPA integrated CAs).
+These classes encapsulate CA-specific attributes and methods for
+operations such as certificate requests, signing, revocation, and managing
+the system's CA trust store (``sssd_auth_ca_db.pem``).
 """
-import shutil
 
-import re
 
-import json
 import os
+import re
+import json
 import python_freeipa
 from cryptography import x509
 from hashlib import sha256
@@ -24,6 +30,14 @@ from SCAutolib.enums import CAType
 
 
 class BaseCA:
+    """
+    A foundational class serving as an interface and base implementation for
+    different types of Certificate Authorities (CAs) within SCAutolib. It
+    defines common properties like certificate and key paths, and provides
+    shared methods for CA-related operations, especially managing the file used
+    by the System Security Services Daemon (SSSD) to store a list of
+    Certificate Authority (CA) certificates (``sssd_auth_ca_db.pem``).
+    """
     dump_file: Path = None
     ca_type: str = None
     _ca_cert: Path = None
@@ -33,35 +47,59 @@ class BaseCA:
 
     @property
     def cert(self):
+        """
+        Returns the path to the CA's certificate file.
+
+        :return: A ``pathlib.Path`` object pointing to the CA certificate.
+        :rtype: pathlib.Path
+        """
+
         return self._ca_cert
 
     def request_cert(self, csr, username: str, cert_out: Path):
         """
-        Request certificate from CA for given username
+        Requests a certificate from the CA for a given username using a
+        CSR (Certificate Signing Request). The signed certificate is then
+        duplicated to the specified output path.
+        This method is a placeholder in ``BaseCA`` and its implementation
+        varies depending on the specific CA type (e.g., local, IPA).
 
-        :param csr: path to CSR
+        :param csr: The path to the CSR file.
         :type csr: str
-        :param username: subject for the certificate
+        :param username: The subject name for the certificate.
         :type username: str
-        :param cert_out: path where the certificate should be duplicated.
-            Default None
+        :param cert_out: The path where the signed certificate should be stored.
         :type cert_out: pathlib.Path
-        :return: None or path where the certificate is stored.
-        :rtype: None or pathlib.Path
+        :return: The path where the certificate is stored.
+        :rtype: pathlib.Path
         """
+
         ...
 
     def setup(self):
         """
-        Configure the CA
+        Configures the Certificate Authority.
+        This method is a placeholder in ``BaseCA`` and its implementation
+        varies depending on the specific CA type (e.g., local, IPA).
+
+        :return: None
+        :rtype: None
         """
+
         ...
 
     def update_ca_db(self):
         """
-        Update /etc/sssd/pki/sssd_auth_ca_db.pem with certificate defined in CA
-        object.
+        Updates the system's ``sssd_auth_ca_db.pem`` file with the CA's
+        certificate defined in this CA object.
+        It backs up the original ``sssd_auth_ca_db.pem`` if it exists and
+        ensures the CA certificate is added if not already present.
+        SELinux context is restored on the database file after modification.
+
+        :return: None
+        :rtype: None
         """
+
         with self._ca_cert.open("r") as f_cert:
             root_cert = f_cert.read()
 
@@ -88,8 +126,15 @@ class BaseCA:
 
     def restore_ca_db(self):
         """
-        restores /etc/sssd/pki/sssd_auth_ca_db.pem to the state it was before.
+        Restores the ``sssd_auth_ca_db.pem`` file to its state before it was
+        modified by this CA object. It uses the backed-up
+        original file for restoration. If no backup exists, it will simply
+        remove the current ``sssd_auth_ca_db.pem`` if it's present.
+
+        :return: None
+        :rtype: None
         """
+
         if self._ca_original_path.exists():
             logger.debug("Found original version of sssd_auth_ca_db.pem")
             with self._ca_original_path.open() as backup, \
@@ -104,24 +149,47 @@ class BaseCA:
 
     def sign_cert(self):
         """
-        Sign the certificate
+        Signs a certificate.
+        This method is a placeholder in ``BaseCA`` and its implementation
+        varies depending on the specific CA type (e.g., local, IPA).
+
+        :return: None
+        :rtype: None
         """
+
         ...
 
     def revoke_cert(self, cert: Path):
         """
-        Revoke the certificate
+        Revokes a given certificate.
+        This method is a placeholder in ``BaseCA`` and its implementation
+        varies depending on the specific CA type (e.g., local, IPA).
 
-        :param cert:
+        :param cert: The ``pathlib.Path`` object to the certificate to be
+                     revoked.
         :type cert: pathlib.Path
+        :return: None
+        :rtype: None
         """
+
         ...
 
     @staticmethod
     def load(json_file):
         """
-        Load CA from JSON file.
-        :return: CA object
+        Loads a CA object from a JSON file.
+        It reads the JSON content, determines the CA type, and then
+        instantiates the appropriate CA subclass with the loaded attributes.
+
+        :param json_file: The ``pathlib.Path`` object pointing to the JSON file
+                          containing the serialized CA data.
+        :type json_file: pathlib.Path
+        :return: An instance of the specific CA class loaded with data from the
+                 JSON file.
+        :rtype: SCAutolib.models.CA.BaseCA
+        :raises SCAutolibException: If the CA object has an unknown type in the
+                                    JSON file, or if the data is invalid for
+                                    IPA CA initialization.
         """
         with json_file.open("r") as f:
             cnt = json.load(f)
@@ -149,7 +217,12 @@ class BaseCA:
 
 class LocalCA(BaseCA):
     """
-    Represents local CA that is created as CA for virtual cards.
+    Represents a local Certificate Authority (CA) that is created and managed
+    directly on the system, typically used as a CA for virtual smart cards.
+    It extends ``BaseCA`` and provides specific
+    implementations for setting up the CA's directory structure, generating
+    self-signed certificates, and managing CRLs (Certificate Revocation Lists)
+    using OpenSSL.
     """
     template = Path(TEMPLATES_DIR, "ca.cnf")
     ca_type = CAType.local
@@ -158,15 +231,24 @@ class LocalCA(BaseCA):
 
     def __init__(self, root_dir: Path = None, cnf: OpensslCnf = None):
         """
-        Class for local CA. Initialize required attributes, real setup is made
-        by LocalCA.setup() method
+        Initializes a ``LocalCA`` object.
+        It sets up paths for the CA's root directory, configuration files,
+        certificate, and key, but the actual file system setup is performed
+        by the ``setup()`` method.
 
-        :param root_dir: Path to root directory of the CA. By default, is in
-            /etc/SCAutolib/ca
-        :type: Path
-        :param cnf: object representing openssl cnf file
-        :type cnf: OpensslCnf
+        :param root_dir: The ``pathlib.Path`` object to the root directory
+                         where the CA files will be stored. Defaults to
+                         ``/etc/SCAutolib/ca``.
+        :type root_dir: pathlib.Path, optional
+        :param cnf: An ``OpensslCnf`` object representing the OpenSSL CNF file
+                    used for the CA.
+        :type cnf: SCAutolib.models.file.OpensslCnf, optional
+        :return: None
+        :rtype: None
+        :raises FileNotFoundError: If the specified ``root_dir`` does not exist
+                                   upon initialization.
         """
+
         self.name = LocalCA.ca_name
         self.ca_type = LocalCA.ca_type
         self.root_dir: Path = Path("/etc/SCAutolib/ca") if root_dir is None \
@@ -191,22 +273,42 @@ class LocalCA(BaseCA):
 
     @property
     def cnf(self):
+        """
+        Returns the OpenSSL CNF object associated with this local CA.
+
+        :return: An ``OpensslCnf`` object.
+        :rtype: SCAutolib.models.file.OpensslCnf
+        """
+
         return self._ca_cnf
 
     @cnf.setter
     def cnf(self, cnf: OpensslCnf):
+        """
+        Sets the OpenSSL CNF object for this local CA.
+
+        :param cnf: The ``OpensslCnf`` object to set.
+        :type cnf: SCAutolib.models.file.OpensslCnf
+        :return: None
+        :rtype: None
+        :raises SCAutolibException: If the provided CNF file does not exist.
+        """
+
         if not cnf.path.exists():
             raise SCAutolibException("CNF file does not exist")
         self._ca_cnf = cnf
 
     def to_dict(self):
         """
-        Customising default property for better serialisation for storing to
-        JSON format.
+        Customizes the serialization of the ``LocalCA`` object to a dictionary
+        format suitable for storing as JSON.
+        It converts ``pathlib.Path`` objects to strings.
 
-        :return: dictionary with all values. Path objects are typed to string.
+        :return: A dictionary containing all serializable attributes of the
+                 ``LocalCA`` instance.
         :rtype: dict
         """
+
         dict_ = {k: str(v) if type(v) is PosixPath else v
                  for k, v in super().__dict__.items()}
         if self._ca_cnf:
@@ -216,8 +318,17 @@ class LocalCA(BaseCA):
     @property
     def is_installed(self):
         """
-        Check if the local CA is installed
+        Checks if the local CA is fully installed on the system.
+        This involves verifying the existence of the root directory, CA
+        certificate, private key, CNF file, and other required files,
+        as well as checking if the CA certificate is present in
+        ``sssd_auth_ca_db.pem``.
+
+        :return: ``True`` if the local CA is completely installed and configured;
+                 ``False`` otherwise.
+        :rtype: bool
         """
+
         try:
             result = all([self.root_dir.exists(),
                           self._ca_cert.exists(),
@@ -240,7 +351,15 @@ class LocalCA(BaseCA):
 
     def setup(self):
         """
-        Creates directory and file structure needed by local CA.
+        Configures the local CA by creating its required directory and file
+        structure. It generates a self-signed root certificate
+        and private key using OpenSSL, and initializes the CRL (Certificate
+        Revocation List).
+
+        :return: None
+        :rtype: None
+        :raises SCAutolibException: If the CA's CNF file is not set or does
+                                    not exist.
         """
         if self._ca_cnf is None:
             raise SCAutolibException("CA CNF file is not set")
@@ -276,22 +395,27 @@ class LocalCA(BaseCA):
     def request_cert(self, csr: Path, username: str,
                      cert_out: Path = None) -> Path:
         """
-        Create the certificate from CSR and sign it. Certificate is stored
-        in the <root ca directory>/ca/newcerts directory with name username.pem
+        Creates and signs a certificate from a given CSR (Certificate Signing
+        Request) using the local CA's private key.
+        The signed certificate is stored in a predefined location (e.g.,
+        ``<root ca directory>/certs/<username>.pem``) or a specified output
+        path.
 
-        :param csr: path to CSR
+        :param csr: The ``pathlib.Path`` object pointing to the CSR file.
         :type csr: pathlib.Path
-        :param username: subject in the CSR
+        :param username: The subject name to be included in the certificate.
         :type username: str
-        :param cert_out: path where the certificate should be duplicated.
-                         Can be a directory or a file. If a file, .pem extension
-                         would be set to the filename. If not specified,
-                         certificate would be created in default directory and
-                         filename  <root ca directory>/certs/<username>.pem
-        :type cert_out: pathlib.Path
-        :return: returns path to the signed certificate
+        :param cert_out: An optional ``pathlib.Path`` object specifying where
+                         the signed certificate should be copied. It can be
+                         a directory or a file. If a file, ``.pem`` extension
+                         is ensured. If ``None``, the certificate is created in
+                         the default directory.
+        :type cert_out: pathlib.Path, optional
+        :return: The ``pathlib.Path`` object to the location of the signed
+                 certificate.
         :rtype: pathlib.Path
         """
+
         if cert_out is not None:
             if cert_out.is_dir():
                 cert_out = cert_out.joinpath(f"{username}.pem")
@@ -308,11 +432,16 @@ class LocalCA(BaseCA):
 
     def revoke_cert(self, cert: Path):
         """
-        Revoke given certificate
+        Revokes a given certificate using the local CA.
+        It updates the CA's CRL (Certificate Revocation List) after revocation.
 
-        :param cert: path to the certificate
+        :param cert: The ``pathlib.Path`` object to the certificate file to be
+                     revoked.
         :type cert: pathlib.Path
+        :return: None
+        :rtype: None
         """
+
         cmd = ['openssl', 'ca', '-config', self._ca_cnf.path, '-revoke', cert]
         run(cmd, check=True)
         cmd = ['openssl', 'ca', '-config', self._ca_cnf.path, '-gencrl',
@@ -322,14 +451,20 @@ class LocalCA(BaseCA):
 
     def cleanup(self):
         """
-        Remove the root directory of the CA
+        Removes the entire root directory of the local CA, including all
+        its generated files, certificates, and keys.
+        It also deletes the associated JSON dump file.
+
+        :return: None
+        :rtype: None
         """
+
         logger.warning(f"Removing local CA {self.root_dir}")
         for file in self.root_dir.iterdir():
             if file.is_file():
                 file.unlink()
             elif file.is_dir():
-                shutil.rmtree(file)
+                rmtree(file)
 
         if self.dump_file.exists():
             self.dump_file.unlink()
@@ -340,18 +475,30 @@ class LocalCA(BaseCA):
 
 class CustomCA(BaseCA):
     """
-    :TODO: CustomCA is not tested yet and it's not functional until physical
-        cards testing with removinator is implemented
-    Represents CA for physical cards. Physical cards are often read-only and
-    rootCA certs or bundles are provided with a card. This class provides
-    methods for manipulation with rootCA certs of physical cards.
+    Represents a custom Certificate Authority (CA), typically used for
+    physical smart cards which might have pre-existing or read-only root CA
+    certificates. This class provides methods
+    for integrating such external CA certificates into the system.
+
+    :TODO: As of the provided code, this class is noted as not yet fully
+    tested or functional.
     """
     ca_type = CAType.custom
 
     def __init__(self, card: dict):
         """
-        Initialize required attributes
+        Initializes a ``CustomCA`` object from provided card data.
+        It sets up the CA's name, certificate path, and dump file location
+        based on the card's information.
+
+        :param card_data: A dictionary containing details about the card,
+                          including the CA's name and certificate data
+                          (e.g., ``card["ca_name"]``, ``card["ca_cert"]``).
+        :type card_data: dict
+        :return: None
+        :rtype: None
         """
+
         self.ca_type = CustomCA.ca_type
         self.name = card["ca_name"]
         self.ca_cert = card["ca_cert"]
@@ -362,8 +509,16 @@ class CustomCA(BaseCA):
 
     def setup(self):
         """
-        Create rootCA file. Actually, copy cert from conf.json
+        Sets up the ``CustomCA`` by creating its root directory and copying
+        the provided CA certificate content into a PEM file within that
+        directory.
+
+        :return: None
+        :rtype: None
+        :raises SCAutolibException: If the CA certificate content is not
+                                    provided in ``self.ca_cert``.
         """
+
         self.root_dir.mkdir(parents=True, exist_ok=True)
         if self.ca_cert is None:
             raise SCAutolibException(
@@ -374,12 +529,15 @@ class CustomCA(BaseCA):
 
     def to_dict(self):
         """
-        Customising default property for better serialisation for storing to
-        JSON format.
+        Customizes the serialization of the ``CustomCA`` object to a dictionary
+        format suitable for JSON storage.
+        It converts ``pathlib.Path`` objects to their string representations.
 
-        :return: dictionary with all values. Path objects are typed to string.
+        :return: A dictionary containing all serializable attributes of the
+                 ``CustomCA`` instance.
         :rtype: dict
         """
+
         dict_ = {k: str(v) if type(v) is PosixPath else v
                  for k, v in super().__dict__.items()}
         return dict_
@@ -387,15 +545,13 @@ class CustomCA(BaseCA):
 
 class IPAServerCA(BaseCA):
     """
-    Class represents IPA server with integrated CA. Through this class
-    communication with IPA server is made primarily using
-    ``python_freeipa.client_meta.ClientMeta`` class.
-
-    During setup of the IPA client
-    on the system, script generated on IPA server side has to be executed for
-    setting up the client for smart card authentication. For this reason SSH
-    connection is made to the server and the script is fetched in frame of
-    ``IPAServerCA.create()`` method.
+    Represents an IPA (Identity Management for Linux) server with its integrated
+    Certificate Authority. This class facilitates
+    communication with the IPA server, primarily using
+    ``python_freeipa.client_meta.ClientMeta``
+    for administrative tasks. It handles IPA client setup
+    on the current system for smart card authentication, including fetching
+    and executing the necessary setup scripts from the IPA server.
     """
     ca_type = CAType.ipa
     ca_name = "IPA"
@@ -415,27 +571,30 @@ class IPAServerCA(BaseCA):
                  admin_passwd: str, root_passwd: str, client_hostname: str,
                  realm: str = None):
         """
-        Initialize object for IPA client for given IPA server. Also, creates
-        meta client (python_freeipa.client_meta.ClientMeta) logged in to the
-        server and ready-to-use.
+        Initializes an ``IPAServerCA`` object, setting up attributes for the
+        IPA server and client. It also performs
+        initial network configurations (adding to ``/etc/hosts``) and
+        establishes a logged-in ``ClientMeta`` instance for API interactions.
 
-        :param ip_addr: IP address of the IPA server
+        :param ip_addr: The IP address of the IPA server.
         :type ip_addr: str
-        :param server_hostname: Hostname of the IPA server
+        :param server_hostname: The hostname of the IPA server.
         :type server_hostname: str
-        :param domain: Domain name of the IPA server
+        :param domain: The domain name of the IPA server.
         :type domain: str
-        :param admin_passwd: Password for admin user on the IPA server
+        :param admin_passwd: The password for the IPA ``admin`` user.
         :type admin_passwd: str
-        :param root_passwd: Password for root user on the IPA server
-                            (system user)
+        :param root_passwd: The root user password on the IPA server (for SSH
+                            access to fetch scripts).
         :type root_passwd: str
-        :param client_hostname: Hostname for the client. This name would be set
-                                on the client host
+        :param client_hostname: The desired hostname for the client system that
+                                will be joined to IPA.
         :type client_hostname: str
-        :param realm: Kerberos realm. If not set, domain in upper cases would
-                      be used instead
-        :type realm: str
+        :param realm: The Kerberos realm. If ``None``, the ``domain`` in
+                      uppercase will be used as the realm.
+        :type realm: str, optional
+        :return: None
+        :rtype: None
         """
         self.ca_type = IPAServerCA.ca_type
         self.name = IPAServerCA.ca_name
@@ -454,10 +613,15 @@ class IPAServerCA(BaseCA):
     @property
     def is_installed(self):
         """
-        :return: True, if IPA client is installed on the system (/etc/ipa
-            directory contains ca.crt file from IPA server), otherwise False
+        Checks if the IPA client is installed on the current system.
+        This is determined by the existence of the ``/etc/ipa`` directory and
+        the ``ca.crt`` file within it, which is provided by the IPA server.
+
+        :return: ``True`` if the IPA client is detected as installed; ``False``
+                 otherwise.
         :rtype: bool
         """
+
         d = Path("/etc/ipa")
         result = d.exists()
         if result:
@@ -466,14 +630,34 @@ class IPAServerCA(BaseCA):
 
     @property
     def domain(self):
+        """
+        Returns the domain name of the IPA server.
+
+        :return: The IPA server's domain as a string.
+        :rtype: str
+        """
+
         return self._ipa_server_domain
+
+    @property
+    def ipa_server_hostname(self):
+        """
+        Returns the hostname of the IPA server this object is configured to
+        interact with.
+
+        :return: The IPA server's hostname as a string.
+        :rtype: str
+        """
+        return self._ipa_server_hostname
 
     def to_dict(self):
         """
-        Customising default property for better serialisation for storing to
-        JSON format.
+        Customizes the serialization of the ``IPAServerCA`` object to a
+        dictionary format suitable for JSON storage.
+        It excludes the ``meta_client`` attribute as it is not serializable.
 
-        :return: dictionary with all values. Path objects are typed to string.
+        :return: A dictionary containing all serializable attributes of the
+                 ``IPAServerCA`` instance.
         :rtype: dict
         """
         dict_: dict = super().__dict__.copy()
@@ -482,10 +666,18 @@ class IPAServerCA(BaseCA):
 
     def setup(self):
         """
-        Setup IPA client for IPA server. After IPA client is installed, system
-        would be configured for smart card login with IPA using script from
-        IPA server obtained via SSH.
+        Configures the IPA client on the current host to join the IPA server.
+        This involves setting up ``/etc/resolv.conf``,
+        setting the hostname, installing the IPA client package, and running
+        a specific script (fetched from the IPA server) to configure smart card
+        login with IPA. It also adjusts the IPA's
+        global password policy.
+
+        :return: None
+        :rtype: None
+        :raises Exception: If the IPA client installation fails.
         """
+
         logger.info(f"Start setup of IPA client on the system for "
                     f"{self._ipa_server_hostname} IPA server.")
 
@@ -542,7 +734,12 @@ class IPAServerCA(BaseCA):
 
     def _meta_client_login(self):
         """
-        Login to admin user via IPA meta client.
+        Establishes a connection and logs in to the IPA server as the ``admin``
+        user using ``python_freeipa.client_meta.ClientMeta``.
+        The connection does not use SSL verification.
+
+        :return: None
+        :rtype: None
         """
         try:
             self.meta_client: ClientMeta = ClientMeta(self._ipa_server_hostname,
@@ -555,15 +752,23 @@ class IPAServerCA(BaseCA):
 
     def _set_hostname(self):
         """
-        Set hostname for specified IPA client hostname
+        Sets the hostname of the current system to the specified IPA client
+        hostname using ``hostnamectl``.
+
+        :return: None
+        :rtype: None
         """
         run(f"hostnamectl set-hostname {self._ipa_client_hostname} --static")
         logger.debug(f"Hostname is set to {self._ipa_client_hostname}")
 
     def _add_to_resolv(self):
         """
-        Add new nameserver (IPA) to /etc/resolv.conf and lock this file for
-        editing
+        Adds the IPA server's IP address as the primary nameserver in
+        ``/etc/resolv.conf``. It checks if the nameserver is
+        already present to avoid duplication.
+
+        :return: None
+        :rtype: None
         """
         nameserver = f"nameserver {self._ipa_server_ip}"
         pattern = rf"^nameserver\s+{self._ipa_server_ip}\s*"
@@ -584,7 +789,11 @@ class IPAServerCA(BaseCA):
 
     def _add_to_hosts(self):
         """
-        Add IPA server (IP address and hostname) to /etc/hosts
+        Adds the IPA server's IP address and hostname to the ``/etc/hosts``
+        file if the entry does not already exist.
+
+        :return: None
+        :rtype: None
         """
         entry = f"{self._ipa_server_ip} {self._ipa_server_hostname}"
         with open("/etc/hosts", "r+") as f:
@@ -598,9 +807,16 @@ class IPAServerCA(BaseCA):
 
     def _get_sc_setup_script(self):
         """
-        Fetch script for smart card setup of IPA client and place it to
-        predefined location. Script is generated only on IPA server.
-        Fetching is done by connecting to the host via SSH.
+        Fetches the smart card setup script for IPA client from the IPA server
+        via SSH. This script is generated on the server-side
+        and is then saved to a predefined local path for execution.
+        It authenticates to the IPA server as ``admin`` and then as ``root``
+        via SSH.
+
+        :return: None
+        :rtype: None
+        :raises SCAutolibException: If the script is not correctly copied or
+                                    if SSH connection/command execution fails.
         """
         import paramiko
         from invoke import Responder
@@ -646,26 +862,27 @@ class IPAServerCA(BaseCA):
 
     def request_cert(self, csr: Path, username: str, cert_out: Path):
         """
-        Request certificate using CSR from IPA CA for given username. It is
-        a wrapper around the python_freeipa.client_meta.ClientMeta.cert_request
-        method. It works with a file, extracts CSR data from it and then
-        stores in PEM format adding required prefix and suffix as in normal
-        certificate and. If cert_out is a directory, then certificate would be
-        stored in this directory with name <username>.pem. If it is a file,
-        then check if it has PEM extension. If not, append .pem suffix to the
-        name.
+        Requests a certificate from the IPA CA for a given username using a CSR
+        (Certificate Signing Request). This method wraps the
+        ``python_freeipa.client_meta.ClientMeta.cert_request`` function,
+        extracts the certificate from the response, and saves it in PEM format
+        to the specified output path.
 
-        :param csr: path to CSR
-        :type csr: patlib.Path
-        :param username: subject for the certificate
+        :param csr: The ``pathlib.Path`` object to the CSR file.
+        :type csr: pathlib.Path
+        :param username: The principal (subject) name for the certificate.
         :type username: str
-        :param cert_out: path where the certificate is stored. Can be a
-                         directory or a file.
-        :type cert_out: patlib.Path
-
-        :return: Path to the PEM certificate.
-        :rtype: patlib.Path
+        :param cert_out: The ``pathlib.Path`` object where the certificate should
+                         be stored. Can be a directory or a file. If it is
+                         directory then the file will be saved there with name
+                         ``<username>.pem``. If it's a file without a ``.pem``
+                         extension, ``.pem`` will be appended.
+        :type cert_out: pathlib.Path
+        :return: A ``pathlib.Path`` object to the location of the PEM certificate
+                 file.
+        :rtype: pathlib.Path
         """
+
         with csr.open() as f:
             csr_content = f.read()
         r = self.meta_client.cert_request(a_csr=csr_content,
@@ -686,13 +903,20 @@ class IPAServerCA(BaseCA):
 
     def add_user(self, user):
         """
-        Add given user to IPA server. It is a wrapper on the
-        python_freeipa.client_meta.ClientMeta.user_add method. Just extracts
-        necessary fields from IPAUser object and pass them to the method. As a
-        result, o_givenname == o_uid == o_sn == o_cn for simplicity.
+        Adds a given user to the IPA server. This method wraps the
+        ``python_freeipa.client_meta.ClientMeta.user_add`` function, extracting
+        necessary user fields for the IPA API call.
+        For simplicity, ``givenname``, ``uid``, ``sn``, and ``cn`` are set to
+        the username.
 
-        :param user: User to be added to the IPA server.
+        :param user_obj: The user object to be added to the IPA server.
+                         Expected to have ``username`` and ``password``
+                         attributes.
+        :type user_obj: SCAutolib.models.user.User
+        :return: None
+        :rtype: None
         """
+
         r = self.meta_client.user_add(user.username, user.username,
                                       user.username, user.username,
                                       o_userpassword=user.password)
@@ -701,24 +925,34 @@ class IPAServerCA(BaseCA):
 
     def del_user(self, user):
         """
-        Remove user from IPA server.
-        :param user: User to be deleted
+        Removes a user from the IPA server.
+        This method wraps the
+        ``python_freeipa.client_meta.ClientMeta.user_del`` function.
 
-        :raise AssertionError: If operation is failed. Fail is detected in
-            return value from request to IPA server.
+        :param user_obj: The user object to be deleted from the IPA server.
+                         Expected to have a ``username`` attribute.
+        :type user_obj: SCAutolib.models.user.User
+        :return: None
+        :rtype: None
         """
+
         r = self.meta_client.user_del(user.username)["result"]
         logger.debug(r)
         logger.info(f"User {user.username} is removed from the IPA server")
 
     def revoke_cert(self, cert_path: Path):
         """
-        Revoke given certificate on the IPA server. It is a wrapper on the
-        python_freeipa.client_meta.ClientMeta.revoke_cert method. It extracts
-        serial number of the certificate from the file
+        Revokes a given certificate on the IPA server.
+        This method wraps the
+        ``python_freeipa.client_meta.ClientMeta.cert_revoke`` function and
+        extracts the serial number of the certificate from the provided PEM
+        file for revocation.
 
-        :param cert_path: Path to the certificate in PEM format
-
+        :param cert_path: The ``pathlib.Path`` object to the certificate file in
+                          PEM format to be revoked.
+        :type cert_path: pathlib.Path
+        :return: The serial number of the revoked certificate.
+        :rtype: int
         """
         with cert_path.open("rb") as f:
             cert = x509.load_pem_x509_certificate(f.read())
@@ -729,9 +963,17 @@ class IPAServerCA(BaseCA):
 
     def cleanup(self):
         """
-        Remove IPA client from the system and from the IPA server
+        Removes the IPA client from the system and also attempts to remove
+        the corresponding host entry from the IPA server.
+        It executes the ``ipa-client-install --uninstall`` command on the
+        client.
 
-        :raise subprocess.CalledProcessError: by run function
+        :return: None
+        :rtype: None
+        :raises subprocess.CalledProcessError: If
+                                               ``ipa-client-install --uninstall``
+                                               fails with an unexpected return
+                                               code.
         """
 
         logger.warning("Removing IPA client from the host "
@@ -747,7 +989,3 @@ class IPAServerCA(BaseCA):
         # Return code 2 means that the IPA client is not configured
         run(["ipa-client-install", "--uninstall", "-U"], return_code=[0, 2])
         logger.info("IPA client is removed.")
-
-    @property
-    def ipa_server_hostname(self):
-        return self._ipa_server_hostname
