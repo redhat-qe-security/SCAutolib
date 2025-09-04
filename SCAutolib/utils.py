@@ -29,7 +29,7 @@ def _check_selinux():
 
     :return: None
     """
-    result = run("semodule -l", print_=False)
+    result = run("semodule -l", log=False)
     if "virtcacard" not in result.stdout:
         logger.debug(
             "SELinux module for virtual smart cards is not present in the "

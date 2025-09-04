@@ -87,7 +87,7 @@ class Screen:
             out = run(['ffmpeg', '-hide_banner', '-y', '-f',
                        'kmsgrab', '-i', '-', '-vf', 'hwdownload,format=bgr0',
                        '-frames', '1', '-update', '1',
-                       filename], check=False, print_=False)
+                       filename], check=False, log=False)
 
             if out.returncode == 0:
                 captured = True

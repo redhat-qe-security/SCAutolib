@@ -92,7 +92,7 @@ schema_card = Schema({'name': Use(str),
 
 
 def run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True,
-        print_=True, return_code: list = None, sleep: int = 0, **kwargs) \
+        log=True, return_code: list = None, sleep: int = 0, **kwargs) \
         -> subprocess.CompletedProcess:
     """
     Executes an external command as a subprocess, providing a controlled
@@ -119,10 +119,10 @@ def run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True,
                   return code is not in the ``return_code`` list. Defaults to
                   ``True``.
     :type check: bool
-    :param print_: If ``True``, the command's standard output will be logged at
+    :param log: If ``True``, the command's standard output will be logged at
                    DEBUG level and standard error at WARNING level. Defaults to
                    ``True``.
-    :type print_: bool
+    :type log: bool
     :param return_code: A list of acceptable return codes for the command. If
                         ``check`` is ``True`` and the command's return code is
                         not in this list, an exception is raised. Defaults to
@@ -147,7 +147,7 @@ def run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True,
     logger.debug(f"run: {' '.join([str(i) for i in cmd])}")
     out = subprocess.run(cmd, stdout=stdout, stderr=stderr, encoding="utf-8",
                          **kwargs)
-    if print_:
+    if log:
         if out.stdout != "":
             logger.debug(out.stdout)
         if out.stderr != "":
