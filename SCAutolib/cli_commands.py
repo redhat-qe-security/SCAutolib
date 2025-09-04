@@ -81,7 +81,7 @@ class NaturalOrderGroup(click.Group):
               help="Path to JSON configuration file.")
 @click.option('--force', "-f", is_flag=True, default=False, show_default=True,
               help="Force the command to overwrite configuration if it exists.")
-@click.option("--verbose", "-v", default="DEBUG", show_default=True,
+@click.option("--verbose", "-v", default="INFO", show_default=True,
               type=click.Choice(
                   ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
                   case_sensitive=False),
