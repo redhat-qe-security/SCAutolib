@@ -17,7 +17,8 @@ from pathlib import Path
 from traceback import format_exc
 
 from SCAutolib import run, logger, TEMPLATES_DIR, LIB_DUMP_CARDS
-from SCAutolib.exceptions import SCAutolibException
+from SCAutolib.exceptions import SCAutolibException, SCAutolibUnkownType, \
+    SCAutolibIPAException, SCAutolibFileNotExists
 from SCAutolib.enums import CardType, UserType
 
 from SCAutolib.models.file import SSSDConf
@@ -117,8 +118,9 @@ class Card:
         :return: An instance of the specific card class loaded with data from
                  the JSON file.
         :rtype: SCAutolib.models.card.Card
-        :raises SCAutolibException: If an unknown card type is encountered in
-                                    the JSON data.
+        :raises SCAutolibUnkownType: If an unknown card type is encountered in
+                                     the JSON data.
+        :raises FileExistsError: If the card file is not found.
         """
 
         if card_name and not card_file:
@@ -126,7 +128,7 @@ class Card:
             logger.debug(f"Loading card {card_name} from {card_file}")
 
         if not card_file.exists():
-            raise SCAutolibException(f"{card_file} does not exist")
+            raise FileExistsError(f"{card_file} does not exist")
 
         with card_file.open("r") as f:
             cnt = json.load(f)
@@ -138,8 +140,7 @@ class Card:
         elif cnt["card_type"] == CardType.physical:
             card = PhysicalCard(cnt)
         else:
-            raise SCAutolibException(
-                f"Unknown card type: {cnt['card_type']}")
+            raise SCAutolibUnkownType(f"Unknown card type: {cnt['card_type']}")
 
         if update_sssd:
             sssd_conf = SSSDConf()
@@ -209,8 +210,8 @@ class VirtualCard(Card):
         :type cert: pathlib.Path, optional
         :return: None
         :rtype: None
-        :raises FileNotFoundError: If the specified ``card_dir`` does not exist
-                                   upon initialization.
+        :raises SCAutolibFileNotExists: If the specified ``card_dir`` does not
+                                        exist upon initialization.
         """
         self.name = card_data["name"]
         self.pin = card_data["pin"]
@@ -221,7 +222,7 @@ class VirtualCard(Card):
         self.card_dir = card_dir if card_dir is not None \
             else Path(card_data["card_dir"])
         if not self.card_dir.exists():
-            raise FileNotFoundError("Card root directory doesn't exists")
+            raise SCAutolibFileNotExists("Card root directory doesn't exists")
         self.dump_file = LIB_DUMP_CARDS.joinpath(f"{self.name}.json")
         self.key = key \
             if key else self.card_dir.joinpath(f"key-{self.name}.pem")
@@ -259,12 +260,13 @@ class VirtualCard(Card):
 
         :return: The ``VirtualCard`` instance.
         :rtype: SCAutolib.models.card.VirtualCard
-        :raises FileNotFoundError: If the systemd service file for the virtual
-                                   card does not exist.
+        :raises SCAutolibFileNotExists: If the systemd service file for the
+                                        virtual card does not exist.
         """
 
         if not self._service_location.exists():
-            raise FileNotFoundError("Service for virtual sc doesn't exists.")
+            raise SCAutolibFileNotExists(
+                "Service for virtual sc doesn't exists.")
         return self
 
     def __exit__(self, exp_type, exp_value, exp_traceback):
@@ -338,12 +340,12 @@ class VirtualCard(Card):
         :type conf: pathlib.Path
         :return: None
         :rtype: None
-        :raises FileNotFoundError: If the provided configuration file path does
-                                   not exist.
+        :raises SCAutolibFileNotExists: If the provided configuration file path
+                                        does not exist.
         """
 
         if not conf.exists():
-            raise FileNotFoundError(f"File {conf} doesn't exist")
+            raise SCAutolibFileNotExists(f"File {conf} doesn't exist")
         self._softhsm2_conf = conf
 
     @property
@@ -433,12 +435,13 @@ class VirtualCard(Card):
 
         :return: The ``VirtualCard`` instance.
         :rtype: SCAutolib.models.card.VirtualCard
-        :raises FileNotFoundError: If the SoftHSM2 configuration file is not
-                                   found.
+        :raises SCAutolibFileNotExists: If the SoftHSM2 configuration file is
+                                        not found.
         """
 
         if not self._softhsm2_conf.exists():
-            raise FileNotFoundError("Can't proceed, SoftHSM2 conf not found.")
+            raise SCAutolibFileNotExists(
+                "Can't proceed, SoftHSM2 conf not found.")
 
         self.card_dir.joinpath("tokens").mkdir(exist_ok=True)
 
@@ -504,9 +507,9 @@ class VirtualCard(Card):
 
         :return: The ``pathlib.Path`` object to the generated CSR file.
         :rtype: pathlib.Path
-        :raises SCAutolibException: If the private key is not set when
-                                    attempting to generate a CSR for an IPA
-                                    user.
+        :raises SCAutolibIPAException: If the private key is not set when
+                                       attempting to generate a CSR for an IPA
+                                       user.
         """
         csr_path = self.card_dir.joinpath(f"csr-{self.cardholder}.csr")
         if self.user.user_type == UserType.local:
@@ -515,8 +518,8 @@ class VirtualCard(Card):
                    "-out", csr_path]
         else:
             if not self.key:
-                raise SCAutolibException("Can't generate CSR because private "
-                                         "key is not set")
+                raise SCAutolibIPAException(
+                    "Can't generate CSR because private key is not set")
             cmd = ["openssl", "req", "-new", "-days", "365",
                    "-nodes", "-key", self.key, "-out",
                    csr_path, "-subj", f"/CN={self.cardholder}"]
@@ -561,8 +564,8 @@ class PhysicalCard(Card):
         :type card_dir: pathlib.Path, optional
         :return: None
         :rtype: None
-        :raises FileNotFoundError: If the specified ``card_dir`` does not exist
-                                   upon initialization.
+        :raises SCAutolibFileNotExists: If the specified ``card_dir`` does not
+                                        exist upon initialization.
         """
 
         self.card_data = card_data
@@ -579,7 +582,7 @@ class PhysicalCard(Card):
         self.uri = card_data["uri"]
         self.card_dir = card_dir
         if not self.card_dir.exists():
-            raise FileNotFoundError("Card root directory doesn't exists")
+            raise SCAutolibFileNotExists("Card root directory doesn't exists")
 
         self.dump_file = LIB_DUMP_CARDS.joinpath(f"{self.name}.json")
 

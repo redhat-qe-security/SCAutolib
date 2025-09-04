@@ -18,6 +18,7 @@ from traceback import format_exc
 from SCAutolib import LIB_BACKUP
 from SCAutolib import logger
 from SCAutolib.utils import run
+from SCAutolib.exceptions import SCAutolibFileNotExists
 
 
 class Authselect:
@@ -100,8 +101,8 @@ class Authselect:
 
         :return: None
         :rtype: None
-        :raises FileNotFoundError: If the backup file expected for restoration
-                                   does not exist.
+        :raises SCAutolibFileNotExists: If the backup file expected for
+                                        restoration does not exist.
         """
 
         if exists(f"/var/lib/authselect/backups/{self.backup_name}"):
@@ -113,8 +114,9 @@ class Authselect:
             # as _set and _restore should be used in context manager defined in
             # this class, it should not happen that backup does not exist except
             # something failed, or it's misused
-            raise FileNotFoundError("Backup file not found. _restore method was"
-                                    "probably called in unexpected manner.")
+            raise SCAutolibFileNotExists(
+                "Backup file not found. _restore method was"
+                "probably called in unexpected manner.")
 
     def __enter__(self):
         """

@@ -8,6 +8,7 @@ generated log line within a specified log file.
 
 
 from SCAutolib import logger
+from SCAutolib.exceptions import SCAutolibNotFound
 from contextlib import contextmanager
 import re
 
@@ -63,4 +64,4 @@ def assert_log(path: str, expected_log: str):
                     return
 
             logger.debug(log)
-            raise Exception('The log was not found.')
+            raise SCAutolibNotFound('The log was not found.')

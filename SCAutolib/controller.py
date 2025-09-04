@@ -19,7 +19,7 @@ from schema import Schema, Use
 from shutil import rmtree
 from typing import Union
 
-from SCAutolib import exceptions, schema_cas, schema_user, schema_card
+from SCAutolib import schema_cas, schema_user, schema_card
 from SCAutolib import (logger, run, LIB_DIR, LIB_BACKUP, LIB_DUMP,
                        LIB_DUMP_USERS, LIB_DUMP_CAS, LIB_DUMP_CARDS,
                        LIB_DUMP_CONFS, TEMPLATES_DIR)
@@ -29,8 +29,8 @@ from SCAutolib.models.CA import BaseCA
 from SCAutolib.enums import (CardType, UserType)
 from SCAutolib.utils import (_check_selinux, _gen_private_key,
                              _install_packages, _check_packages,
-                             dump_to_json)
-from SCAutolib.utils import isDistro
+                             dump_to_json, isDistro)
+from SCAutolib.exceptions import *
 
 
 class Controller:
@@ -94,7 +94,7 @@ class Controller:
             with self._lib_conf_path.open("r") as f:
                 tmp_conf = json.load(f)
                 if tmp_conf is None:
-                    raise exceptions.SCAutolibException(
+                    raise SCAutolibWrongConfig(
                         "Data are not loaded correctly.")
             self.lib_conf = self._validate_configuration(tmp_conf, params)
 
@@ -144,11 +144,11 @@ class Controller:
         # test, or b) created and signed using FreeIPA.
         try:
             self.setup_local_ca(force=force)
-        except exceptions.SCAutolibWrongConfig as e:
+        except SCAutolibWrongConfig as e:
             logger.info(e)
         try:
             self.setup_ipa_client(force=force)
-        except exceptions.SCAutolibWrongConfig as e:
+        except SCAutolibWrongConfig as e:
             logger.info(e)
 
         for usr in self.lib_conf["users"]:
@@ -213,7 +213,7 @@ class Controller:
             msg = "Can't continue. Some packages are missing: " \
                   f"{', '.join(missing)}"
             logger.critical(msg)
-            raise exceptions.SCAutolibException(msg)
+            raise SCAutolibException(msg)
 
         if graphical:
             self.setup_graphical(install_missing, gdm)
@@ -250,8 +250,8 @@ class Controller:
                     be installed as part of system preparation.
         :type gdm: bool
         :return: None
-        :raises SCAutolibException: If required packages are missing and
-                                    ``install_missing`` is ``False``.
+        :raises SCAutolibGUIException: If required packages are missing and
+                                      ``install_missing`` is ``False``.
         """
 
         packages = ["gcc", "tesseract", "ffmpeg-free"]
@@ -266,7 +266,7 @@ class Controller:
             msg = "Can't continue with graphical. Some packages are missing: " \
                   f"{', '.join(missing)}"
             logger.critical(msg)
-            raise exceptions.SCAutolibException(msg)
+            raise SCAutolibGUIException(msg)
 
         if not isDistro('fedora'):
             run(['dnf', 'groupinstall', 'Server with GUI', '-y',
@@ -305,7 +305,7 @@ class Controller:
 
         if "local_ca" not in self.lib_conf["ca"]:
             msg = "Section for local CA is not found in the configuration file"
-            raise exceptions.SCAutolibWrongConfig(msg)
+            raise SCAutolibWrongConfig(msg)
 
         ca_dir: Path = self.lib_conf["ca"]["local_ca"]["dir"]
         ca_dir.mkdir(exist_ok=True, parents=True)
@@ -338,15 +338,15 @@ class Controller:
                           includes information about its associated CA.
         :type card_data: dict
         :return: None
-        :raises FileNotFoundError: If the CA certificate file is not found
-                                   after setup.
+        :raises SCAutolibFileNotExists: If the CA certificate file is not found
+                                        after setup.
         """
 
         if card_data["card_type"] == CardType.physical:
             ca = BaseCA.factory(create=True, card_data=card_data)
             ca.setup()
             if not ca._ca_cert.is_file():
-                raise FileNotFoundError(f"File not found: {ca._ca_cert}")
+                raise SCAutolibFileNotExists(f"File not found: {ca._ca_cert}")
             dump_to_json(ca)
 
     def setup_ipa_client(self, force: bool = False):
@@ -368,7 +368,7 @@ class Controller:
 
         if "ipa" not in self.lib_conf["ca"]:
             msg = "Section for IPA is not found in the configuration file"
-            raise exceptions.SCAutolibWrongConfig(msg)
+            raise SCAutolibWrongConfig(msg)
         self.ipa_ca = CA.IPAServerCA(**self.lib_conf["ca"]["ipa"])
 
         if self.ipa_ca.is_installed:
@@ -401,9 +401,9 @@ class Controller:
         :type force: bool
         :return: The created or configured ``User`` object.
         :rtype: SCAutolib.models.user.User
-        :raises SCAutolibException: If an IPA user is to be configured but no
-                                    IPA client is currently configured on the
-                                    system.
+        :raises SCAutolibIPAException: If an IPA user is to be configured but no
+                                       IPA client is currently configured on the
+                                       system.
         """
 
         new_user = None
@@ -419,7 +419,7 @@ class Controller:
             if self.ipa_ca is None:
                 msg = "Can't proceed in configuration of IPA user because no " \
                       "IPA Client is configured"
-                raise exceptions.SCAutolibException(msg)
+                raise SCAutolibIPAException(msg)
             new_user = user.IPAUser(ipa_server=self.ipa_ca,
                                     username=user_dict["name"],
                                     password=user_dict["passwd"])
@@ -571,7 +571,7 @@ class Controller:
 
         logger.debug(f"Starting enrollment of the card {card.name}")
         if not card:
-            raise exceptions.SCAutolibException(
+            raise SCAutolibException(
                 f"Card {card.name} is not initialized")
 
         if not card.key.exists():
@@ -703,7 +703,7 @@ class Controller:
         opensc_module.backup()
         try:
             opensc_module.get("disable-in", separator=":")
-        except exceptions.SCAutolibException:
+        except SCAutolibWrongConfig:
             logger.warning("OpenSC module does not have option 'disable-in: "
                            "virt_cacard' set")
             opensc_module.set(key="disable-in", value="virt_cacard",
@@ -759,7 +759,7 @@ class Controller:
         for user_dict in self.lib_conf["users"]:
             if user_dict["name"] == name:
                 return user_dict
-        raise exceptions.SCAutolibMissingUserConfig(name)
+        raise SCAutolibMissingUserConfig(name)
 
     def init_ca(self, local: bool = False):
         """
@@ -779,11 +779,11 @@ class Controller:
         if local:
             self.local_ca = CA.LocalCA(self.lib_conf["ca"]["local_ca"]["dir"])
             if not self.local_ca.cert.exists():
-                raise exceptions.SCAutolibMissingCA(
+                raise SCAutolibMissingCA(
                     f"CA certificate not found in {str(self.local_ca.cert)}")
         else:
             self.ipa_ca = CA.IPAServerCA(self.lib_conf["ca"]["ipa"])
             if not self.ipa_ca.is_installed:
-                raise exceptions.SCAutolibMissingCA(
+                raise SCAutolibMissingCA(
                     "IPA server CA is not installed")
         logger.info("CA is initialized")

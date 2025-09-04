@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from SCAutolib.models.file import SSSDConf
+from SCAutolib.exceptions import SCAutolibFileExists
 from conftest import FILES_DIR
 from test_sssd_conf import compare_conf_files
 
@@ -19,8 +20,8 @@ def test_create_fail(file_test_prepare):
     file_test = file_test_prepare
     with file_test._conf_file.open('w') as config:
         config.write('Test config file')
-    with pytest.raises(FileExistsError, match=f'{file_test._conf_file} '
-                                              f'already exists'):
+    with pytest.raises(SCAutolibFileExists, match=f'{file_test._conf_file} '
+                                                  f'already exists'):
         file_test.create()
 
 

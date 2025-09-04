@@ -9,6 +9,7 @@ from subprocess import check_output, run, CalledProcessError, PIPE
 from SCAutolib.models import CA
 from SCAutolib.models.file import SSSDConf, File, OpensslCnf
 from SCAutolib.models.user import User
+from SCAutolib.exceptions import SCAutolibFileExists
 
 DIR_PATH = os.path.dirname(os.path.abspath(__file__))
 FILES_DIR = os.path.join(DIR_PATH, "files")
@@ -69,7 +70,7 @@ def local_ca_fixture(tmp_path_factory, backup_sssd_ca_db):
         cnf.create()
         cnf.save()
         ca.setup()
-    except FileExistsError:
+    except SCAutolibFileExists:
         pass
     return ca
 
