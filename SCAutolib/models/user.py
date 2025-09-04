@@ -65,52 +65,6 @@ class User:
              for k, v in self.__dict__.items()}
         return d
 
-    @staticmethod
-    def load(json_file, **kwargs):
-        """
-        Loads user data from a specified JSON file and reconstructs the
-        corresponding ``User`` or ``IPAUser`` object.
-        It determines the correct class to instantiate based on the
-        ``user_type`` field in the JSON content.
-
-        :param json_file: The ``pathlib.Path`` object pointing to the JSON file
-                          from which to read the user's data.
-        :type json_file: pathlib.Path
-        :param kwargs: Additional keyword arguments that might be necessary to
-                       initialize the user object, particularly for ``IPAUser``
-                       which requires an ``ipa_server`` object.
-        :type kwargs: dict
-        :return: An initialized ``User`` or ``IPAUser`` object loaded with data
-                 from the JSON file.
-        :rtype: SCAutolib.models.user.User or SCAutolib.models.user.IPAUser
-        :raises SCAutolibException: If an unknown user type is encountered in
-                                    the JSON data, or if ``ipa_server`` is not
-                                    provided for an IPA user.
-        """
-
-        with json_file.open("r") as f:
-            cnt = json.load(f)
-
-        if cnt["user_type"] == UserType.local:
-            user = User(username=cnt["username"],
-                        password=cnt["password"])
-
-        elif cnt["user_type"] == UserType.ipa:
-            if "ipa_server" not in kwargs:
-                raise SCAutolibException("IPA Server object was not provided. "
-                                         "Can't load IPA user.")
-
-            user = IPAUser(ipa_server=kwargs["ipa_server"],
-                           username=cnt["username"],
-                           password=cnt["password"])
-
-        else:
-            raise SCAutolibException(f"Unknown user type: {cnt['user_type']}")
-
-        logger.debug(f"User {user.__class__} is loaded: {user.__dict__}")
-
-        return user
-
     def add_user(self):
         """
         Adds the user to the local system using the ``useradd`` system
@@ -157,6 +111,62 @@ class User:
         if self.dump_file.exists():
             self.dump_file.unlink()
             logger.debug(f"Removed {self.dump_file} dump file")
+
+    @staticmethod
+    def load(user_file: Path = None, username: str = None, **kwargs):
+        """
+        Loads user data from a specified JSON file and reconstructs the
+        corresponding ``User`` or ``IPAUser`` object.
+        It determines the correct class to instantiate based on the
+        ``user_type`` field in the JSON content.
+
+        :param user_file: The ``pathlib.Path`` object pointing to the JSON file
+                          from which to read the user's data.
+        :type user_file: pathlib.Path
+        :param kwargs: Additional keyword arguments that might be necessary to
+                       initialize the user object, particularly for ``IPAUser``
+                       which requires an ``ipa_server`` object.
+        :param username: The username of the user to load.
+        :type username: str
+        :type kwargs: dict
+        :return: An initialized ``User`` or ``IPAUser`` object loaded with data
+                 from the JSON file.
+        :rtype: SCAutolib.models.user.User or SCAutolib.models.user.IPAUser
+        :raises SCAutolibException: If an unknown user type is encountered in
+                                    the JSON data, or if ``ipa_server`` is not
+                                    provided for an IPA user.
+        """
+
+        if username and not user_file:
+            user_file = LIB_DUMP_USERS.joinpath(f"{username}.json")
+            logger.debug(f"Loading user {username} from {user_file}")
+
+        if not user_file.exists():
+            raise SCAutolibException(f"{user_file} does not exist")
+
+        with user_file.open("r") as f:
+            cnt = json.load(f)
+
+        user = None
+        if cnt["user_type"] == UserType.local:
+            user = User(username=cnt["username"],
+                        password=cnt["password"])
+
+        elif cnt["user_type"] == UserType.ipa:
+            if "ipa_server" not in kwargs:
+                raise SCAutolibException("IPA Server object was not provided. "
+                                         "Can't load IPA user.")
+
+            user = IPAUser(ipa_server=kwargs["ipa_server"],
+                           username=cnt["username"],
+                           password=cnt["password"])
+
+        else:
+            raise SCAutolibException(f"Unknown user type: {cnt['user_type']}")
+
+        logger.debug(f"User {user.__class__} is loaded: {user.__dict__}")
+
+        return user
 
 
 class IPAUser(User):

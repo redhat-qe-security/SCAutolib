@@ -22,7 +22,7 @@ import uinput
 import logging
 
 from SCAutolib import run, logger
-from SCAutolib.isDistro import isDistro
+from SCAutolib.utils import isDistro
 
 
 class Screen:

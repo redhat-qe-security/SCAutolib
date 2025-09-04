@@ -214,6 +214,49 @@ class BaseCA:
         logger.debug(f"CA {cnt['name']} is loaded from file {json_file}")
         return ca
 
+    @staticmethod
+    def factory(path: Path = None, cnf: OpensslCnf = None,
+               card_data: dict = None, ca_name: str = None,
+               create: bool = False):
+        """
+        A factory function to create or load Certificate Authority (CA) objects
+        based on the provided parameters. It can initialize
+        a new CA instance or load an existing one from a JSON dump file.
+
+        :param path: The ``pathlib.Path`` object to the CA's root directory.
+                     This is used when creating a new ``LocalCA`` instance.
+        :type path: pathlib.Path, optional
+        :param cnf: An ``OpensslCnf`` object representing the OpenSSL
+                    configuration file for the CA. Used when creating a new
+                    ``LocalCA``.
+        :type cnf: SCAutolib.models.file.OpensslCnf, optional
+        :param card_data: A dictionary containing various attributes of the
+                        card (e.g., PIN, cardholder, slot). This data is used
+                        when creating a new ``CustomCA`` for physical cards.
+        :type card_data: dict, optional
+        :param ca_name: The name of the CA to load. This parameter is used when
+                        ``create`` is ``False`` to identify the specific CA
+                        JSON dump file.
+        :type ca_name: str, optional
+        :param create: If ``True``, a new CA object will be created
+                    (either ``LocalCA`` or ``CustomCA``). If ``False``,
+                    an existing CA object will be loaded from a dump file.
+        :type create: bool
+        :return: An initialized CA object (either ``LocalCA``, ``CustomCA``, or
+                ``IPAServerCA`` instance).
+        :rtype: SCAutolib.models.CA.BaseCA
+        """
+        if not create:
+            ca = BaseCA.load(LIB_DUMP_CAS.joinpath(f"{ca_name}.json"))
+            return ca
+
+        if not path:            # create CA for physical card
+            ca = CustomCA(card_data)
+            return ca
+        else:                   # create new CA object for virtual card
+            ca = LocalCA(root_dir=path, cnf=cnf)
+            return ca
+
 
 class LocalCA(BaseCA):
     """
@@ -989,3 +1032,34 @@ class IPAServerCA(BaseCA):
         # Return code 2 means that the IPA client is not configured
         run(["ipa-client-install", "--uninstall", "-U"], return_code=[0, 2])
         logger.info("IPA client is removed.")
+
+    @staticmethod
+    def factory():
+        """
+        Creates and returns an ``IPAServerCA`` object. This function
+        loads the IPA server CA configuration from its JSON dump file.
+        It specifically asserts that the loaded CA is an instance of
+        ``IPAServerCA``.
+
+        .. note: Creating new IPA server with CA is not supported.
+
+        :return: An initialized ``IPAServerCA`` object.
+        :rtype: SCAutolib.models.CA.IPAServerCA
+        :raises SCAutolibException: If the IPA server CA dump file is not found
+                                    or if the loaded object is not a valid
+                                    ``IPAServerCA`` instance.
+        """
+        json_file = LIB_DUMP_CAS.joinpath("ipa-server.json")
+        if not json_file.exists():
+            msg = "Dump file for ipa server CA is not present."
+            logger.error(msg)
+            logger.error("The reason for this is most likely that the system "
+                         "was not configured for IPA client via SCAutolib")
+            raise SCAutolibException(msg)
+        ca = BaseCA.load(json_file)
+        if not isinstance(ca, IPAServerCA):
+            msg = "Values in dump file are not valid for IPA server, so the " \
+                "object can't be created"
+            logger.error(msg)
+            raise SCAutolibException(msg)
+        return ca
