@@ -11,7 +11,7 @@ it includes a specialized command group for automated GUI testing.
 
 import click
 from pathlib import Path
-from sys import exit
+from sys import exit, argv
 
 from collections import OrderedDict
 
@@ -106,6 +106,7 @@ def cli(ctx, force, verbose, conf):
     :return: None
     """
     logger.setLevel(verbose)
+    logger.debug(f"Invocked CLI command: {' '.join(argv)}")
     ctx.ensure_object(dict)  # Create a dict to store the context
     ctx.obj["FORCE"] = force  # Store the force option in the context
     parsed_conf = None
@@ -338,7 +339,7 @@ def init():
     Restarts the display manager for a clean state.
 
     :return: A string literal ``"init"`` that signals the execution of the
-             GUI initialization action within the ``run_all`` callback.
+             GUI initialization action within the ``gui_run_all`` callback.
     :rtype: str
     """
     return "init"
@@ -362,7 +363,7 @@ def assert_text(name, no):
                is *not* found on the screen.
     :type no: bool
     :return: A string representing the assertion action to be performed by the
-             ``run_all`` callback (e.g., ``"assert_text:ExpectedText"`` or
+             ``gui_run_all`` callback (e.g., ``"assert_text:ExpectedText"`` or
              ``"assert_no_text:UnexpectedText"``).
     :rtype: str
     """
@@ -382,7 +383,7 @@ def click_on(name):
                  clicked.
     :type name: str
     :return: A string representing the click action to be performed by the
-             ``run_all`` callback (e.g., ``"click_on:ButtonLabel"``).
+             ``gui_run_all`` callback (e.g., ``"click_on:ButtonLabel"``).
     :rtype: str
     """
     return f"click_on:{name}"
@@ -404,7 +405,7 @@ def check_home_screen(no):
                is *not* the home screen.
     :type no: bool
     :return: A string representing the home screen check action to be performed
-             by the ``run_all`` callback (e.g., `"check_home_screen"` or
+             by the ``gui_run_all`` callback (e.g., `"check_home_screen"` or
              `"check_no_home_screen"`).
     :rtype: str
     """
@@ -423,7 +424,7 @@ def kb_send(keys):
                  pressing (e.g., ``enter``, ``alt+f4``).
     :type keys: str
     :return: A string representing the keyboard send action to be performed by
-             the ``run_all`` callback (e.g., `"kb_send:enter"`).
+             the ``gui_run_all`` callback (e.g., `"kb_send:enter"`).
     :rtype: str
     """
     return f"kb_send:{keys}"
@@ -440,7 +441,7 @@ def kb_write(keys):
     :param keys: The string of text to be written or typed into the GUI.
     :type keys: str
     :return: A string representing the keyboard write action to be performed by
-             the ``run_all`` callback (e.g., `"kb_write:myusername"`).
+             the ``gui_run_all`` callback (e.g., `"kb_write:myusername"`).
     :rtype: str
     """
     return f"kb_write:{keys}"
@@ -454,7 +455,7 @@ def done():
     completed.
 
     :return: A string literal `"done"` that signals the execution of the
-             GUI cleanup action within the ``run_all`` callback.
+             GUI cleanup action within the ``gui_run_all`` callback.
     :rtype: str
     """
     return "done"
@@ -462,7 +463,7 @@ def done():
 
 @gui.result_callback()
 @click.pass_context
-def run_all(ctx, actions, install_missing):
+def gui_run_all(ctx, actions, install_missing):
     """
     Executes all chained GUI test actions in the order they were provided on
     the command line. It initializes the graphical
@@ -487,6 +488,7 @@ def run_all(ctx, actions, install_missing):
     from SCAutolib.models.gui import GUI
     gui = GUI(from_cli=True)
     for action in actions:
+        logger.debug(f"Processing GUI CLI option: {action}...")
         if "init" in action:
             gui.__enter__()
         if "assert_text" in action:
