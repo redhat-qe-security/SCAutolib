@@ -24,7 +24,8 @@ from socket import gethostname
 
 from SCAutolib import TEMPLATES_DIR, logger, run, LIB_DIR, LIB_DUMP_CAS, \
     LIB_BACKUP
-from SCAutolib.exceptions import SCAutolibException
+from SCAutolib.exceptions import SCAutolibException, SCAutolibUnkownType, \
+    SCAutolibIPAException, SCAutolibFileNotExists
 from SCAutolib.models.file import OpensslCnf
 from SCAutolib.enums import CAType
 
@@ -187,9 +188,9 @@ class BaseCA:
         :return: An instance of the specific CA class loaded with data from the
                  JSON file.
         :rtype: SCAutolib.models.CA.BaseCA
-        :raises SCAutolibException: If the CA object has an unknown type in the
-                                    JSON file, or if the data is invalid for
-                                    IPA CA initialization.
+        :raises SCAutolibUnkownType: If the CA object has an unknown type in the
+                                     JSON file, or if the data is invalid for
+                                     IPA CA initialization.
         """
         with json_file.open("r") as f:
             cnt = json.load(f)
@@ -207,7 +208,7 @@ class BaseCA:
         elif cnt["ca_type"] == CAType.local:
             ca = LocalCA(root_dir=cnt["root_dir"])
         else:
-            raise SCAutolibException("CA object has unknown type. Only ipa, "
+            raise SCAutolibUnkownType("CA object has unknown type. Only ipa, "
                                      "custom and local types are supported. CA "
                                      "object not loaded")
 
@@ -288,8 +289,8 @@ class LocalCA(BaseCA):
         :type cnf: SCAutolib.models.file.OpensslCnf, optional
         :return: None
         :rtype: None
-        :raises FileNotFoundError: If the specified ``root_dir`` does not exist
-                                   upon initialization.
+        :raises SCAutolibFileNotExists: If the specified ``root_dir`` does not
+                                        exist upon initialization.
         """
 
         self.name = LocalCA.ca_name
@@ -297,7 +298,8 @@ class LocalCA(BaseCA):
         self.root_dir: Path = Path("/etc/SCAutolib/ca") if root_dir is None \
             else Path(root_dir)
         if not self.root_dir.exists():
-            raise FileNotFoundError("Root directory of CA does not exist.")
+            raise SCAutolibFileNotExists(
+                "Root directory of CA does not exist.")
         self._conf_dir: Path = self.root_dir.joinpath("conf")
         self._newcerts: Path = self.root_dir.joinpath("newcerts")
         self._certs: Path = self.root_dir.joinpath("certs")
@@ -334,11 +336,11 @@ class LocalCA(BaseCA):
         :type cnf: SCAutolib.models.file.OpensslCnf
         :return: None
         :rtype: None
-        :raises SCAutolibException: If the provided CNF file does not exist.
+        :raises SCAutolibFileNotExists: If the provided CNF file does not exist.
         """
 
         if not cnf.path.exists():
-            raise SCAutolibException("CNF file does not exist")
+            raise SCAutolibFileNotExists("CNF file does not exist")
         self._ca_cnf = cnf
 
     def to_dict(self):
@@ -401,13 +403,13 @@ class LocalCA(BaseCA):
 
         :return: None
         :rtype: None
-        :raises SCAutolibException: If the CA's CNF file is not set or does
-                                    not exist.
+        :raises SCAutolibException: If the CA's CNF file is not set.
+        :raises SCAutolibFileNotExists: If the CA's CNF file  does not exist.
         """
         if self._ca_cnf is None:
             raise SCAutolibException("CA CNF file is not set")
         elif not self._ca_cnf.path.exists():
-            raise SCAutolibException("CA CNF does not exist")
+            raise SCAutolibFileNotExists("CA CNF does not exist")
 
         self.root_dir.mkdir(parents=True, exist_ok=True)
         self._newcerts.mkdir(exist_ok=True)
@@ -742,7 +744,7 @@ class IPAServerCA(BaseCA):
             logger.critical("Installation of IPA client is failed")
             rmtree("/etc/ipa/*")
             logger.debug("Directory /etc/ipa is removed")
-            raise
+            raise SCAutolibIPAException("IPA client installation failed.")
         logger.debug("IPA client is installed")
 
         try:
@@ -1045,9 +1047,9 @@ class IPAServerCA(BaseCA):
 
         :return: An initialized ``IPAServerCA`` object.
         :rtype: SCAutolib.models.CA.IPAServerCA
-        :raises SCAutolibException: If the IPA server CA dump file is not found
-                                    or if the loaded object is not a valid
-                                    ``IPAServerCA`` instance.
+        :raises SCAutolibIPAException: If the IPA server CA dump file is not
+                                       found or if the loaded object is not a
+                                       valid ``IPAServerCA`` instance.
         """
         json_file = LIB_DUMP_CAS.joinpath("ipa-server.json")
         if not json_file.exists():
@@ -1055,11 +1057,11 @@ class IPAServerCA(BaseCA):
             logger.error(msg)
             logger.error("The reason for this is most likely that the system "
                          "was not configured for IPA client via SCAutolib")
-            raise SCAutolibException(msg)
+            raise SCAutolibIPAException(msg)
         ca = BaseCA.load(json_file)
         if not isinstance(ca, IPAServerCA):
             msg = "Values in dump file are not valid for IPA server, so the " \
                 "object can't be created"
             logger.error(msg)
-            raise SCAutolibException(msg)
+            raise SCAutolibIPAException(msg)
         return ca

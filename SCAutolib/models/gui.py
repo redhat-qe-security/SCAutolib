@@ -23,6 +23,7 @@ import logging
 
 from SCAutolib import run, logger
 from SCAutolib.utils import isDistro
+from SCAutolib.exceptions import SCAutolibGUIException, SCAutolibNotFound
 
 
 class Screen:
@@ -71,8 +72,9 @@ class Screen:
         :type timeout: float
         :return: The string path to the captured screenshot file.
         :rtype: str
-        :raises Exception: If ``ffmpeg`` cannot capture a screenshot within the
-                           specified timeout period.
+        :raises SCAutolibGUIException: If ``ffmpeg`` cannot capture a
+                                       screenshot within the specified timeout
+                                       period.
         """
 
         logger.debug(f"Taking screenshot number {self.screenshot_num}")
@@ -96,7 +98,8 @@ class Screen:
                              f"stdout: {out.stdout}, stderr: {out.stderr}")
 
         if not captured:
-            raise Exception('Could not capture screenshot within timeout.')
+            raise SCAutolibGUIException(
+                'Could not capture screenshot within timeout.')
 
         if self.html_file:
             with open(self.html_file, 'a') as fp:
@@ -268,8 +271,8 @@ def action_decorator(func):
     :return: The wrapper function that adds pre- and post-action screenshot
              and comparison logic.
     :rtype: callable
-    :raises Exception: If `check_difference` is enabled and that the action did
-                       not produce a visible change
+    :raises SCAutolibGUIException: If `check_difference` is enabled and that
+                                   the action did not produce a visible change
     """
 
     def wrapper(self,
@@ -290,8 +293,8 @@ def action_decorator(func):
             if images_equal(start_screenshot, end_screenshot):
                 # If the screenshot before and after action are the same
                 # an exception is raised
-                raise Exception("Action did not change "
-                                "the contents of the screen")
+                raise SCAutolibGUIException(
+                    "Action did not change the contents of the screen")
 
     return wrapper
 
@@ -505,8 +508,8 @@ class GUI:
         :type timeout: float
         :return: None
         :rtype: None
-        :raises Exception: If the ``key`` is not found in screenshots within
-                           the specified timeout.
+        :raises SCAutolibNotFound: If the ``key`` is not found in screenshots
+                                   within the specified timeout.
         """
 
         logger.info(f"Trying to find key='{key}' to click on.")
@@ -547,8 +550,9 @@ class GUI:
                 break
 
         if item is None:
-            raise Exception(f"Found no key='{key}' in screenshots "
-                            f"{first_scr} to {last_scr}")
+            raise SCAutolibNotFound(
+                f"Found no key='{key}' in screenshots "
+                f"{first_scr} to {last_scr}")
 
         x = float(item['left'] + item['width'] / 2)
         y = float(item['top'] + item['height'] / 2)
@@ -560,7 +564,7 @@ class GUI:
 
     @action_decorator
     @log_decorator
-    def kb_write(self, *args, **kwargs):
+    def kb_write(self, *args, press_enter: bool = True, **kwargs):
         """
         Simulates typing a literal string of characters into the active GUI
         input field or window. It handles uppercase
@@ -569,6 +573,9 @@ class GUI:
         :param args: Positional arguments. The first argument is expected to be
                      the string to write.
         :type args: tuple
+        :param press_enter: If set (default), after the text the enter button
+                            will be pressed.
+        :type press_enter: bool
         :param kwargs: Additional keyword arguments are passed to
                        ``keyboard.write`` (e.g., ``delay``).
         :type kwargs: dict
@@ -590,6 +597,8 @@ class GUI:
             else:
                 last = f"{last}{char}"
         keyboard.write(*[last], **kwargs)
+        if press_enter:
+            self.kb_send('enter')
 
     @action_decorator
     @log_decorator
@@ -626,8 +635,8 @@ class GUI:
         :type timeout: float
         :return: None
         :rtype: None
-        :raises Exception: If the ``key`` is not found in any screenshot within
-                           the specified timeout.
+        :raises SCAutolibNotFound: If the ``key`` is not found in any
+                                   screenshot within the specified timeout.
         """
 
         logger.info(f"Trying to find key='{key}'")
@@ -646,7 +655,7 @@ class GUI:
             if selection.sum() != 0:
                 return
 
-        raise Exception('The key was not found.')
+        raise SCAutolibNotFound('The key was not found.')
 
     @log_decorator
     def assert_no_text(self, key: str, timeout: float = 0):
@@ -663,8 +672,8 @@ class GUI:
         :type timeout: float
         :return: None
         :rtype: None
-        :raises Exception: If the ``key`` is found in any screenshot within the
-                           specified timeout.
+        :raises SCAutolibNotFound: If the ``key`` is found in any screenshot
+                                   within the specified timeout.
         """
 
         logger.info(f"Trying to find key='{key}'"
@@ -682,8 +691,9 @@ class GUI:
 
             # The key was found, but should not be
             if selection.sum() != 0:
-                raise Exception(f"The key='{key}' was found "
-                                f"in the screenshot {screenshot}")
+                raise SCAutolibNotFound(
+                    f"The key='{key}' was found "
+                    f"in the screenshot {screenshot}")
 
     @log_decorator
     def check_home_screen(self, polarity: bool = True):

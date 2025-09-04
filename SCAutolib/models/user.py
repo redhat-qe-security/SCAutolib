@@ -15,7 +15,8 @@ import python_freeipa
 from pathlib import Path, PosixPath
 
 from SCAutolib import run, logger, LIB_DUMP_USERS
-from SCAutolib.exceptions import SCAutolibException
+from SCAutolib.exceptions import SCAutolibException, SCAutolibIPAException, \
+    SCAutolibUnkownType, SCAutolibFileNotExists
 from SCAutolib.models.CA import IPAServerCA
 from SCAutolib.enums import UserType
 
@@ -132,9 +133,11 @@ class User:
         :return: An initialized ``User`` or ``IPAUser`` object loaded with data
                  from the JSON file.
         :rtype: SCAutolib.models.user.User or SCAutolib.models.user.IPAUser
-        :raises SCAutolibException: If an unknown user type is encountered in
-                                    the JSON data, or if ``ipa_server`` is not
-                                    provided for an IPA user.
+        :raises SCAutolibFileNotExists: If user file is not found.
+        :raises SCAutolibIPAException: if ``ipa_server`` is not provided for an
+                                       IPA user.
+        :raises SCAutolibUnkownType: If an unknown user type is encountered in
+                                    the JSON data.
         """
 
         if username and not user_file:
@@ -142,7 +145,7 @@ class User:
             logger.debug(f"Loading user {username} from {user_file}")
 
         if not user_file.exists():
-            raise SCAutolibException(f"{user_file} does not exist")
+            raise SCAutolibFileNotExists(f"{user_file} does not exist")
 
         with user_file.open("r") as f:
             cnt = json.load(f)
@@ -154,15 +157,16 @@ class User:
 
         elif cnt["user_type"] == UserType.ipa:
             if "ipa_server" not in kwargs:
-                raise SCAutolibException("IPA Server object was not provided. "
-                                         "Can't load IPA user.")
+                raise SCAutolibIPAException(
+                    "IPA Server object was not provided. "
+                    "Can't load IPA user.")
 
             user = IPAUser(ipa_server=kwargs["ipa_server"],
                            username=cnt["username"],
                            password=cnt["password"])
 
         else:
-            raise SCAutolibException(f"Unknown user type: {cnt['user_type']}")
+            raise SCAutolibUnkownType(f"Unknown user type: {cnt['user_type']}")
 
         logger.debug(f"User {user.__class__} is loaded: {user.__dict__}")
 

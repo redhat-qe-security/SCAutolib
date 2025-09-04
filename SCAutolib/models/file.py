@@ -19,7 +19,8 @@ from typing import Union
 import json
 
 from SCAutolib import logger, TEMPLATES_DIR, LIB_BACKUP, LIB_DUMP_CONFS, run
-from SCAutolib.exceptions import SCAutolibException
+from SCAutolib.exceptions import SCAutolibFileExists, SCAutolibWrongConfig, \
+    SCAutolibNoTemplate, SCAutolibFileNotExists
 from SCAutolib.utils import isDistro
 
 
@@ -85,20 +86,21 @@ class File:
 
         :return: None
         :rtype: None
-        :raises FileExistsError: If the configuration file already exists on
-                                 the file system.
-        :raises ValueError: If no template file was provided during object
-                            initialization when ``create`` is called.
+        :raises SCAutolibFileExists: If the configuration file already exists
+                                     on the file system.
+        :raises SCAutolibNoTemplate: If no template file was provided during
+                                     object initialization when ``create`` is
+                                     called.
         """
 
         if self._conf_file.exists():
             logger.warning(f"Create error: {self._conf_file} already exists.")
-            raise FileExistsError(f'{self._conf_file} already exists')
+            raise SCAutolibFileExists(f'{self._conf_file} already exists')
         else:
             self._default_parser = ConfigParser()
             self._default_parser.optionxform = str
             if self._template is None:
-                raise ValueError("Template file was not provided.")
+                raise SCAutolibNoTemplate("Template file was not provided.")
             with self._template.open() as t:
                 self._default_parser.read_file(t)
 
@@ -222,13 +224,8 @@ class File:
         :type separator: str
         :return: The string value associated with the key.
         :rtype: str
-        :raises SCAutolibException: If the key is not found in a simple
-                                    (non-``ConfigParser``) file.
-        :raises configparser.NoSectionError: If the specified section is not
-                                             found in a
-                                             ``ConfigParser``-supported file.
-        :raises KeyError: If the key is not present within the specified
-                          section in a ``ConfigParser``-supported file.
+        :raises SCAutolibWrongConfig: If the section or key is not found in the
+                                      file.
         """
 
         if section is None:
@@ -243,14 +240,20 @@ class File:
                 if key_from_file == key:
                     return value.strip()
 
-            raise SCAutolibException(f"Key '{key}' doesn't present in the "
-                                     f"file {self._conf_file}")
+            raise SCAutolibWrongConfig(f"Key '{key}' doesn't present in the "
+                                       f"file {self._conf_file}")
         elif self._default_parser is None:
             self._default_parser = ConfigParser()
             self._default_parser.optionxform = str
             with self._conf_file.open() as config:
                 self._default_parser.read_file(config)
-        return self._default_parser[section][key]
+
+        try:
+            value = self._default_parser[section][key]
+        except KeyError as e:
+            raise SCAutolibWrongConfig(str(e))
+
+        return value
 
     def save(self):
         """
@@ -500,9 +503,9 @@ class SSSDConf(File):
 
         :return: None
         :rtype: None
-        :raises FileExistsError: If internal backup files already exist,
-                                 suggesting ``create`` was executed multiple
-                                 times.
+        :raises SCAutolibFileExists: If internal backup files already exist,
+                                     suggesting ``create`` was executed
+                                     multiple times.
         """
 
         try:
@@ -511,7 +514,7 @@ class SSSDConf(File):
             logger.info(f"{self._conf_file} file exists, loading values")
             self._backup_original = self.backup("sssd-conf-original")
 
-        except FileNotFoundError:
+        except SCAutolibFileNotExists:
             logger.warning(f"{self._conf_file} not present")
             logger.warning("Creating sssd.conf based on the template")
 
@@ -650,7 +653,7 @@ class SSSDConf(File):
 
         :return: None
         :rtype: None
-        :raises FileExistsError: If an internal backup file already exists.
+        :raises SCAutolibFileExists: If an internal backup file already exists.
         """
 
         backup_files = (self._backup_default, self._backup_original)
@@ -660,7 +663,7 @@ class SSSDConf(File):
                 logger.error("This suggest that create method was already "
                              "executed. Create method should not be executed "
                              "multiple times")
-                raise FileExistsError(f'{file} file exists')
+                raise SCAutolibFileExists(f'{file} file exists')
 
 
 class SoftHSM2Conf(File):

@@ -18,6 +18,7 @@ from collections import OrderedDict
 from SCAutolib import logger, exceptions, schema_user
 from SCAutolib.controller import Controller
 from SCAutolib.enums import ReturnCode
+from SCAutolib.exceptions import SCAutolibException
 
 
 def check_conf_path(conf):
@@ -28,9 +29,12 @@ def check_conf_path(conf):
     :type conf: str
     :return: A resolved ``Path`` object if the file exists.
     :rtype: pathlib.Path
-    :raises click.BadParameter: If the path does not exist.
+    :raises SCAutolibException: If there is a problem with the file.
     """
-    return click.Path(exists=True, resolve_path=True)(conf)
+    try:
+        return click.Path(exists=True, resolve_path=True)(conf)
+    except click.BadParameter as e:
+        raise SCAutolibException(str(e))
 
 
 # In Help output, force the subcommand list to match the order
@@ -510,7 +514,6 @@ def gui_run_all(ctx, actions, install_missing):
         if "kb_write" in action:
             params = action.split(":", 1)[1].split()[0]
             gui.kb_write(params)
-            gui.kb_send('enter')
         if "done" in action:
             gui.__exit__(None, None, None)
             ctx.obj["CONTROLLER"].cleanup()

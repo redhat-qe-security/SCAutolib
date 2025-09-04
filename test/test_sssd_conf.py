@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from SCAutolib.models.file import SSSDConf
+from SCAutolib.exceptions import SCAutolibFileExists
 from conftest import FILES_DIR
 
 
@@ -66,7 +67,7 @@ def test_check_backups(tmpdir):
     sssd = SSSDConf()
     sssd._backup_default = tmpfile
     sssd._backup_original = tmpfile
-    with pytest.raises(FileExistsError, match=f'{tmpfile} file exists'):
+    with pytest.raises(SCAutolibFileExists, match=f'{tmpfile} file exists'):
         sssd.check_backups()
 
 

@@ -18,6 +18,28 @@ class SCAutolibException(Exception):
         super().__init__(*args)
 
 
+class SCAutolibGUIException(SCAutolibException):
+    """
+    Exception raised by GUI functions when something is wrong.
+    """
+    default = "Graphical enviroment encountered and error"
+
+    def __init__(self, msg=None):
+        msg = self.default if msg is None else msg
+        super().__init__(msg)
+
+
+class SCAutolibIPAException(SCAutolibException):
+    """
+    Exception raised by IPA functions when something is wrong.
+    """
+    default = "IPA setup encountered and error"
+
+    def __init__(self, msg=None):
+        msg = self.default if msg is None else msg
+        super().__init__(msg)
+
+
 class SCAutolibWrongConfig(SCAutolibException):
     """
     Exception raised when a required key or section is missing or is
@@ -56,4 +78,59 @@ class SCAutolibMissingUserConfig(SCAutolibException):
     """
     def __init__(self, name):
         msg = f"User {name} is found in config file"
+        super().__init__(msg)
+
+
+class SCAutolibFileExists(SCAutolibException):
+    """
+    Exception raised when a file that we want to create already exists.
+    """
+    default = "The file already exists"
+
+    def __init__(self, msg=None):
+        msg = self.default if msg is None else msg
+        super().__init__(msg)
+
+
+class SCAutolibFileNotExists(SCAutolibException):
+    """
+    Exception raised when a file that we want doesn't exist.
+    """
+    default = "The file does not exists"
+
+    def __init__(self, msg=None):
+        msg = self.default if msg is None else msg
+        super().__init__(msg)
+
+
+class SCAutolibNoTemplate(SCAutolibException):
+    """
+    Exception raised when no template file was provided during object
+    initialization when a ``create`` function is called.
+    """
+    default = "No template was provided for the file to be created"
+
+    def __init__(self, msg=None):
+        msg = self.default if msg is None else msg
+        super().__init__(msg)
+
+
+class SCAutolibUnkownType(SCAutolibException):
+    """
+    Exception raised when a type given is not in the enum.
+    """
+    default = "Unkown type"
+
+    def __init__(self, msg=None):
+        msg = self.default if msg is None else msg
+        super().__init__(msg)
+
+class SCAutolibNotFound(SCAutolibException):
+    """
+    Exception raised when expected result is not found.
+    """
+    default = "Expected result is not found"
+
+    def __init__(self, msg=None):
+        msg = self.default if msg is None else msg
         super().__init__(msg)
