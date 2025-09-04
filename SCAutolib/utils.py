@@ -10,17 +10,13 @@ operations.
 
 
 import json
+import distro
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
+from typing import Union
 from pathlib import Path
 
-from SCAutolib import (run, logger, TEMPLATES_DIR, LIB_DUMP_USERS, LIB_DUMP_CAS,
-                       LIB_DUMP_CARDS)
-from SCAutolib.exceptions import SCAutolibException
-from SCAutolib.models.CA import LocalCA, BaseCA, CustomCA, IPAServerCA
-from SCAutolib.models.card import Card
-from SCAutolib.models.file import OpensslCnf, SSSDConf
-from SCAutolib.models.user import User
+from SCAutolib import run, logger, TEMPLATES_DIR
 
 
 def _check_selinux():
@@ -134,133 +130,64 @@ def dump_to_json(obj):
     logger.debug(f"Object {type(obj)} is stored to the {obj.dump_file} file")
 
 
-def load_user(username, **kwargs):
+def isDistro(OSes: Union[str, list], version: str = None) -> bool:
     """
-    Loads a ``User`` object from a JSON dump file corresponding to the given
-    username. The file is expected to be located in ``LIB_DUMP_USERS``
-    directory.
+    Identifies if the current operating system matches a specified distribution
+    and, optionally, its version. This function leverages the ``distro`` library
+    to determine the system's ID, name, and version details.
 
-    :param username: The username of the user to load.
-    :type username: str
-    :param kwargs: Additional keyword arguments that might be required by the
-                   ``User.load`` static method, particularly for ``IPAUser``
-                   objects (e.g., ``ipa_server`` object).
-    :type kwargs: dict
-    :return: The loaded ``User`` object (either ``User`` or ``IPAUser``
-             instance).
-    :rtype: SCAutolib.models.user.User
-    :raises SCAutolibException: If the user's JSON dump file does not exist.
+    :param OSes: The ID or name of the operating system(s) to check against.
+                 Can be a single string (e.g., "fedora", "rhel") or a list of
+                 strings. Case-insensitive comparison is performed.
+    :type OSes: Union[str, list]
+    :param version: An optional string specifying the version to check. It can
+                    include comparison operators
+                    (``<``, ``<=``, ``==``, ``>``, ``>=``).
+                    If no operator is specified, ``==`` is assumed.
+                    Examples: "8", ">=9", "<39".
+    :type version: str, optional
+    :return: ``True`` if the current operating system matches the specified
+             distribution(s) and version criteria; ``False`` otherwise.
+    :rtype: bool
     """
-    user_file = LIB_DUMP_USERS.joinpath(f"{username}.json")
-    logger.debug(f"Loading user {username} from {user_file}")
-    user = None
-    if user_file.exists():
-        user = User.load(user_file, **kwargs)
+
+    cur_id = distro.id().lower()
+    cur_name = distro.name().lower()
+
+    if isinstance(OSes, str):
+        results = (OSes in cur_id) or (OSes in cur_name)
     else:
-        raise SCAutolibException(f"{user_file} does not exist")
-    return user
+        results = False
+        for item in OSes:
+            if not isinstance(item, str):
+                continue
+            item = item.lower()
+            results = results or (item in cur_id) or (item in cur_name)
 
+    if results is False:
+        return False
 
-def load_token(card_name: str = None, update_sssd: bool = False):
-    """
-    Loads a ``Card`` object from a JSON dump file based on the provided card
-    name. This function is primarily intended for use
-    in pytest configurations to set up card objects for tests.
-    Optionally, it can update the SSSD configuration file (``sssd.conf``)
-    with a ``shadowutils`` rule for the user of the loaded card.
+    if version:
+        cur_major = int(distro.major_version())
+        cur_minor = int(distro.minor_version()) if distro.minor_version() else 0
 
-    :param card_name: The name of the card object to load.
-    :type card_name: str, optional
-    :param update_sssd: If ``True``, the SSSD configuration file will be
-                        updated with a ``shadowutils`` rule for the user of the
-                        loaded card.
-    :return: The loaded ``Card`` object
-    :rtype: SCAutolib.models.card.Card
-    """
-    card_file = LIB_DUMP_CARDS.joinpath(f"{card_name}.json")
-    logger.debug(f"Loading card {card_name} from {card_file}")
-    card = None
-    if card_file.exists():
-        card = Card.load(card_file)
-    if update_sssd:
-        sssd_conf = SSSDConf()
-        sssd_conf.set(section=f"certmap/shadowutils/{card.cardholder}",
-                      key="matchrule",
-                      value=f"<SUBJECT>.*CN={card.CN}.*")
-        sssd_conf.save()
-        run(["sss_cache", "-E"])
-        run(["systemctl", "restart", "sssd"])
-    return card
+        if version[0] in ('<', '=', '>'):
+            if version[1] == '=':
+                op = version[:2]
+                version = version[2:]
+            else:
+                op = version[0] if version[0] != '=' else '=='
+                version = version[1:]
+        else:
+            op = '=='
 
+        parts = version.split('.')
+        major = int(parts[0])
+        minor = int(parts[1]) if len(parts) > 1 else None
 
-def ipa_factory():
-    """
-    Creates and returns an ``IPAServerCA`` object. This function
-    loads the IPA server CA configuration from its JSON dump file.
-    It specifically asserts that the loaded CA is an instance of
-    ``IPAServerCA``.
+        if major == cur_major and minor:
+            return eval("{0} {1} {2}".format(cur_minor, op, minor))
+        else:
+            return eval("{0} {1} {2}".format(cur_major, op, major))
 
-    .. note: Creating new IPA server with CA is not supported.
-
-    :return: An initialized ``IPAServerCA`` object.
-    :rtype: SCAutolib.models.CA.IPAServerCA
-    :raises SCAutolibException: If the IPA server CA dump file is not found
-                                or if the loaded object is not a valid
-                                ``IPAServerCA`` instance.
-    """
-    json_file = LIB_DUMP_CAS.joinpath("ipa-server.json")
-    if not json_file.exists():
-        msg = "Dump file for ipa server CA is not present."
-        logger.error(msg)
-        logger.error("The reason for this is most likely that the system was "
-                     "not configured for IPA client via SCAutolib")
-        raise SCAutolibException(msg)
-    ca = BaseCA.load(json_file)
-    if not isinstance(ca, IPAServerCA):
-        msg = "Values in dump file are not valid for IPA server, so the " \
-              "object can't be created"
-        logger.error(msg)
-        raise SCAutolibException(msg)
-    return ca
-
-
-def ca_factory(path: Path = None, cnf: OpensslCnf = None,
-               card_data: dict = None, ca_name: str = None,
-               create: bool = False):
-    """
-    A factory function to create or load Certificate Authority (CA) objects
-    based on the provided parameters. It can initialize
-    a new CA instance or load an existing one from a JSON dump file.
-
-    :param path: The ``pathlib.Path`` object to the CA's root directory. This is
-                 used when creating a new ``LocalCA`` instance.
-    :type path: pathlib.Path, optional
-    :param cnf: An ``OpensslCnf`` object representing the OpenSSL configuration
-                file for the CA. Used when creating a new ``LocalCA``.
-    :type cnf: SCAutolib.models.file.OpensslCnf, optional
-    :param card_data: A dictionary containing various attributes of the card
-                      (e.g., PIN, cardholder, slot). This data is used when
-                      creating a new ``CustomCA`` for physical cards.
-    :type card_data: dict, optional
-    :param ca_name: The name of the CA to load. This parameter is used when
-                    ``create`` is ``False`` to identify the specific CA JSON dump
-                    file.
-    :type ca_name: str, optional
-    :param create: If ``True``, a new CA object will be created
-                   (either ``LocalCA`` or ``CustomCA``). If ``False``,
-                   an existing CA object will be loaded from a dump file.
-    :type create: bool
-    :return: An initialized CA object (either ``LocalCA``, ``CustomCA``, or
-             ``IPAServerCA`` instance).
-    :rtype: SCAutolib.models.CA.BaseCA
-    """
-    if not create:
-        ca = BaseCA.load(LIB_DUMP_CAS.joinpath(f"{ca_name}.json"))
-        return ca
-
-    if not path:            # create CA for physical card
-        ca = CustomCA(card_data)
-        return ca
-    else:                   # create new CA object for virtual card
-        ca = LocalCA(root_dir=path, cnf=cnf)
-        return ca
+    return True

@@ -20,6 +20,7 @@ from SCAutolib import run, logger, TEMPLATES_DIR, LIB_DUMP_CARDS
 from SCAutolib.exceptions import SCAutolibException
 from SCAutolib.enums import CardType, UserType
 
+from SCAutolib.models.file import SSSDConf
 
 class Card:
     """
@@ -98,15 +99,21 @@ class Card:
         ...
 
     @staticmethod
-    def load(json_file):
+    def load(card_file: Path = None, card_name: str = None,
+             update_sssd: bool = False):
         """
         Loads a ``Card`` object from a specified JSON dump file.
         It reads the JSON content, determines the card type, and then
         instantiates the appropriate card subclass with the loaded data.
 
-        :param json_file: The ``pathlib.Path`` object pointing to the JSON file
+        :param card_file: The ``pathlib.Path`` object pointing to the JSON file
                           containing the serialized card data.
-        :type json_file: pathlib.Path
+        :type card_file: pathlib.Path
+        :param card_name: The name of the card object to load.
+        :type card_name: str, optional
+        :param update_sssd: If ``True``, the SSSD configuration file will be
+                            updated with a ``shadowutils`` rule for the user of
+                            the loaded card.
         :return: An instance of the specific card class loaded with data from
                  the JSON file.
         :rtype: SCAutolib.models.card.Card
@@ -114,7 +121,14 @@ class Card:
                                     the JSON data.
         """
 
-        with json_file.open("r") as f:
+        if card_name and not card_file:
+            card_file = LIB_DUMP_CARDS.joinpath(f"{card_name}.json")
+            logger.debug(f"Loading card {card_name} from {card_file}")
+
+        if not card_file.exists():
+            raise SCAutolibException(f"{card_file} does not exist")
+
+        with card_file.open("r") as f:
             cnt = json.load(f)
 
         card = None
@@ -126,8 +140,17 @@ class Card:
         else:
             raise SCAutolibException(
                 f"Unknown card type: {cnt['card_type']}")
-        return card
 
+        if update_sssd:
+            sssd_conf = SSSDConf()
+            sssd_conf.set(section=f"certmap/shadowutils/{card.cardholder}",
+                          key="matchrule",
+                          value=f"<SUBJECT>.*CN={card.CN}.*")
+            sssd_conf.save()
+            run(["sss_cache", "-E"])
+            run(["systemctl", "restart", "sssd"])
+
+        return card
 
 class VirtualCard(Card):
     """

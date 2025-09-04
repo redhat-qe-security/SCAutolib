@@ -20,7 +20,7 @@ import json
 
 from SCAutolib import logger, TEMPLATES_DIR, LIB_BACKUP, LIB_DUMP_CONFS, run
 from SCAutolib.exceptions import SCAutolibException
-from SCAutolib.isDistro import isDistro
+from SCAutolib.utils import isDistro
 
 
 class File:

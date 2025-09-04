@@ -69,8 +69,9 @@ using a smart card. The user and card needs to exist beforehand:
     import sys
     import logging
     import pexpect
-    from SCAutolib.utils import load_user, load_token
+    from SCAutolib.utils import load_user
     from SCAutolib.models.authselect import Authselect
+    from SCAutolib.models.card import Card
 
     log = logging.getLogger("Simple_test")
 
@@ -78,7 +79,7 @@ using a smart card. The user and card needs to exist beforehand:
     local_user = load_user("local_user")
 
     log.info("Loading token")
-    local_user.card = load_token("my_token")
+    local_user.card = Card.load(card_name = "my_token")
 
     log.info("Creating user shell")
     user_shell = pexpect.spawn("/usr/bin/sh -c 'su base-user'", encoding="utf-8")
@@ -96,12 +97,10 @@ using a smart card. The user and card needs to exist beforehand:
 
 **Explanation:**
 
-#.  **`from SCAutolib.utils import load_user, load_token`**: Loading helpers
-    from the SCAutolib utils.
 #.  **`local_user = load_user("local_user")`**: Finding the user and loading
-#.  information about it.
-#.  **`local_user.card = load_token("my_token")`**: Loading information about
-    the card and add it to the user object.
+    information about it.
+#.  **`local_user.card = Card.load(card_name = "my_token")`**: Loading
+    information about the card and add it to the user object.
 #.  **`user_shell = pexpect.spawn(...)`**: Use pexpect to create an interactive
     local user terminal.
 #.  **`with Authselect():`**: Context manager to setup Authselect, it accepts

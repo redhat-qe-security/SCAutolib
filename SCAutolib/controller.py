@@ -29,8 +29,8 @@ from SCAutolib.models.CA import BaseCA
 from SCAutolib.enums import (CardType, UserType)
 from SCAutolib.utils import (_check_selinux, _gen_private_key,
                              _install_packages, _check_packages,
-                             dump_to_json, ca_factory)
-from SCAutolib.isDistro import isDistro
+                             dump_to_json)
+from SCAutolib.utils import isDistro
 
 
 class Controller:
@@ -311,7 +311,7 @@ class Controller:
         ca_dir.mkdir(exist_ok=True, parents=True)
 
         cnf = OpensslCnf(ca_dir.joinpath("ca.cnf"), "CA", str(ca_dir))
-        self.local_ca = ca_factory(path=ca_dir, cnf=cnf, create=True)
+        self.local_ca = BaseCA.factory(path=ca_dir, cnf=cnf, create=True)
         if force:
             logger.warning(f"Removing previous local CA from {ca_dir}")
             self.local_ca.cleanup()
@@ -343,7 +343,7 @@ class Controller:
         """
 
         if card_data["card_type"] == CardType.physical:
-            ca = ca_factory(create=True, card_data=card_data)
+            ca = BaseCA.factory(create=True, card_data=card_data)
             ca.setup()
             if not ca._ca_cert.is_file():
                 raise FileNotFoundError(f"File not found: {ca._ca_cert}")
