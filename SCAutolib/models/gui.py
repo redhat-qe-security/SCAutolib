@@ -111,6 +111,31 @@ class Screen:
         self.screenshot_num += 1
         return filename
 
+    def disable_screensaver(self):
+        """
+        Disable linux Gnome screensaver
+
+        :return: None
+        :rtype: None
+        """
+        run([
+            "gsettings", "set", "org.gnome.desktop.screensaver",
+            "idle-activation-enabled", "false"
+        ])
+        logger.debug(f"Screensaver have been disabled.")
+
+    def enable_screensaver(self):
+        """
+        Enable linux Gnome screensaver
+
+        :return: None
+        :rtype: None
+        """
+        run([
+            "gsettings", "set", "org.gnome.desktop.screensaver",
+            "idle-activation-enabled", "true"
+        ])
+        logger.debug(f"Screensaver have been enabled.")
 
 class Mouse:
     """
@@ -198,8 +223,7 @@ class Mouse:
         # release the button
         self.device.emit(uinput_button, 0)
 
-
-def image_to_data(path: str):
+def image_to_data(path: str, threshold: int = 120):
     """
     Converts a screenshot image into a DataFrame of words with their
     normalized coordinates and dimensions. This process
@@ -220,7 +244,7 @@ def image_to_data(path: str):
                           fx=upscaling_factor,
                           fy=upscaling_factor,
                           interpolation=cv2.INTER_LANCZOS4)
-    _, binary = cv2.threshold(upscaled, 120, 255, cv2.THRESH_BINARY_INV)
+    _, binary = cv2.threshold(upscaled, threshold, 255, cv2.THRESH_BINARY_INV)
     df = pytesseract.image_to_data(binary, output_type='data.frame')
 
     yres, xres = binary.shape[:2]
@@ -441,6 +465,7 @@ class GUI:
 
         # By restarting gdm, the system gets into defined state
         run(['systemctl', 'restart', 'gdm'], check=True)
+        self.screen.disable_screensaver()
         # Cannot screenshot before gdm starts displaying
         # This would break the display
         sleep(self.gdm_init_time)
@@ -474,6 +499,7 @@ class GUI:
             return
 
         run(['systemctl', 'stop', 'gdm'], check=True)
+        self.screen.enable_screensaver()
 
         with open(self.html_file, 'a') as fp:
             fp.write(
@@ -492,7 +518,8 @@ class GUI:
 
     @action_decorator
     @log_decorator
-    def click_on(self, key: str, timeout: float = 30):
+    def click_on(self, key: str, timeout: float = 30,
+                 min_thres: int = 120, max_thres: int = 160):
         """
         Simulates a mouse click on a GUI object containing the specified text.
         It repeatedly captures screenshots and
@@ -514,13 +541,24 @@ class GUI:
 
         logger.info(f"Trying to find key='{key}' to click on.")
 
-        end_time = time() + timeout
+        thres_diff = max_thres - min_thres
+        if thres_diff < 0:
+            raise SCAutolibGUIException(
+                "Image max_thres cannot be less than min_thres.")
+
         item = None
         first_scr = None
         last_scr = None
 
+        key_list = key.split(" ")
+        multiword = len(key_list) > 1
+
+        start_time = time()
+        end_time = start_time + timeout
+
         # Repeat screenshotting, until the key is found
-        while time() < end_time:
+        passed_time = time()
+        while passed_time < end_time:
             # Capture the screenshot
             screenshot = self.screen.screenshot()
 
@@ -528,12 +566,24 @@ class GUI:
             if first_scr is None:
                 first_scr = screenshot
 
-            df = image_to_data(screenshot)
-            selection = df['text'] == key
+            threshold = int(
+                min_thres +
+                ( thres_diff * ( int(passed_time - start_time) / timeout ) )
+            )
+            df = image_to_data(screenshot, threshold=threshold)
+
+            selection = None
+            if multiword:
+                words = " ".join(str(text) for text in df['text'])
+                if key in words:
+                    selection = df['text'] == key_list[0]
+            else:
+                selection = df['text'] == key
 
             # If there is no matching word, try again
-            if selection.sum() == 0:
+            if selection is not None and selection.sum() == 0:
                 logger.info('Found no match, trying again')
+                passed_time = time()
                 continue
 
             # Exactly one word matching, exit the loop
@@ -620,7 +670,8 @@ class GUI:
         keyboard.send(*args, **kwargs)
 
     @log_decorator
-    def assert_text(self, key: str, timeout: float = 0):
+    def assert_text(self, key: str, timeout: float = 0,
+                    min_thres: int = 120, max_thres: int = 160):
         """
         Asserts that a given text string (``key``) is found on the screen
         within a specified timeout. It repeatedly captures
@@ -641,24 +692,49 @@ class GUI:
 
         logger.info(f"Trying to find key='{key}'")
 
-        end_time = time() + timeout
-        first = True
+        thres_diff = max_thres - min_thres
+        if thres_diff < 0:
+            raise SCAutolibGUIException(
+                "Image max_thres cannot be less than min_thres.")
 
-        while first or time() < end_time:
+        key_list = key.split(" ")
+        multiword = len(key_list) > 1
+        threshold = max_thres
+
+        start_time = time()
+        end_time = start_time + timeout
+
+        first = True
+        passed_time = start_time
+        while first or passed_time < end_time:
             first = False
             # Capture the screenshot
             screenshot = self.screen.screenshot()
-            df = image_to_data(screenshot)
-            selection = df['text'] == key
+
+            if timeout:
+                threshold = int(
+                    min_thres +
+                    ( thres_diff * ( int(passed_time - start_time) / timeout ) )
+                )
+            df = image_to_data(screenshot, threshold=threshold)
+            if multiword:
+                words = " ".join(str(text) for text in df['text'])
+                if key in words:
+                    selection = df['text'] == key_list[0]
+            else:
+                selection = df['text'] == key
 
             # The key was found
             if selection.sum() != 0:
                 return
 
+            passed_time = time()
+
         raise SCAutolibNotFound('The key was not found.')
 
     @log_decorator
-    def assert_no_text(self, key: str, timeout: float = 0):
+    def assert_no_text(self, key: str, timeout: float = 0,
+                       min_thres: int = 120, max_thres: int = 160):
         """
         Asserts that a given text string (`key`) is *not* found on the screen
         within a specified timeout. If the key is found in any screenshot
@@ -679,21 +755,48 @@ class GUI:
         logger.info(f"Trying to find key='{key}'"
                     " (it should not be in the screenshot)")
 
-        end_time = time() + timeout
-        first = True
+        thres_diff = max_thres - min_thres
+        if thres_diff < 0:
+            raise SCAutolibGUIException(
+                "Image max_thres cannot be less than min_thres.")
 
-        while first or time() < end_time:
-            first = False
+        key_list = key.split(" ")
+        multiword = len(key_list) > 1
+        threshold = max_thres
+
+        start_time = time()
+        end_time = start_time + timeout
+
+        first = True
+        passed_time = start_time
+        while first or passed_time < end_time:
+            first=False
             # Capture the screenshot
             screenshot = self.screen.screenshot()
-            df = image_to_data(screenshot)
-            selection = df['text'] == key
 
-            # The key was found, but should not be
-            if selection.sum() != 0:
-                raise SCAutolibNotFound(
-                    f"The key='{key}' was found "
-                    f"in the screenshot {screenshot}")
+            if timeout:
+                threshold = int(
+                    min_thres +
+                    ( thres_diff * ( int(passed_time - start_time) / timeout ) )
+                )
+            df = image_to_data(screenshot, threshold=threshold)
+
+            if multiword:
+                words = " ".join(str(text) for text in df['text'])
+                if key in words:
+                    raise SCAutolibNotFound(
+                        f"The key='{key}' was found "
+                        f"in the screenshot {screenshot}")
+            else:
+                selection = df['text'] == key
+
+                # The key was found, but should not be
+                if selection.sum() != 0:
+                    raise SCAutolibNotFound(
+                        f"The key='{key}' was found "
+                        f"in the screenshot {screenshot}")
+
+            passed_time = time()
 
     @log_decorator
     def check_home_screen(self, polarity: bool = True):
