@@ -271,20 +271,6 @@ class File:
             with self._conf_file.open("w") as config:
                 config.writelines(self._simple_content)
 
-    def clean(self):
-        """
-        Removes the configuration file from the file system if it exists.
-
-        :return: None
-        :rtype: None
-        """
-
-        try:
-            self._conf_file.unlink()
-            logger.info(f"Removing {self._conf_file}.")
-        except FileNotFoundError:
-            logger.info(f"{self._conf_file} does not exist. Nothing to do.")
-
     def backup(self, name: str = None):
         """
         Saves a copy of the original configuration file to a designated backup
@@ -615,7 +601,7 @@ class SSSDConf(File):
                 config.write(original.read())
             self._backup_original.unlink()
         else:
-            self.clean()
+            self.remove()
 
         if self._backup_default.exists():
             self._backup_default.unlink()
