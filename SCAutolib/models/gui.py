@@ -389,13 +389,12 @@ class GUI:
         if res_dir_name:
             self.html_directory = self.html_directory.joinpath(res_dir_name)
         elif from_cli:
-            run_dirs = [str(run_dir).split('/')[-1]
-                        for run_dir in self.html_directory.iterdir()
-                        if "cli_gui" in str(run_dir)]
-            run_dirs.sort(reverse=True)
+            run_dirs = [run_dir for run_dir in self.html_directory.iterdir()
+                        if run_dir.is_dir() and "cli_gui" in run_dir.name]
+            run_dirs.sort(key= lambda x: x.name, reverse=True)
 
-            last_run_dir = Path(run_dirs[0]) if len(run_dirs) > 0 else None
-            if last_run_dir and not last_run_dir.joinpath('done').exists():
+            last_run_dir = run_dirs[0] if len(run_dirs) > 0 else None
+            if last_run_dir and not last_run_dir.joinpath('.done').exists():
                 # Use the old run directory
                 logger.debug("Using HTML logging file from last time.")
                 self.html_directory = self.html_directory.joinpath(
@@ -494,8 +493,7 @@ class GUI:
         :rtype: None
         """
 
-        done_file = self.html_directory.joinpath('done')
-        print(done_file)
+        done_file = self.html_directory.joinpath('.done')
         if done_file.exists():
             return
 
@@ -508,7 +506,6 @@ class GUI:
                 "</html>\n"
             )
 
-        print(done_file)
         with open(done_file, 'w') as fp:
             fp.write("done")
 
