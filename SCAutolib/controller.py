@@ -743,7 +743,7 @@ class Controller:
         else:
             return ["e2fsprogs", "ipa-client"]
 
-    def get_user_dict(self, name):
+    def get_user_dict(self, name: str):
         """
         Retrieves a user's configuration dictionary from the loaded
         configuration file based on the provided username.

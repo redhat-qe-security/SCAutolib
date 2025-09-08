@@ -91,8 +91,9 @@ schema_card = Schema({'name': Use(str),
                       Optional('key', default=None): Use(str)})
 
 
-def run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True,
-        log=True, return_code: list = None, sleep: int = 0, **kwargs) \
+def run(cmd: list[str], stdout: int = subprocess.PIPE,
+        stderr: int = subprocess.PIPE, check: bool = True, log: bool = True,
+        return_code: list = None, sleep: int = 0, **kwargs) \
         -> subprocess.CompletedProcess:
     """
     Executes an external command as a subprocess, providing a controlled

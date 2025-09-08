@@ -14,6 +14,7 @@ import os
 import re
 import json
 import python_freeipa
+from typing import Union
 from cryptography import x509
 from hashlib import sha256
 from pathlib import Path, PosixPath
@@ -57,7 +58,7 @@ class BaseCA:
 
         return self._ca_cert
 
-    def request_cert(self, csr, username: str, cert_out: Path):
+    def request_cert(self, csr: Union[str, Path], username: str, cert_out: Path):
         """
         Requests a certificate from the CA for a given username using a
         CSR (Certificate Signing Request). The signed certificate is then
@@ -176,7 +177,7 @@ class BaseCA:
         ...
 
     @staticmethod
-    def load(json_file):
+    def load(json_file: Union[str, Path]):
         """
         Loads a CA object from a JSON file.
         It reads the JSON content, determines the CA type, and then
@@ -946,7 +947,7 @@ class IPAServerCA(BaseCA):
                     f"-----END CERTIFICATE-----")
         return cert_out
 
-    def add_user(self, user):
+    def add_user(self, user: str):
         """
         Adds a given user to the IPA server. This method wraps the
         ``python_freeipa.client_meta.ClientMeta.user_add`` function, extracting
@@ -968,7 +969,7 @@ class IPAServerCA(BaseCA):
         logger.debug(r)
         logger.info(f"User {user.username} is added to the IPA server")
 
-    def del_user(self, user):
+    def del_user(self, user: str):
         """
         Removes a user from the IPA server.
         This method wraps the

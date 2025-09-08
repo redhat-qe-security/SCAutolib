@@ -69,7 +69,7 @@ def _gen_private_key(key_path: Path, size: int = 2048):
             encryption_algorithm=serialization.NoEncryption()))
 
 
-def _install_packages(packages):
+def _install_packages(packages: list[str]):
     """
     Installs a list of specified RPM packages on the system.
     After installation, it logs the installed version of each package for
@@ -86,7 +86,7 @@ def _install_packages(packages):
         logger.debug(f"Package {pkg} is installed")
 
 
-def _check_packages(packages):
+def _check_packages(packages: list[str]):
     """
     Identifies and returns a list of packages that are required for SCAutolib
     but are not currently installed on the system.
@@ -112,7 +112,7 @@ def _check_packages(packages):
     return missing
 
 
-def dump_to_json(obj):
+def dump_to_json(obj: any):
     """
     Serializes a given object into a JSON file, using the object's
     ``to_dict()`` method for serialization and its ``dump_file`` attribute to
