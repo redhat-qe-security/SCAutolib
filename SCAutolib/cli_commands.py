@@ -21,7 +21,7 @@ from SCAutolib.enums import ReturnCode
 from SCAutolib.exceptions import SCAutolibException
 
 
-def check_conf_path(conf):
+def check_conf_path(conf: str):
     """
     Validates and resolves the path to the JSON configuration file.
 
@@ -46,7 +46,7 @@ class NaturalOrderGroup(click.Group):
     help output in the order they were defined in the code.
     This overrides ``click``'s default alphabetical sorting for subcommands.
     """
-    def __init__(self, name=None, commands=None, **attrs):
+    def __init__(self, name: str = None, commands: dict = None, **attrs):
         """
         Initializes the NaturalOrderGroup, ensuring the commands dictionary
         is an ``OrderedDict`` to maintain insertion order.
@@ -66,7 +66,7 @@ class NaturalOrderGroup(click.Group):
                              commands=commands,
                              **attrs)
 
-    def list_commands(self, ctx):
+    def list_commands(self, ctx: click.Context):
         """
         Lists the command names in their defined order.
 
@@ -91,7 +91,7 @@ class NaturalOrderGroup(click.Group):
                   case_sensitive=False),
               help="Set the verbosity level of the output.")
 @click.pass_context
-def cli(ctx, force, verbose, conf):
+def cli(ctx: click.Context, force: bool, verbose: bool, conf: Path):
     """
     The main entry point for the SCAutolib CLI.
     It initializes global settings and the Controller instance based on
@@ -136,7 +136,8 @@ def cli(ctx, force, verbose, conf):
               is_flag=True,
               help="Install missing packages")
 @click.pass_context
-def prepare(ctx, gdm, install_missing, graphical):
+def prepare(ctx: click.Context, gdm: bool, install_missing: bool,
+            graphical: bool):
     """
     Configures the entire system for smart card operations and testing
     based on the configuration file. This includes
@@ -175,7 +176,7 @@ def prepare(ctx, gdm, install_missing, graphical):
               help="Type of the CA to be configured. If not set, all CA's "
                    "from the config file would be configured")
 @click.pass_context
-def setup_ca(ctx, ca_type):
+def setup_ca(ctx: click.Context, ca_type: str):
     """
     Configures Certificate Authorities (CAs) on the system from the
     configuration file. Can target 'all', 'local',
@@ -232,7 +233,8 @@ def setup_ca(ctx, ca_type):
               show_default=True,
               help="Type of the user to be created")
 @click.pass_context
-def setup_user(ctx, name, card_dir, card_type, passwd, pin, user_type):
+def setup_user(ctx: click.Context, name: str, card_dir: str, card_type: str,
+               passwd: str, pin: str, user_type: str):
     """
     Configures a user, optionally with smart card integration, from config
     or CLI arguments. Handles CA initialization and user/card setup.
@@ -299,7 +301,7 @@ def setup_user(ctx, name, card_dir, card_type, passwd, pin, user_type):
 
 @cli.command()
 @click.pass_context
-def cleanup(ctx):
+def cleanup(ctx: click.Context):
     """
     Cleans up all configurations and system changes made by SCAutolib commands,
     particularly from ``prepare``. Restores the system to a clean state (as
@@ -321,7 +323,7 @@ def cleanup(ctx):
               is_flag=True,
               help="Install missing packages")
 @click.pass_context
-def gui(ctx, install_missing):
+def gui(ctx: click.Context, install_missing: bool):
     """
     Command group for running chained GUI test commands.
     Manages graphical environment dependencies.
@@ -356,7 +358,7 @@ def init():
               is_flag=True,
               help="Reverse the action")
 @click.argument("name")
-def assert_text(name, no):
+def assert_text(name: str, no: bool):
     """
     Asserts the presence or absence of a specific text string on the
     currently displayed GUI screen.
@@ -378,7 +380,7 @@ def assert_text(name, no):
 
 @gui.command()
 @click.argument("name")
-def click_on(name):
+def click_on(name: str):
     """
     Simulates a mouse click action on a GUI object or area that contains the
     specified text.
@@ -399,7 +401,7 @@ def click_on(name):
               default=False,
               is_flag=True,
               help="Reverse the action")
-def check_home_screen(no):
+def check_home_screen(no: bool):
     """
     Verifies if the currently displayed graphical screen is (or is not) the
     expected "home screen" environment. Currently the Gnome Shell home screen
@@ -420,7 +422,7 @@ def check_home_screen(no):
 
 @gui.command()
 @click.argument("keys")
-def kb_send(keys):
+def kb_send(keys: str):
     """
     Sends one or more specific key press events to the active GUI window.
 
@@ -436,7 +438,7 @@ def kb_send(keys):
 
 @gui.command()
 @click.argument("keys")
-def kb_write(keys):
+def kb_write(keys: str):
     """
     Simulates typing a literal string of characters into the active GUI input
     field or window. After the string is sent, an 'enter' key press is
@@ -467,7 +469,7 @@ def done():
 
 @gui.result_callback()
 @click.pass_context
-def gui_run_all(ctx, actions, install_missing):
+def gui_run_all(ctx: click.Context, actions: list[str], install_missing: bool):
     """
     Executes all chained GUI test actions in the order they were provided on
     the command line. It initializes the graphical
@@ -478,7 +480,7 @@ def gui_run_all(ctx, actions, install_missing):
     :param actions: A list of strings, where each string is a representation
                     of a GUI test action to be performed (e.g., `"init"`,
                     `"assert_text:ExpectedText"`).
-    :type actions: list of str
+    :type actions: list
     :param install_missing: A boolean flag indicating whether any missing
                             packages required for the graphical setup should be
                             installed prior to running the GUI actions.

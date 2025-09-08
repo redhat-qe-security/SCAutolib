@@ -13,6 +13,7 @@ capabilities.
 import inspect
 from time import sleep, time
 from pathlib import Path
+from typing import Callable
 
 import cv2
 import keyboard
@@ -282,7 +283,7 @@ def images_equal(path1: str, path2: str):
     return True
 
 
-def action_decorator(func):
+def action_decorator(func: Callable):
     """
     A decorator for GUI automation functions that change the state of the GUI.
     This decorator captures a screenshot before and after
@@ -301,9 +302,9 @@ def action_decorator(func):
 
     def wrapper(self,
                 *args,
-                wait_time=None,
-                screenshot=True,
-                check_difference=True,
+                wait_time: int = None,
+                screenshot: bool = True,
+                check_difference: bool = True,
                 **kwargs):
 
         start_screenshot = self.screen.screenshot() if screenshot else None
@@ -323,7 +324,7 @@ def action_decorator(func):
     return wrapper
 
 
-def log_decorator(func):
+def log_decorator(func: Callable):
     """
     A decorator that logs the invocation of the decorated function, including
     its name and arguments. This provides a clear

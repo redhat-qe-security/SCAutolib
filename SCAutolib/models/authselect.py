@@ -32,8 +32,8 @@ class Authselect:
     """
     backup_name = LIB_BACKUP.joinpath("SCAutolib_authselect_backup")
 
-    def __init__(self, required=False, lock_on_removal=False,
-                 mk_homedir=False, sudo=False):
+    def __init__(self, required: bool = False, lock_on_removal: bool = False,
+                 mk_homedir: bool = False, sudo: bool = False):
         """
         Initializes the ``Authselect`` object with desired ``authselect``
         profile features. By default, it sets the ``with-smartcard``

@@ -35,7 +35,7 @@ class User:
     dump_file: Path = None
     user_type: str = None
 
-    def __init__(self, username, password):
+    def __init__(self, username: str, password: str):
         """
         Initializes a ``User`` object for a local system user.
 
