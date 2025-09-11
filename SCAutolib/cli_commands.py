@@ -357,8 +357,13 @@ def init():
               default=False,
               is_flag=True,
               help="Reverse the action")
+@click.option("--case-insensitive",
+              required=False,
+              default=False,
+              is_flag=True,
+              help="make the match of the words case insensitive.")
 @click.argument("name")
-def assert_text(name: str, no: bool):
+def assert_text(name: str, no: bool, case_insensitive: bool):
     """
     Asserts the presence or absence of a specific text string on the
     currently displayed GUI screen.
@@ -374,13 +379,18 @@ def assert_text(name: str, no: bool):
     :rtype: str
     """
     if no:
-        return f"assert_no_text:{name}"
-    return f"assert_text:{name}"
+        return f"assert_no_text:{not case_insensitive}:{name}"
+    return f"assert_text:{not case_insensitive}:{name}"
 
 
 @gui.command()
+@click.option("--case-insensitive",
+              required=False,
+              default=False,
+              is_flag=True,
+              help="make the match of the words case insensitive.")
 @click.argument("name")
-def click_on(name: str):
+def click_on(name: str, case_insensitive: bool):
     """
     Simulates a mouse click action on a GUI object or area that contains the
     specified text.
@@ -392,7 +402,7 @@ def click_on(name: str):
              ``gui_run_all`` callback (e.g., ``"click_on:ButtonLabel"``).
     :rtype: str
     """
-    return f"click_on:{name}"
+    return f"click_on:{not case_insensitive}:{name}"
 
 
 @gui.command()
@@ -498,14 +508,15 @@ def gui_run_all(ctx: click.Context, actions: list[str], install_missing: bool):
         if "init" in action:
             gui.__enter__()
         if "assert_text" in action:
-            assert_text = action.split(":", 1)[1]
-            gui.assert_text(assert_text)
+            case_sensitive, assert_text = action.split(":", 2)[1:]
+            gui.assert_text(assert_text, case_sensitive=eval(case_sensitive))
         if "assert_no_text" in action:
-            assert_text = action.split(":", 1)[1]
-            gui.assert_no_text(assert_text)
+            case_sensitive, assert_text = action.split(":", 2)[1:]
+            gui.assert_no_text(
+                assert_text, case_sensitive=eval(case_sensitive))
         if "click_on" in action:
-            click_on = action.split(":", 1)[1]
-            gui.click_on(click_on)
+            case_sensitive, click_on = action.split(":", 2)[1:]
+            gui.click_on(click_on, case_sensitive=eval(case_sensitive))
         if "check_home_screen" in action:
             gui.check_home_screen()
         if "check_no_home_screen" in action:
