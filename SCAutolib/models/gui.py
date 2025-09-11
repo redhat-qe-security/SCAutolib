@@ -517,7 +517,8 @@ class GUI:
     @action_decorator
     @log_decorator
     def click_on(self, key: str, timeout: float = 30,
-                 min_thres: int = 120, max_thres: int = 160):
+                 min_thres: int = 120, max_thres: int = 160,
+                 case_sensitive: bool = True):
         """
         Simulates a mouse click on a GUI object containing the specified text.
         It repeatedly captures screenshots and
@@ -531,11 +532,28 @@ class GUI:
         :param timeout: The maximum time in seconds to wait for the ``key`` to
                         be found on the screen before raising an exception.
         :type timeout: float
+        :param min_thres: The initial threshold that will be use in the
+                          beginning for matching the words. Threshold would be
+                          increasing to with every failed iteration to the
+                          value of the max_thres value.
+                          Default 120.
+        :type min_thres: int
+        :param max_thres: The maximum threshold on which the script will do to
+                          match words.
+                          Default 160.
+        :type max_thres: int
+        :param case_sensitive: if True then the case of the key must be matched
+                               exactly, if False then the case is not relevant.
+                               Default True.
+        :type case_sensitive: bool
         :return: None
         :rtype: None
         :raises SCAutolibNotFound: If the ``key`` is not found in screenshots
                                    within the specified timeout.
         """
+
+        if not case_sensitive:
+            key = key.lower()
 
         logger.info(f"Trying to find key='{key}' to click on.")
 
@@ -570,13 +588,18 @@ class GUI:
             )
             df = image_to_data(screenshot, threshold=threshold)
 
+            if not case_sensitive:
+                df['text'] = df['text'].map(
+                    lambda x: x.lower() if isinstance(x,str) else x)
+
             selection = None
+            search_key = key
             if multiword:
                 words = " ".join(str(text) for text in df['text'])
                 if key in words:
-                    selection = df['text'] == key_list[0]
-            else:
-                selection = df['text'] == key
+                    search_key = key_list[0]
+
+            selection = df['text'] == search_key
 
             # If there is no matching word, try again
             if selection is not None and selection.sum() == 0:
@@ -669,7 +692,8 @@ class GUI:
 
     @log_decorator
     def assert_text(self, key: str, timeout: float = 0,
-                    min_thres: int = 120, max_thres: int = 160):
+                    min_thres: int = 120, max_thres: int = 160,
+                    case_sensitive: bool = True):
         """
         Asserts that a given text string (``key``) is found on the screen
         within a specified timeout. It repeatedly captures
@@ -682,6 +706,20 @@ class GUI:
                         be found. A zero timeout means only one screenshot
                         will be taken and evaluated.
         :type timeout: float
+        :param min_thres: The initial threshold that will be use in the
+                          beginning for matching the words. Threshold would be
+                          increasing to with every failed iteration to the
+                          value of the max_thres value.
+                          Default 120.
+        :type min_thres: int
+        :param max_thres: The maximum threshold on which the script will do to
+                          match words.
+                          Default 160.
+        :type max_thres: int
+        :param case_sensitive: if True then the case of the key must be matched
+                               exactly, if False then the case is not relevant.
+                               Default True.
+        :type case_sensitive: bool
         :return: None
         :rtype: None
         :raises SCAutolibNotFound: If the ``key`` is not found in any
@@ -689,6 +727,9 @@ class GUI:
         """
 
         logger.info(f"Trying to find key='{key}'")
+
+        if not case_sensitive:
+            key = key.lower()
 
         thres_diff = max_thres - min_thres
         if thres_diff < 0:
@@ -715,6 +756,12 @@ class GUI:
                     ( thres_diff * ( int(passed_time - start_time) / timeout ) )
                 )
             df = image_to_data(screenshot, threshold=threshold)
+
+            if not case_sensitive:
+                df['text'] = df['text'].map(
+                    lambda x: x.lower() if isinstance(x,str) else x)
+
+            selection = None
             if multiword:
                 words = " ".join(str(text) for text in df['text'])
                 if key in words:
@@ -723,7 +770,7 @@ class GUI:
                 selection = df['text'] == key
 
             # The key was found
-            if selection.sum() != 0:
+            if selection is not None and selection.sum() != 0:
                 return
 
             passed_time = time()
@@ -732,7 +779,8 @@ class GUI:
 
     @log_decorator
     def assert_no_text(self, key: str, timeout: float = 0,
-                       min_thres: int = 120, max_thres: int = 160):
+                       min_thres: int = 120, max_thres: int = 160,
+                       case_sensitive: bool = True):
         """
         Asserts that a given text string (`key`) is *not* found on the screen
         within a specified timeout. If the key is found in any screenshot
@@ -744,6 +792,20 @@ class GUI:
                         of the ``key``. A zero timeout means only one
                         screenshot will be taken and evaluated.
         :type timeout: float
+        :param min_thres: The initial threshold that will be use in the
+                          beginning for matching the words. Threshold would be
+                          increasing to with every failed iteration to the
+                          value of the max_thres value.
+                          Default 120.
+        :type min_thres: int
+        :param max_thres: The maximum threshold on which the script will do to
+                          match words.
+                          Default 160.
+        :type max_thres: int
+        :param case_sensitive: if True then the case of the key must be matched
+                               exactly, if False then the case is not relevant.
+                               Default True.
+        :type case_sensitive: bool
         :return: None
         :rtype: None
         :raises SCAutolibNotFound: If the ``key`` is found in any screenshot
@@ -752,6 +814,9 @@ class GUI:
 
         logger.info(f"Trying to find key='{key}'"
                     " (it should not be in the screenshot)")
+
+        if not case_sensitive:
+            key = key.lower()
 
         thres_diff = max_thres - min_thres
         if thres_diff < 0:
@@ -779,6 +844,11 @@ class GUI:
                 )
             df = image_to_data(screenshot, threshold=threshold)
 
+            if not case_sensitive:
+                df['text'] = df['text'].map(
+                    lambda x: x.lower() if isinstance(x,str) else x)
+
+            selection = None
             if multiword:
                 words = " ".join(str(text) for text in df['text'])
                 if key in words:
@@ -789,7 +859,7 @@ class GUI:
                 selection = df['text'] == key
 
                 # The key was found, but should not be
-                if selection.sum() != 0:
+                if selection is not None and selection.sum() != 0:
                     raise SCAutolibNotFound(
                         f"The key='{key}' was found "
                         f"in the screenshot {screenshot}")
