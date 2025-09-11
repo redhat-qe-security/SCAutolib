@@ -802,8 +802,8 @@ class GUI:
         Checks for the presence or absence of a specific string on the screen
         to determine if the displayed GUI is the system's "home screen" or
         desktop. It adapts the text to search for based
-        on the detected Linux distribution (e.g., "tosearch" for Fedora,
-        "Activities" for CentOS and RHEL).
+        on the detected Linux distribution (e.g., "to search" for Fedora >= 42,
+        "tosearch" for Fedora < 42, "Activities" for CentOS and RHEL).
 
         :param polarity: If ``True``, it asserts that the home screen indicator
                          text is present. If ``False``, it asserts that the
@@ -816,14 +816,16 @@ class GUI:
         """
 
         if polarity is True:
-            func_str = 'assert_text'
+            func_str = "assert_text"
         else:
-            func_str = 'assert_no_text'
+            func_str = "assert_no_text"
 
-        if isDistro('fedora'):
-            check_str = 'tosearch'
+        if isDistro("fedora", ">=42"):
+            check_str = "to search"
+        elif isDistro("fedora"):
+            check_str = "tosearch"
         else:
-            check_str = 'Activities'
+            check_str = "Activities"
 
         func = getattr(self, func_str)
         func(check_str, timeout=20)
