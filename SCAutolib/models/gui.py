@@ -14,6 +14,7 @@ import inspect
 from time import sleep, time
 from pathlib import Path
 from typing import Callable
+from typing import Union
 
 import cv2
 import keyboard
@@ -412,6 +413,19 @@ class GUI:
         self.screenshot_directory = self.html_directory.joinpath("screenshots")
         # will create both dirs
         self.screenshot_directory.mkdir(parents=True, exist_ok=True)
+
+        # Code for image matching and asserting
+        self.match_directory = self.html_directory.joinpath("image_matches")
+        self.match_directory.mkdir(parents=True, exist_ok=True)
+
+        taken_image_ids = [int(str(image).split('/')[-1].split('.')[0])
+                           for image in Path(self.match_directory).iterdir()]
+
+        match_num = 1
+        if len(taken_image_ids) > 0:
+            taken_image_ids.sort(reverse=True)
+            match_num = taken_image_ids[0] + 1
+        self.match_image_id = match_num
 
         self.html_file = self.html_directory.joinpath("index.html")
         if not self.html_file.exists():
@@ -863,6 +877,181 @@ class GUI:
                     raise SCAutolibNotFound(
                         f"The key='{key}' was found "
                         f"in the screenshot {screenshot}")
+
+            passed_time = time()
+
+    def assert_image(self, img_path: Union[str, Path], timeout: float = 0,
+                     start_thres: float = .85, end_thres: float = .8):
+        """
+        Asserts that a given image (taken from a path) is found on the screen
+        within a specified timeout. If the image is found in any screenshot
+        during the monitoring period, an exception is raised.
+
+        :param img_path: The path of the image that should be found in the
+                         screenshots.
+        :type img_path: str or Path
+        :param timeout: The maximum time in seconds to monitor for the presense
+                        of the image. A zero timeout means only one
+                        screenshot will be taken and evaluated.
+        :type timeout: float
+        :param start_thres: The initial threshold that will be use in the
+                            beginning for matching the image. Threshold would
+                            be increasing to with every failed iteration to the
+                            value of the end_thres value if timeout is
+                            specified.
+                            Default 0.85.
+        :type start_thres: float
+        :param end_thres: The final threshold on which the script will do to
+                          match the image.
+                          Default 0.80.
+        :type end_thres: float
+        :return: None
+        :rtype: None
+        :raises SCAutolibNotFound: If the image is not found in any screenshot
+                                   within the specified timeout.
+        """
+
+        logger.info(f"Trying to match image from '{img_path}'"
+                    " (it should be in the screenshot)")
+
+        thres_diff = start_thres - end_thres
+        if thres_diff < 0:
+            raise SCAutolibGUIException(
+                "Image start_thres cannot be less than end_thres.")
+
+        threshold = start_thres
+
+        start_time = time()
+        end_time = start_time + timeout
+
+        image_found = False
+        first = True
+        passed_time = start_time
+        while first or passed_time < end_time:
+            first = False
+
+            screenshot = self.screen.screenshot()
+            img_rgb = cv2.imread(screenshot)
+            template = cv2.imread(img_path)
+            w, h = template.shape[:-1]
+
+            res = cv2.matchTemplate(img_rgb, template, cv2.TM_CCOEFF_NORMED)
+            if timeout:
+                threshold = (
+                    start_thres -
+                    ( thres_diff * ( int(passed_time - start_time) / timeout ) )
+                )
+            logger.debug(f"Using threshold {threshold} for image matching.")
+            loc = np.where(res >= threshold)
+            for pt in zip(*loc[::-1]):  # Switch columns and rows
+                image_found = True
+                cv2.rectangle(img_rgb, pt, (pt[0] + w, pt[1] + h), (0, 0, 255), 1)
+
+            image_path = self.match_directory.joinpath(
+                f"{self.match_image_id}.png")
+            cv2.imwrite(image_path, img_rgb)
+            logger.debug(f"Saved image with match number {self.match_image_id}.")
+
+            if self.html_file:
+                with open(self.html_file, 'a') as fp:
+                    fp.write(
+                        f"<img src=\"screenshots/{self.match_image_id}.png\" "
+                        f"alt=\"Image match number {self.match_image_id}\">"
+                )
+
+            if image_found:
+                break
+
+            passed_time = time()
+
+        if not image_found:
+            raise SCAutolibNotFound(f"Image from '{img_path}' was not found "
+                                    f"in the screenshot {screenshot}. "
+                                    f"Check {image_path}.")
+
+    def assert_no_image(self, img_path: Union[str, Path], timeout: float = 0,
+                        start_thres: float = .85, end_thres: float = .8):
+        """
+        Asserts that a given image (taken from a path) is *not* found on the
+        screen within a specified timeout. If the image is found in any
+        screenshot during the monitoring period, an exception is raised.
+
+        :param img_path: The path of the image that should be found in the
+                         screenshots.
+        :type img_path: str or Path
+        :param timeout: The maximum time in seconds to monitor for the presense
+                        of the image. A zero timeout means only one
+                        screenshot will be taken and evaluated.
+        :type timeout: float
+        :param start_thres: The initial threshold that will be use in the
+                            beginning for matching the image. Threshold would
+                            be increasing to with every failed iteration to the
+                            value of the end_thres value if timeout is
+                            specified.
+                            Default 0.85.
+        :type start_thres: float
+        :param end_thres: The final threshold on which the script will do to
+                          match the image.
+                          Default 0.80.
+        :type end_thres: float
+        :return: None
+        :rtype: None
+        :raises SCAutolibNotFound: If the image is not found in any screenshot
+                                   within the specified timeout.
+        """
+
+        logger.info(f"Trying to match image from '{img_path}'"
+                    " (it should not be in the screenshot)")
+
+        thres_diff = start_thres - end_thres
+        if thres_diff < 0:
+            raise SCAutolibGUIException(
+                "Image start_thres cannot be less than end_thres.")
+
+        threshold = start_thres
+
+        start_time = time()
+        end_time = start_time + timeout
+
+        image_found = False
+        first = True
+        passed_time = start_time
+        while first or passed_time < end_time:
+            first = False
+
+            screenshot = self.screen.screenshot()
+            img_rgb = cv2.imread(screenshot)
+            template = cv2.imread(img_path)
+            w, h = template.shape[:-1]
+
+            res = cv2.matchTemplate(img_rgb, template, cv2.TM_CCOEFF_NORMED)
+            if timeout:
+                threshold = (
+                    start_thres -
+                    ( thres_diff * ( int(passed_time - start_time) / timeout ) )
+                )
+            logger.debug(f"Using threshold {threshold} for image matching.")
+            loc = np.where(res >= threshold)
+            for pt in zip(*loc[::-1]):  # Switch columns and rows
+                image_found = True
+                cv2.rectangle(img_rgb, pt, (pt[0] + w, pt[1] + h), (0, 0, 255), 1)
+
+            image_path = self.match_directory.joinpath(
+                f"{self.match_image_id}.png")
+            cv2.imwrite(image_path, img_rgb)
+            logger.debug(f"Saved image with match number {self.match_image_id}.")
+
+            if self.html_file:
+                with open(self.html_file, 'a') as fp:
+                    fp.write(
+                        f"<img src=\"screenshots/{self.match_image_id}.png\" "
+                        f"alt=\"Image match number {self.match_image_id}\">"
+                )
+
+            if image_found:
+                raise SCAutolibNotFound(f"Image from '{img_path}' was found "
+                                        f"in the screenshot {screenshot}. "
+                                        f"Check {image_path}.")
 
             passed_time = time()
 

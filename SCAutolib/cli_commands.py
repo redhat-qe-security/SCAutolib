@@ -373,6 +373,9 @@ def assert_text(name: str, no: bool, case_insensitive: bool):
     :param no: If ``True``, this reverses the assertion, checking that the text
                is *not* found on the screen.
     :type no: bool
+    :param case_insensitive: If ``True``, then the search of the text will be
+                             case insensitive
+    :type case_insensitive: bool
     :return: A string representing the assertion action to be performed by the
              ``gui_run_all`` callback (e.g., ``"assert_text:ExpectedText"`` or
              ``"assert_no_text:UnexpectedText"``).
@@ -381,6 +384,33 @@ def assert_text(name: str, no: bool, case_insensitive: bool):
     if no:
         return f"assert_no_text:{not case_insensitive}:{name}"
     return f"assert_text:{not case_insensitive}:{name}"
+
+
+@gui.command()
+@click.option("--no",
+              required=False,
+              default=False,
+              is_flag=True,
+              help="Reverse the action")
+@click.argument("path")
+def assert_image(path: str, no: bool):
+    """
+    Asserts the presence or absence of a specific image on the
+    currently displayed GUI screen.
+
+    :param path: The text string to search for on the screen.
+    :type path: str
+    :param no: If ``True``, this reverses the assertion, checking that the text
+               is *not* found on the screen.
+    :type no: bool
+    :return: A string representing the assertion action to be performed by the
+             ``gui_run_all`` callback (e.g., ``"assert_image:ImagePath"`` or
+             ``"assert_no_image:ImagePath"``).
+    :rtype: str
+    """
+    if no:
+        return f"assert_no_image:{path}"
+    return f"assert_image:{path}"
 
 
 @gui.command()
@@ -398,6 +428,9 @@ def click_on(name: str, case_insensitive: bool):
     :param name: The string text content of the GUI object that should be
                  clicked.
     :type name: str
+    :param case_insensitive: If ``True``, then the search of the text will be
+                             case insensitive
+    :type case_insensitive: bool
     :return: A string representing the click action to be performed by the
              ``gui_run_all`` callback (e.g., ``"click_on:ButtonLabel"``).
     :rtype: str
@@ -507,27 +540,33 @@ def gui_run_all(ctx: click.Context, actions: list[str], install_missing: bool):
         logger.debug(f"Processing GUI CLI option: {action}...")
         if "init" in action:
             gui.__enter__()
-        if "assert_text" in action:
+        elif "assert_text" in action:
             case_sensitive, assert_text = action.split(":", 2)[1:]
             gui.assert_text(assert_text, case_sensitive=eval(case_sensitive))
-        if "assert_no_text" in action:
+        elif "assert_no_text" in action:
             case_sensitive, assert_text = action.split(":", 2)[1:]
             gui.assert_no_text(
                 assert_text, case_sensitive=eval(case_sensitive))
-        if "click_on" in action:
+        elif "assert_image" in action:
+            image_path = action.split(":", 1)[1]
+            gui.assert_image(image_path)
+        elif "assert_no_image" in action:
+            image_path = action.split(":", 1)[1]
+            gui.assert_no_image(image_path, timeout=5)
+        elif "click_on" in action:
             case_sensitive, click_on = action.split(":", 2)[1:]
             gui.click_on(click_on, case_sensitive=eval(case_sensitive))
-        if "check_home_screen" in action:
+        elif "check_home_screen" in action:
             gui.check_home_screen()
-        if "check_no_home_screen" in action:
+        elif "check_no_home_screen" in action:
             gui.check_home_screen(False)
-        if "kb_send" in action:
+        elif "kb_send" in action:
             params = action.split(":", 1)[1].split()[0]
             gui.kb_send(params)
-        if "kb_write" in action:
+        elif "kb_write" in action:
             params = action.split(":", 1)[1].split()[0]
             gui.kb_write(params)
-        if "done" in action:
+        elif "done" in action:
             gui.__exit__(None, None, None)
             ctx.obj["CONTROLLER"].cleanup()
 
