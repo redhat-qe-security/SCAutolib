@@ -124,7 +124,7 @@ class Screen:
             "gsettings", "set", "org.gnome.desktop.screensaver",
             "idle-activation-enabled", "false"
         ])
-        logger.debug(f"Screensaver have been disabled.")
+        logger.debug("Screensaver have been disabled.")
 
     def enable_screensaver(self):
         """
@@ -137,7 +137,8 @@ class Screen:
             "gsettings", "set", "org.gnome.desktop.screensaver",
             "idle-activation-enabled", "true"
         ])
-        logger.debug(f"Screensaver have been enabled.")
+        logger.debug("Screensaver have been enabled.")
+
 
 class Mouse:
     """
@@ -224,6 +225,7 @@ class Mouse:
         sleep(self.CLICK_HOLD_TIME)
         # release the button
         self.device.emit(uinput_button, 0)
+
 
 def image_to_data(path: str, threshold: int = 120):
     """
@@ -392,7 +394,7 @@ class GUI:
         elif from_cli:
             run_dirs = [run_dir for run_dir in self.html_directory.iterdir()
                         if run_dir.is_dir() and "cli_gui" in run_dir.name]
-            run_dirs.sort(key= lambda x: x.name, reverse=True)
+            run_dirs.sort(key=lambda x: x.name, reverse=True)
 
             last_run_dir = run_dirs[0] if len(run_dirs) > 0 else None
             if last_run_dir and not last_run_dir.joinpath('.done').exists():
@@ -597,14 +599,15 @@ class GUI:
                 first_scr = screenshot
 
             threshold = int(
-                min_thres +
-                ( thres_diff * ( int(passed_time - start_time) / timeout ) )
+                min_thres + (
+                    thres_diff * (int(passed_time - start_time) / timeout)
+                )
             )
             df = image_to_data(screenshot, threshold=threshold)
 
             if not case_sensitive:
                 df['text'] = df['text'].map(
-                    lambda x: x.lower() if isinstance(x,str) else x)
+                    lambda x: x.lower() if isinstance(x, str) else x)
 
             selection = None
             search_key = key
@@ -766,14 +769,15 @@ class GUI:
 
             if timeout:
                 threshold = int(
-                    min_thres +
-                    ( thres_diff * ( int(passed_time - start_time) / timeout ) )
+                    min_thres + (
+                        thres_diff * (int(passed_time - start_time) / timeout)
+                    )
                 )
             df = image_to_data(screenshot, threshold=threshold)
 
             if not case_sensitive:
                 df['text'] = df['text'].map(
-                    lambda x: x.lower() if isinstance(x,str) else x)
+                    lambda x: x.lower() if isinstance(x, str) else x)
 
             selection = None
             if multiword:
@@ -847,20 +851,21 @@ class GUI:
         first = True
         passed_time = start_time
         while first or passed_time < end_time:
-            first=False
+            first = False
             # Capture the screenshot
             screenshot = self.screen.screenshot()
 
             if timeout:
                 threshold = int(
-                    min_thres +
-                    ( thres_diff * ( int(passed_time - start_time) / timeout ) )
+                    min_thres + (
+                        thres_diff * (int(passed_time - start_time) / timeout)
+                    )
                 )
             df = image_to_data(screenshot, threshold=threshold)
 
             if not case_sensitive:
                 df['text'] = df['text'].map(
-                    lambda x: x.lower() if isinstance(x,str) else x)
+                    lambda x: x.lower() if isinstance(x, str) else x)
 
             selection = None
             if multiword:
@@ -890,7 +895,7 @@ class GUI:
         :param img_path: The path of the image that should be found in the
                          screenshots.
         :type img_path: str or Path
-        :param timeout: The maximum time in seconds to monitor for the presense
+        :param timeout: The maximum time in seconds to monitor for the presence
                         of the image. A zero timeout means only one
                         screenshot will be taken and evaluated.
         :type timeout: float
@@ -938,14 +943,16 @@ class GUI:
             res = cv2.matchTemplate(img_rgb, template, cv2.TM_CCOEFF_NORMED)
             if timeout:
                 threshold = (
-                    start_thres -
-                    ( thres_diff * ( int(passed_time - start_time) / timeout ) )
+                    start_thres - (
+                        thres_diff * (int(passed_time - start_time) / timeout)
+                    )
                 )
             logger.debug(f"Using threshold {threshold} for image matching.")
             loc = np.where(res >= threshold)
             for pt in zip(*loc[::-1]):  # Switch columns and rows
                 image_found = True
-                cv2.rectangle(img_rgb, pt, (pt[0] + w, pt[1] + h), (0, 0, 255), 1)
+                cv2.rectangle(
+                    img_rgb, pt, (pt[0] + w, pt[1] + h), (0, 0, 255), 1)
 
             image_path = self.match_directory.joinpath(
                 f"{self.match_image_id}.png")
@@ -957,7 +964,7 @@ class GUI:
                     fp.write(
                         f"<img src=\"screenshots/{self.match_image_id}.png\" "
                         f"alt=\"Image match number {self.match_image_id}\">"
-                )
+                    )
 
             if image_found:
                 break
@@ -979,7 +986,7 @@ class GUI:
         :param img_path: The path of the image that should be found in the
                          screenshots.
         :type img_path: str or Path
-        :param timeout: The maximum time in seconds to monitor for the presense
+        :param timeout: The maximum time in seconds to monitor for the presence
                         of the image. A zero timeout means only one
                         screenshot will be taken and evaluated.
         :type timeout: float
@@ -1027,14 +1034,16 @@ class GUI:
             res = cv2.matchTemplate(img_rgb, template, cv2.TM_CCOEFF_NORMED)
             if timeout:
                 threshold = (
-                    start_thres -
-                    ( thres_diff * ( int(passed_time - start_time) / timeout ) )
+                    start_thres - (
+                        thres_diff * (int(passed_time - start_time) / timeout)
+                    )
                 )
             logger.debug(f"Using threshold {threshold} for image matching.")
             loc = np.where(res >= threshold)
             for pt in zip(*loc[::-1]):  # Switch columns and rows
                 image_found = True
-                cv2.rectangle(img_rgb, pt, (pt[0] + w, pt[1] + h), (0, 0, 255), 1)
+                cv2.rectangle(
+                    img_rgb, pt, (pt[0] + w, pt[1] + h), (0, 0, 255), 1)
 
             image_path = self.match_directory.joinpath(
                 f"{self.match_image_id}.png")
@@ -1046,7 +1055,7 @@ class GUI:
                     fp.write(
                         f"<img src=\"screenshots/{self.match_image_id}.png\" "
                         f"alt=\"Image match number {self.match_image_id}\">"
-                )
+                    )
 
             if image_found:
                 raise SCAutolibNotFound(f"Image from '{img_path}' was found "

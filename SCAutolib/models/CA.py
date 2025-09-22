@@ -25,7 +25,7 @@ from socket import gethostname
 
 from SCAutolib import TEMPLATES_DIR, logger, run, LIB_DIR, LIB_DUMP_CAS, \
     LIB_BACKUP
-from SCAutolib.exceptions import SCAutolibException, SCAutolibUnkownType, \
+from SCAutolib.exceptions import SCAutolibException, SCAutolibUnknownType, \
     SCAutolibIPAException, SCAutolibFileNotExists
 from SCAutolib.models.file import OpensslCnf
 from SCAutolib.enums import CAType
@@ -189,7 +189,7 @@ class BaseCA:
         :return: An instance of the specific CA class loaded with data from the
                  JSON file.
         :rtype: SCAutolib.models.CA.BaseCA
-        :raises SCAutolibUnkownType: If the CA object has an unknown type in the
+        :raises SCAutolibUnknownType: If the CA object has an unknown type in the
                                      JSON file, or if the data is invalid for
                                      IPA CA initialization.
         """
@@ -209,17 +209,17 @@ class BaseCA:
         elif cnt["ca_type"] == CAType.local:
             ca = LocalCA(root_dir=cnt["root_dir"])
         else:
-            raise SCAutolibUnkownType("CA object has unknown type. Only ipa, "
-                                     "custom and local types are supported. CA "
-                                     "object not loaded")
+            raise SCAutolibUnknownType("CA object has unknown type. Only ipa, "
+                                       "custom and local types are supported. "
+                                       "CA object not loaded")
 
         logger.debug(f"CA {cnt['name']} is loaded from file {json_file}")
         return ca
 
     @staticmethod
     def factory(path: Path = None, cnf: OpensslCnf = None,
-               card_data: dict = None, ca_name: str = None,
-               create: bool = False):
+                card_data: dict = None, ca_name: str = None,
+                create: bool = False):
         """
         A factory function to create or load Certificate Authority (CA) objects
         based on the provided parameters. It can initialize

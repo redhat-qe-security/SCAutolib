@@ -22,7 +22,7 @@ class SCAutolibGUIException(SCAutolibException):
     """
     Exception raised by GUI functions when something is wrong.
     """
-    default = "Graphical enviroment encountered and error"
+    default = "Graphical environment encountered and error"
 
     def __init__(self, msg=None):
         msg = self.default if msg is None else msg
@@ -115,15 +115,16 @@ class SCAutolibNoTemplate(SCAutolibException):
         super().__init__(msg)
 
 
-class SCAutolibUnkownType(SCAutolibException):
+class SCAutolibUnknownType(SCAutolibException):
     """
     Exception raised when a type given is not in the enum.
     """
-    default = "Unkown type"
+    default = "Unknown type"
 
     def __init__(self, msg=None):
         msg = self.default if msg is None else msg
         super().__init__(msg)
+
 
 class SCAutolibNotFound(SCAutolibException):
     """

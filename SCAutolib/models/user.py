@@ -16,7 +16,7 @@ from pathlib import Path, PosixPath
 
 from SCAutolib import run, logger, LIB_DUMP_USERS
 from SCAutolib.exceptions import SCAutolibException, SCAutolibIPAException, \
-    SCAutolibUnkownType, SCAutolibFileNotExists
+    SCAutolibUnknownType, SCAutolibFileNotExists
 from SCAutolib.models.CA import IPAServerCA
 from SCAutolib.enums import UserType
 
@@ -136,7 +136,7 @@ class User:
         :raises SCAutolibFileNotExists: If user file is not found.
         :raises SCAutolibIPAException: if ``ipa_server`` is not provided for an
                                        IPA user.
-        :raises SCAutolibUnkownType: If an unknown user type is encountered in
+        :raises SCAutolibUnknownType: If an unknown user type is encountered in
                                     the JSON data.
         """
 
@@ -166,7 +166,8 @@ class User:
                            password=cnt["password"])
 
         else:
-            raise SCAutolibUnkownType(f"Unknown user type: {cnt['user_type']}")
+            raise SCAutolibUnknownType(
+                f"Unknown user type: {cnt['user_type']}")
 
         logger.debug(f"User {user.__class__} is loaded: {user.__dict__}")
 
