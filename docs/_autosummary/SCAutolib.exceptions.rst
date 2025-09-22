@@ -3,22 +3,22 @@ SCAutolib.exceptions
 
 .. automodule:: SCAutolib.exceptions
 
-   
-   
-   
 
-   
-   
-   
 
-   
-   
-   
 
-   
-   
+
+
+
+
+
+
+
+
+
+
+
    .. rubric:: Exceptions
-   
+
    .. autoexception:: SCAutolibException
       :members:
    .. autoexception:: SCAutolibFileExists
@@ -37,12 +37,12 @@ SCAutolib.exceptions
       :members:
    .. autoexception:: SCAutolibNotFound
       :members:
-   .. autoexception:: SCAutolibUnkownType
+   .. autoexception:: SCAutolibUnknownType
       :members:
    .. autoexception:: SCAutolibWrongConfig
       :members:
-   
-   
+
+
 
 
 

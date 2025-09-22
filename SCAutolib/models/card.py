@@ -17,11 +17,12 @@ from pathlib import Path
 from traceback import format_exc
 
 from SCAutolib import run, logger, TEMPLATES_DIR, LIB_DUMP_CARDS
-from SCAutolib.exceptions import SCAutolibException, SCAutolibUnkownType, \
+from SCAutolib.exceptions import SCAutolibException, SCAutolibUnknownType, \
     SCAutolibIPAException, SCAutolibFileNotExists
 from SCAutolib.enums import CardType, UserType
 
 from SCAutolib.models.file import SSSDConf
+
 
 class Card:
     """
@@ -118,7 +119,7 @@ class Card:
         :return: An instance of the specific card class loaded with data from
                  the JSON file.
         :rtype: SCAutolib.models.card.Card
-        :raises SCAutolibUnkownType: If an unknown card type is encountered in
+        :raises SCAutolibUnknownType: If an unknown card type is encountered in
                                      the JSON data.
         :raises FileExistsError: If the card file is not found.
         """
@@ -140,7 +141,8 @@ class Card:
         elif cnt["card_type"] == CardType.physical:
             card = PhysicalCard(cnt)
         else:
-            raise SCAutolibUnkownType(f"Unknown card type: {cnt['card_type']}")
+            raise SCAutolibUnknownType(
+                f"Unknown card type: {cnt['card_type']}")
 
         if update_sssd:
             sssd_conf = SSSDConf()
@@ -152,6 +154,7 @@ class Card:
             run(["systemctl", "restart", "sssd"])
 
         return card
+
 
 class VirtualCard(Card):
     """
