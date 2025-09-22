@@ -12,7 +12,7 @@ SCAutolib.cli\_commands
    .. rubric:: Functions
    
    .. autofunction:: check_conf_path
-   .. autofunction:: run_all
+   .. autofunction:: gui_run_all
    
    
 
