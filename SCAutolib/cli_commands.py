@@ -538,35 +538,38 @@ def gui_run_all(ctx: click.Context, actions: list[str], install_missing: bool):
     gui = GUI(from_cli=True)
     for action in actions:
         logger.debug(f"Processing GUI CLI option: {action}...")
-        if "init" in action:
+
+        try:
+            keyword, params = action.split(":", 1)
+        except ValueError as e:
+            keyword = action
+            params = None
+
+        if keyword == "init":
             gui.__enter__()
-        elif "assert_text" in action:
-            case_sensitive, assert_text = action.split(":", 2)[1:]
+        elif keyword == "assert_text":
+            case_sensitive, assert_text = params.split(":", 1)
             gui.assert_text(assert_text, case_sensitive=eval(case_sensitive))
-        elif "assert_no_text" in action:
-            case_sensitive, assert_text = action.split(":", 2)[1:]
+        elif keyword == "assert_no_text":
+            case_sensitive, assert_text = params.split(":", 1)
             gui.assert_no_text(
                 assert_text, case_sensitive=eval(case_sensitive))
-        elif "assert_image" in action:
-            image_path = action.split(":", 1)[1]
-            gui.assert_image(image_path)
-        elif "assert_no_image" in action:
-            image_path = action.split(":", 1)[1]
-            gui.assert_no_image(image_path, timeout=5)
-        elif "click_on" in action:
-            case_sensitive, click_on = action.split(":", 2)[1:]
+        elif keyword == "assert_image":
+            gui.assert_image(params)
+        elif keyword == "assert_no_image":
+            gui.assert_no_image(params)
+        elif keyword == "click_on":
+            case_sensitive, click_on = params.split(":", 1)
             gui.click_on(click_on, case_sensitive=eval(case_sensitive))
-        elif "check_home_screen" in action:
+        elif keyword == "check_home_screen":
             gui.check_home_screen()
-        elif "check_no_home_screen" in action:
+        elif keyword == "check_no_home_screen":
             gui.check_home_screen(False)
-        elif "kb_send" in action:
-            params = action.split(":", 1)[1].split()[0]
+        elif keyword == "kb_send":
             gui.kb_send(params)
-        elif "kb_write" in action:
-            params = action.split(":", 1)[1].split()[0]
+        elif keyword == "kb_write":
             gui.kb_write(params)
-        elif "done" in action:
+        elif keyword == "done":
             gui.__exit__(None, None, None)
             ctx.obj["CONTROLLER"].cleanup()
 
