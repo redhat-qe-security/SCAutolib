@@ -21,9 +21,23 @@ SCAutolib.exceptions
    
    .. autoexception:: SCAutolibException
       :members:
+   .. autoexception:: SCAutolibFileExists
+      :members:
+   .. autoexception:: SCAutolibFileNotExists
+      :members:
+   .. autoexception:: SCAutolibGUIException
+      :members:
+   .. autoexception:: SCAutolibIPAException
+      :members:
    .. autoexception:: SCAutolibMissingCA
       :members:
    .. autoexception:: SCAutolibMissingUserConfig
+      :members:
+   .. autoexception:: SCAutolibNoTemplate
+      :members:
+   .. autoexception:: SCAutolibNotFound
+      :members:
+   .. autoexception:: SCAutolibUnkownType
       :members:
    .. autoexception:: SCAutolibWrongConfig
       :members:

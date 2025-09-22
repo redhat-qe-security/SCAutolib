@@ -9,6 +9,10 @@
 
    
    
+   .. rubric:: Functions
+   
+   .. autofunction:: run
+   
    
 
    
@@ -27,6 +31,10 @@
    :template: custom-module-template.rst
    :recursive:
 
-   SCAutolib
-   setup
+   cli_commands
+   controller
+   enums
+   exceptions
+   models
+   utils
 
