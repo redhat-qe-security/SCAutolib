@@ -576,7 +576,7 @@ class GUI:
         thres_diff = max_thres - min_thres
         if thres_diff < 0:
             raise SCAutolibGUIException(
-                "Image max_thres cannot be less than min_thres.")
+                "Image max_thres cannot be smaller than min_thres.")
 
         item = None
         first_scr = None
@@ -751,7 +751,7 @@ class GUI:
         thres_diff = max_thres - min_thres
         if thres_diff < 0:
             raise SCAutolibGUIException(
-                "Image max_thres cannot be less than min_thres.")
+                "Image max_thres cannot be smaller than min_thres.")
 
         key_list = key.split(" ")
         multiword = len(key_list) > 1
@@ -839,7 +839,7 @@ class GUI:
         thres_diff = max_thres - min_thres
         if thres_diff < 0:
             raise SCAutolibGUIException(
-                "Image max_thres cannot be less than min_thres.")
+                "Image max_thres cannot be smaller than min_thres.")
 
         key_list = key.split(" ")
         multiword = len(key_list) > 1
@@ -922,7 +922,7 @@ class GUI:
         thres_diff = start_thres - end_thres
         if thres_diff < 0:
             raise SCAutolibGUIException(
-                "Image start_thres cannot be less than end_thres.")
+                "Image start_thres cannot be smaller than end_thres.")
 
         threshold = start_thres
 
@@ -1013,7 +1013,7 @@ class GUI:
         thres_diff = start_thres - end_thres
         if thres_diff < 0:
             raise SCAutolibGUIException(
-                "Image start_thres cannot be less than end_thres.")
+                "Image start_thres cannot be smaller than end_thres.")
 
         threshold = start_thres
 
