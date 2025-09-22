@@ -541,7 +541,7 @@ def gui_run_all(ctx: click.Context, actions: list[str], install_missing: bool):
 
         try:
             keyword, params = action.split(":", 1)
-        except ValueError as e:
+        except ValueError:
             keyword = action
             params = None
 
