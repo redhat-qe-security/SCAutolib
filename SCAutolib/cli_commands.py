@@ -348,7 +348,7 @@ def init():
              GUI initialization action within the ``gui_run_all`` callback.
     :rtype: str
     """
-    return "init"
+    return ("init",)
 
 
 @gui.command()
@@ -387,8 +387,8 @@ def assert_text(name: str, no: bool, case_insensitive: bool, get_text: bool):
     :rtype: str
     """
     if no:
-        return f"assert_no_text:{not case_insensitive}:{name}"
-    return f"assert_text:{not case_insensitive}:{get_text}:{name}"
+        return ("assert_no_text", not case_insensitive, name)
+    return ("assert_text", not case_insensitive, get_text, name)
 
 
 @gui.command()
@@ -414,8 +414,8 @@ def assert_image(path: str, no: bool):
     :rtype: str
     """
     if no:
-        return f"assert_no_image:{path}"
-    return f"assert_image:{path}"
+        return ("assert_no_image", f"{path}")
+    return ("assert_image", f"{path}")
 
 
 @gui.command()
@@ -440,7 +440,7 @@ def click_on(name: str, case_insensitive: bool):
              ``gui_run_all`` callback (e.g., ``"click_on:ButtonLabel"``).
     :rtype: str
     """
-    return f"click_on:{not case_insensitive}:{name}"
+    return ("click_on", not case_insensitive, name)
 
 
 @gui.command()
@@ -464,8 +464,8 @@ def check_home_screen(no: bool):
     :rtype: str
     """
     if no:
-        return "check_no_home_screen"
-    return "check_home_screen"
+        return ("check_no_home_screen",)
+    return ("check_home_screen",)
 
 
 @gui.command()
@@ -481,7 +481,7 @@ def kb_send(keys: str):
              the ``gui_run_all`` callback (e.g., `"kb_send:enter"`).
     :rtype: str
     """
-    return f"kb_send:{keys}"
+    return ("kb_send", keys)
 
 
 @gui.command()
@@ -498,7 +498,7 @@ def kb_write(keys: str):
              the ``gui_run_all`` callback (e.g., `"kb_write:myusername"`).
     :rtype: str
     """
-    return f"kb_write:{keys}"
+    return ("kb_write", keys)
 
 
 @gui.command()
@@ -512,12 +512,12 @@ def done():
              GUI cleanup action within the ``gui_run_all`` callback.
     :rtype: str
     """
-    return "done"
+    return ("done",)
 
 
 @gui.result_callback()
 @click.pass_context
-def gui_run_all(ctx: click.Context, actions: list[str], install_missing: bool):
+def gui_run_all(ctx: click.Context, actions: list, install_missing: bool):
     """
     Executes all chained GUI test actions in the order they were provided on
     the command line. It initializes the graphical
@@ -545,7 +545,7 @@ def gui_run_all(ctx: click.Context, actions: list[str], install_missing: bool):
         logger.debug(f"Processing GUI CLI option: {action}...")
 
         try:
-            keyword, params = action.split(":", 1)
+            keyword, *params = action
         except ValueError:
             keyword = action
             params = None
@@ -553,27 +553,32 @@ def gui_run_all(ctx: click.Context, actions: list[str], install_missing: bool):
         if keyword == "init":
             gui.__enter__()
         elif keyword == "assert_text":
-            case_sensitive, get_text, assert_text = params.split(":", 2)
-            gui.assert_text(assert_text, case_sensitive=eval(case_sensitive), get_text=eval(get_text))
+            case_sensitive, get_text, assert_text = params
+            gui.assert_text(assert_text, case_sensitive=case_sensitive,
+                            get_text=get_text)
         elif keyword == "assert_no_text":
-            case_sensitive, assert_text = params.split(":", 1)
+            case_sensitive, assert_text = params
             gui.assert_no_text(
-                assert_text, case_sensitive=eval(case_sensitive))
+                assert_text, case_sensitive=case_sensitive)
         elif keyword == "assert_image":
-            gui.assert_image(params)
+            image, = params
+            gui.assert_image(image)
         elif keyword == "assert_no_image":
-            gui.assert_no_image(params)
+            image, = params
+            gui.assert_no_image(image)
         elif keyword == "click_on":
-            case_sensitive, click_on = params.split(":", 1)
-            gui.click_on(click_on, case_sensitive=eval(case_sensitive))
+            case_sensitive, click_on = params
+            gui.click_on(click_on, case_sensitive=case_sensitive)
         elif keyword == "check_home_screen":
             gui.check_home_screen()
         elif keyword == "check_no_home_screen":
             gui.check_home_screen(False)
         elif keyword == "kb_send":
-            gui.kb_send(params)
+            text, = params
+            gui.kb_send(text)
         elif keyword == "kb_write":
-            gui.kb_write(params)
+            text, = params
+            gui.kb_write(text)
         elif keyword == "done":
             gui.__exit__(None, None, None)
             ctx.obj["CONTROLLER"].cleanup()
