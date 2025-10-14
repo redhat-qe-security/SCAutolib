@@ -710,7 +710,7 @@ class GUI:
     @log_decorator
     def assert_text(self, key: str, timeout: float = 0,
                     min_thres: int = 120, max_thres: int = 160,
-                    case_sensitive: bool = True):
+                    case_sensitive: bool = True, get_text: bool = False):
         """
         Asserts that a given text string (``key``) is found on the screen
         within a specified timeout. It repeatedly captures
@@ -737,6 +737,10 @@ class GUI:
                                exactly, if False then the case is not relevant.
                                Default True.
         :type case_sensitive: bool
+        :param get_text: if True then the text found on the screen will be
+                         output to the log.
+                         Default False.
+        :type get_text: bool
         :return: None
         :rtype: None
         :raises SCAutolibNotFound: If the ``key`` is not found in any
@@ -778,6 +782,16 @@ class GUI:
             if not case_sensitive:
                 df['text'] = df['text'].map(
                     lambda x: x.lower() if isinstance(x, str) else x)
+
+            if get_text:
+                text_dump = ["|"]
+                for text in df['text']:
+                    if type(text) is str:
+                        text_dump.append(text)
+                    elif type(text) is not str and text_dump[-1] != "|":
+                        text_dump.append("|")
+                text_dump.pop(0)
+                logger.info(f"Text dump='{' '.join(text_dump)}'")
 
             selection = None
             if multiword:
