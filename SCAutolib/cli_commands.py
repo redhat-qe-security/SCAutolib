@@ -362,8 +362,13 @@ def init():
               default=False,
               is_flag=True,
               help="make the match of the words case insensitive.")
+@click.option("--get-text",
+              required=False,
+              default=False,
+              is_flag=True,
+              help="Log words found on screen regardless of match.")
 @click.argument("name")
-def assert_text(name: str, no: bool, case_insensitive: bool):
+def assert_text(name: str, no: bool, case_insensitive: bool, get_text: bool):
     """
     Asserts the presence or absence of a specific text string on the
     currently displayed GUI screen.
@@ -383,7 +388,7 @@ def assert_text(name: str, no: bool, case_insensitive: bool):
     """
     if no:
         return f"assert_no_text:{not case_insensitive}:{name}"
-    return f"assert_text:{not case_insensitive}:{name}"
+    return f"assert_text:{not case_insensitive}:{get_text}:{name}"
 
 
 @gui.command()
@@ -548,8 +553,8 @@ def gui_run_all(ctx: click.Context, actions: list[str], install_missing: bool):
         if keyword == "init":
             gui.__enter__()
         elif keyword == "assert_text":
-            case_sensitive, assert_text = params.split(":", 1)
-            gui.assert_text(assert_text, case_sensitive=eval(case_sensitive))
+            case_sensitive, get_text, assert_text = params.split(":", 2)
+            gui.assert_text(assert_text, case_sensitive=eval(case_sensitive), get_text=eval(get_text))
         elif keyword == "assert_no_text":
             case_sensitive, assert_text = params.split(":", 1)
             gui.assert_no_text(
