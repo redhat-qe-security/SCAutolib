@@ -113,32 +113,6 @@ class Screen:
         self.screenshot_num += 1
         return filename
 
-    def disable_screensaver(self):
-        """
-        Disable linux Gnome screensaver
-
-        :return: None
-        :rtype: None
-        """
-        run([
-            "gsettings", "set", "org.gnome.desktop.screensaver",
-            "idle-activation-enabled", "false"
-        ])
-        logger.debug("Screensaver have been disabled.")
-
-    def enable_screensaver(self):
-        """
-        Enable linux Gnome screensaver
-
-        :return: None
-        :rtype: None
-        """
-        run([
-            "gsettings", "set", "org.gnome.desktop.screensaver",
-            "idle-activation-enabled", "true"
-        ])
-        logger.debug("Screensaver have been enabled.")
-
 
 class Mouse:
     """
@@ -481,7 +455,6 @@ class GUI:
 
         # By restarting gdm, the system gets into defined state
         run(['systemctl', 'restart', 'gdm'], check=True)
-        self.screen.disable_screensaver()
         # Cannot screenshot before gdm starts displaying
         # This would break the display
         sleep(self.gdm_init_time)
@@ -514,7 +487,6 @@ class GUI:
             return
 
         run(['systemctl', 'stop', 'gdm'], check=True)
-        self.screen.enable_screensaver()
 
         with open(self.html_file, 'a') as fp:
             fp.write(
@@ -534,7 +506,8 @@ class GUI:
     @log_decorator
     def click_on(self, key: str, timeout: float = 30,
                  min_thres: int = 120, max_thres: int = 160,
-                 case_sensitive: bool = True):
+                 case_sensitive: bool = True,
+                 click_on_match: int = 1):
         """
         Simulates a mouse click on a GUI object containing the specified text.
         It repeatedly captures screenshots and
@@ -562,21 +535,29 @@ class GUI:
                                exactly, if False then the case is not relevant.
                                Default True.
         :type case_sensitive: bool
+        :param click_on_match: if multiple matches are found then click on
+                               the nth match.
+                               Default 0 (first match)
+        :type click_on_match: int
         :return: None
         :rtype: None
         :raises SCAutolibNotFound: If the ``key`` is not found in screenshots
                                    within the specified timeout.
         """
 
-        if not case_sensitive:
-            key = key.lower()
-
-        logger.info(f"Trying to find key='{key}' to click on.")
+        if click_on_match < 1:
+            raise SCAutolibGUIException(
+                "The match to click one should be more or equal to 1.")
 
         thres_diff = max_thres - min_thres
         if thres_diff < 0:
             raise SCAutolibGUIException(
                 "Image max_thres cannot be smaller than min_thres.")
+
+        if not case_sensitive:
+            key = key.lower()
+
+        logger.info(f"Trying to find key='{key}' to click on.")
 
         item = None
         first_scr = None
@@ -633,8 +614,9 @@ class GUI:
             # More than one word matches, choose the first match
             # Probably deterministic, but it should not be relied upon
             else:
-                logger.info('Found multiple matches')
-                item = df[selection].iloc[0]
+                logger.info('Found multiple matches. '
+                            f'Clicking on match number {click_on_match}.')
+                item = df[selection].iloc[click_on_match - 1]
                 break
 
         if item is None:
@@ -807,7 +789,7 @@ class GUI:
 
             passed_time = time()
 
-        raise SCAutolibNotFound('The key was not found.')
+        raise SCAutolibNotFound(f"The key='{key}' was not found.")
 
     @log_decorator
     def assert_no_text(self, key: str, timeout: float = 0,

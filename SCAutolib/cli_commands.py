@@ -17,8 +17,10 @@ from collections import OrderedDict
 
 from SCAutolib import logger, exceptions, schema_user
 from SCAutolib.controller import Controller
+from SCAutolib.models.card import Card
 from SCAutolib.enums import ReturnCode
 from SCAutolib.exceptions import SCAutolibException
+from SCAutolib.utils import dump_to_json
 
 
 def check_conf_path(conf: str):
@@ -168,15 +170,30 @@ def prepare(ctx: click.Context, gdm: bool, install_missing: bool,
 
 
 @cli.command()
-@click.option("--ca-type", "-t",
+@click.option("--prepare", "-P",
               required=False,
-              default='all',
-              type=click.Choice(['all', 'local', 'ipa'], case_sensitive=False),
-              show_default=True,
-              help="Type of the CA to be configured. If not set, all CA's "
-                   "from the config file would be configured")
+              default=False,
+              is_flag=True,
+              help="Prepare system for a card, including installing CA.")
+@click.option("--insert", "-I",
+              required=False,
+              default=False,
+              is_flag=True,
+              help="Inserts a card to the system.")
+@click.option("--remove", "-R",
+              required=False,
+              default=False,
+              is_flag=True,
+              help="Remove a card from the system.")
+@click.option("--restore", "-C",
+              required=False,
+              default=False,
+              is_flag=True,
+              help="Restore system from the prepare step.")
+@click.argument("card_name")
 @click.pass_context
-def setup_ca(ctx: click.Context, ca_type: str):
+def card(ctx: click.Context, card_name: str, prepare: bool, insert: bool,
+         remove: bool, restore: bool):
     """
     Configures Certificate Authorities (CAs) on the system from the
     configuration file. Can target 'all', 'local',
@@ -190,112 +207,21 @@ def setup_ca(ctx: click.Context, ca_type: str):
     :return: The command exits with a success code upon completion.
     :rtype: No return (exits the process).
     """
-    cnt = ctx.obj["CONTROLLER"]
-    if ca_type == 'all':
-        cnt.setup_local_ca(force=ctx.obj["FORCE"])
-        cnt.setup_ipa_client(force=ctx.obj["FORCE"])
-    elif ca_type == 'local':
-        cnt.setup_local_ca(force=ctx.obj["FORCE"])
-    elif ca_type == 'ipa':
-        cnt.setup_ipa_client(force=ctx.obj["FORCE"])
-    exit(ReturnCode.SUCCESS.value)
-
-
-@cli.command()
-@click.argument("name",
-                required=True,
-                default=None)
-@click.option("--card-dir", "-d",
-              required=False,
-              default=None,
-              help="Path to the directory where smart card should be created")
-@click.option("--card-type", "-t",
-              required=False,
-              default="virtual",
-              type=click.Choice(
-                  ["virtual", "real", "removinator"], case_sensitive=False),
-              show_default=True,
-              help="Type of the smart card to be created")
-@click.option("--passwd", "-p",
-              required=False,
-              default=None,
-              show_default=True,
-              help="Password for the user")
-@click.option("--pin", "-P",
-              required=False,
-              default=None,
-              show_default=True,
-              help="PIN for the smart card")
-@click.option("--user-type", "-T",
-              required=False,
-              default="local",
-              type=click.Choice(["local", "ipa"], case_sensitive=False),
-              show_default=True,
-              help="Type of the user to be created")
-@click.pass_context
-def setup_user(ctx: click.Context, name: str, card_dir: str, card_type: str,
-               passwd: str, pin: str, user_type: str):
-    """
-    Configures a user, optionally with smart card integration, from config
-    or CLI arguments. Handles CA initialization and user/card setup.
-
-    :param ctx: The Click context object.
-    :type ctx: click.Context
-    :param name: The username for the user to be configured or created.
-    :type name: str
-    :param card_dir: The file system path where the smart card's related files
-                     will be stored. Required if creating a new user via CLI
-                     without a config entry.
-    :type card_dir: str or None
-    :param card_type: The type of smart card to associate with the user.
-                      Options include ``virtual``, ``real`` (physical), or
-                      ``removinator``.
-    :type card_type: str
-    :param passwd: The password for the user. Required if creating a new user
-                   via CLI without a config entry.
-    :type passwd: str or None
-    :param pin: The PIN for the smart card associated with the user. Required
-                if creating a new user via CLI without a config entry.
-    :type pin: str or None
-    :param user_type: The type of user account to create: ``local`` system user
-                      or an ``ipa`` (Identity Management for Linux) user.
-    :type user_type: str
-    :return: The command exits with a success code or an error code upon
-             failure.
-    :rtype: No return (exits the process).
-    """
-    cnt = ctx.obj["CONTROLLER"]
-    logger.info(f"Start setup user {name}")
-    try:
-        user_dict = cnt.get_user_dict(name)
-    except exceptions.SCAutolibMissingUserConfig:
-        logger.warning(f"User {name} not found in config file, "
-                       f"trying to create a new one")
-        if not all([card_dir, card_type, passwd, pin, user_type]):
-            logger.error("Not all required arguments are set")
-            logger.error("Required arguments: --card-dir, --pin, --password")
-            exit(ReturnCode.ERROR.value)
-        user_dict = schema_user.validate(
-            {"name": name,
-             "card_dir": Path(card_dir),
-             "card_type": card_type,
-             "passwd": passwd,
-             "pin": pin,
-             "local": user_type == "local"})
-        logger.debug(f"User dict: {user_dict}")
-
-    try:
-        cnt.init_ca(user_dict["local"])
-    except exceptions.SCAutolibMissingCA:
-        logger.error("CA is not configured on the system")
-        exit(ReturnCode.MISSING_CA.value)
-
-    try:
-        user = cnt.setup_user(user_dict, ctx.obj["FORCE"])
-        cnt.enroll_card(user, ctx.obj["FORCE"])
-    except exceptions.SCAutolibException:
-        logger.error("Something went wrong")
+    card = Card.load(card_name=card_name)
+    if prepare:
+        card.__enter__()
+    elif insert:
+        card.insert()
+    elif remove:
+        card.remove()
+    elif restore:
+        card.restore_card_ca()
+        card.__exit__(None, None, None)
+    else:
+        logger.error(
+            "Some action (prepare, insert, remove or restore) is needed!")
         exit(ReturnCode.FAILURE.value)
+    dump_to_json(card)
     exit(ReturnCode.SUCCESS.value)
 
 
@@ -581,7 +507,7 @@ def gui_run_all(ctx: click.Context, actions: list, install_missing: bool):
             gui.kb_write(text)
         elif keyword == "done":
             gui.__exit__(None, None, None)
-            ctx.obj["CONTROLLER"].cleanup()
+            # ctx.obj["CONTROLLER"].cleanup()
 
 
 if __name__ == "__main__":

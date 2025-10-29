@@ -26,6 +26,7 @@ import time
 from schema import Schema, Use, Or, And, Optional
 
 from SCAutolib.enums import CardType, UserType
+from SCAutolib.exceptions import SCAutolibCommandFailed
 
 fmt = ("%(asctime)s %(name)s:%(module)s.%(funcName)s.%(lineno)d "
        "[%(levelname)s] %(message)s")
@@ -56,9 +57,11 @@ schema_cas = Schema(And(
     Use(dict),
     # Check that CA section contains at least one and maximum
     # two entries
-    lambda l: 1 <= len(l.keys()) <= 2,  # noqa: E741
-    {Optional("local_ca"): {
-        Optional("dir", default=Path("/etc/SCAutolib/ca")): Use(Path)},
+    lambda l: 1 <= len(l.keys()) <= 3,  # noqa: E741
+    {
+        Optional("local_ca"): {
+            Optional("dir", default=Path("/etc/SCAutolib/ca")): Use(Path)
+        },
         Optional("ipa"): {
             'admin_passwd': Use(str),
             'root_passwd': Use(str),
@@ -66,29 +69,39 @@ schema_cas = Schema(And(
             'server_hostname': Use(str),
             'client_hostname': Use(str),
             'domain': Use(str),
-            'realm': Use(str.upper)}}),
+            'realm': Use(str.upper)
+        },
+        Optional("custom"): [{
+            'name': Use(str),
+            'ca_cert': Use(str)
+        }],
+    }),
     ignore_extra_keys=True)
 
 # Specify validation schema for all users
-schema_user = Schema({'name': Use(str),
-                      'passwd': Use(str),
-                      'user_type': Or(UserType.local, UserType.ipa)})
+schema_user = Schema({
+    'name': Use(str),
+    'passwd': Use(str),
+    'user_type': Or(UserType.local, UserType.ipa)
+})
 
 # Specify validation schema for all cards
-schema_card = Schema({'name': Use(str),
-                      'pin': Use(str),
-                      Optional('card_details', default=None): Use(str),
-                      'cardholder': Use(str),
-                      'CN': Use(str),
-                      Optional('UID', default=None): Use(str),
-                      Optional('expires', default=None): Use(str),
-                      'card_type': Or(CardType.virtual, CardType.physical),
-                      'ca_name': Use(str),
-                      Optional('ca_cert', default=None): Use(str),
-                      Optional('slot', default=None): Use(str),
-                      Optional('uri', default=None): Use(str),
-                      Optional('cert', default=None): Use(str),
-                      Optional('key', default=None): Use(str)})
+schema_card = Schema({
+    'name': Use(str),
+    'pin': Use(str),
+    Optional('label', default=None): Use(str),
+    Optional('card_details', default=None): Use(str),
+    'cardholder': Use(str),
+    'CN': Use(str),
+    Optional('UID', default=None): Use(str),
+    Optional('expires', default=None): Use(str),
+    'card_type': Or(CardType.virtual, CardType.physical),
+    'ca_name': Use(str),
+    Optional('slot', default=None): Use(str),
+    Optional('uri', default=None): Use(str),
+    Optional('cert', default=None): Use(str),
+    Optional('key', default=None): Use(str)
+})
 
 
 def run(cmd: list[str], stdout: int = subprocess.PIPE,
@@ -116,7 +129,7 @@ def run(cmd: list[str], stdout: int = subprocess.PIPE,
                    Defaults to ``subprocess.PIPE`` to capture output.
     :type stderr: None or int or IO
     :param check: If ``True``, the function will raise a
-                  ``subprocess.CalledProcessError`` exception if the command's
+                  ``SCAutolibCommandFailed`` exception if the command's
                   return code is not in the ``return_code`` list. Defaults to
                   ``True``.
     :type check: bool
@@ -134,12 +147,12 @@ def run(cmd: list[str], stdout: int = subprocess.PIPE,
     :type sleep: int
     :param kwargs: Additional keyword arguments are passed directly to the
                    ``subprocess.run`` function.
-    :raises subprocess.CalledProcessError: If ``check`` is ``True`` and the
-                                           command's return code is not among
-                                           the expected ``return_code`` values.
+    :raises SCAutolibCommandFailed: If ``check`` is ``True`` and the
+                                    command's return code is not among
+                                    the expected ``return_code`` values.
     :return: An object representing the completed process, including stdout,
              stderr, and return code.
-    :rtype: subprocess.CompletedProcess
+    :rtype: SCAutolibCommandFailed
     """
     if return_code is None:
         return_code = [0]
@@ -158,6 +171,6 @@ def run(cmd: list[str], stdout: int = subprocess.PIPE,
         if out.returncode not in return_code:
             logger.error(f"Unexpected return code {out.returncode}. "
                          f"Expected: {return_code}")
-            raise subprocess.CalledProcessError(out.returncode, cmd)
+            raise SCAutolibCommandFailed(" ".join(cmd), out.returncode)
     time.sleep(sleep)
     return out

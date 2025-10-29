@@ -500,17 +500,17 @@ class SSSDConf(File):
             logger.info(f"{self._conf_file} file exists, loading values")
             self._backup_original = self.backup("sssd-conf-original")
 
-        except SCAutolibFileNotExists:
+        except FileNotFoundError:
             logger.warning(f"{self._conf_file} not present")
             logger.warning("Creating sssd.conf based on the template")
 
-        with self._template.open() as template:
-            logger.info(f"Updating {self._conf_file} with values from the "
-                        f"template")
-            self._default_parser.read_file(template)
+            with self._template.open() as template:
+                logger.info(f"Updating {self._conf_file} with values from the "
+                            f"template")
+                self._default_parser.read_file(template)
 
-        with self._backup_default.open("w") as bdefault:
-            self._default_parser.write(bdefault)
+            with self._conf_file.open("w") as conf:
+                self._default_parser.write(conf)
 
         with self.dump_file.open("w") as f:
             json.dump({
@@ -600,8 +600,10 @@ class SSSDConf(File):
                     self._conf_file.open("w") as config:
                 config.write(original.read())
             self._backup_original.unlink()
+            logger.info("Restored sssd.conf to the original version")
         else:
             self.remove()
+            logger.info("No sssd.conf original version found. Removed.")
 
         if self._backup_default.exists():
             self._backup_default.unlink()
@@ -610,7 +612,6 @@ class SSSDConf(File):
             self.dump_file.unlink()
             logger.debug(f"Removed {self.dump_file} dump file")
 
-        logger.info("Restored sssd.conf to the original version")
         self._changed = False
 
     def update_default_content(self):
@@ -650,6 +651,14 @@ class SSSDConf(File):
                              "executed. Create method should not be executed "
                              "multiple times")
                 raise SCAutolibFileExists(f'{file} file exists')
+
+    def update_matchrule(self, cardholder: str, CN: str):
+        self.set(section=f"certmap/shadowutils/{cardholder}",
+                        key="matchrule",
+                        value=f"<SUBJECT>.*CN={CN}.*")
+        self.save()
+        run(["sss_cache", "-E"])
+        run(["systemctl", "restart", "sssd"])
 
 
 class SoftHSM2Conf(File):
