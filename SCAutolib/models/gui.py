@@ -23,7 +23,7 @@ import pytesseract
 import uinput
 import logging
 
-from SCAutolib import run, logger
+from SCAutolib import run, logger, TEMPLATES_DIR
 from SCAutolib.utils import isDistro
 from SCAutolib.exceptions import SCAutolibGUIException, SCAutolibNotFound
 
@@ -112,32 +112,6 @@ class Screen:
 
         self.screenshot_num += 1
         return filename
-
-    def disable_screensaver(self):
-        """
-        Disable linux Gnome screensaver
-
-        :return: None
-        :rtype: None
-        """
-        run([
-            "gsettings", "set", "org.gnome.desktop.screensaver",
-            "idle-activation-enabled", "false"
-        ])
-        logger.debug("Screensaver have been disabled.")
-
-    def enable_screensaver(self):
-        """
-        Enable linux Gnome screensaver
-
-        :return: None
-        :rtype: None
-        """
-        run([
-            "gsettings", "set", "org.gnome.desktop.screensaver",
-            "idle-activation-enabled", "true"
-        ])
-        logger.debug("Screensaver have been enabled.")
 
 
 class Mouse:
@@ -490,7 +464,6 @@ class GUI:
 
         # By restarting gdm, the system gets into defined state
         run(['systemctl', 'restart', 'gdm'], check=True)
-        self.screen.disable_screensaver()
         # Cannot screenshot before gdm starts displaying
         # This would break the display
         sleep(self.gdm_init_time)
@@ -523,7 +496,6 @@ class GUI:
             return
 
         run(['systemctl', 'stop', 'gdm'], check=True)
-        self.screen.enable_screensaver()
 
         with open(self.html_file, 'a') as fp:
             fp.write(
@@ -543,7 +515,8 @@ class GUI:
     @log_decorator
     def click_on(self, key: str, timeout: float = 30,
                  min_thres: int = 120, max_thres: int = 160,
-                 case_sensitive: bool = True):
+                 case_sensitive: bool = True,
+                 click_on_match: int = 1):
         """
         Simulates a mouse click on a GUI object containing the specified text.
         It repeatedly captures screenshots and
@@ -571,21 +544,31 @@ class GUI:
                                exactly, if False then the case is not relevant.
                                Default True.
         :type case_sensitive: bool
+        :param click_on_match: if multiple matches are found then click on
+                               the nth match.
+                               Default 0 (first match)
+        :type click_on_match: int
         :return: None
         :rtype: None
+        :raises SCAutolibGUIException: If a parameter is not configured
+                                       correctly.
         :raises SCAutolibNotFound: If the ``key`` is not found in screenshots
                                    within the specified timeout.
         """
 
-        if not case_sensitive:
-            key = key.lower()
-
-        logger.info(f"Trying to find key='{key}' to click on.")
+        if click_on_match < 1:
+            raise SCAutolibGUIException(
+                "The match to click one should be more or equal to 1.")
 
         thres_diff = max_thres - min_thres
         if thres_diff < 0:
             raise SCAutolibGUIException(
                 "Image max_thres cannot be smaller than min_thres.")
+
+        if not case_sensitive:
+            key = key.lower()
+
+        logger.info(f"Trying to find key='{key}' to click on.")
 
         item = None
         first_scr = None
@@ -642,8 +625,9 @@ class GUI:
             # More than one word matches, choose the first match
             # Probably deterministic, but it should not be relied upon
             else:
-                logger.info('Found multiple matches')
-                item = df[selection].iloc[0]
+                logger.info('Found multiple matches. '
+                            f'Clicking on match number {click_on_match}.')
+                item = df[selection].iloc[click_on_match - 1]
                 break
 
         if item is None:
@@ -762,6 +746,8 @@ class GUI:
         :type get_text: bool
         :return: None
         :rtype: None
+        :raises SCAutolibGUIException: If a parameter is not configured
+                                       correctly.
         :raises SCAutolibNotFound: If the ``key`` is not found in any
                                    screenshot within the specified timeout.
         """
@@ -826,7 +812,7 @@ class GUI:
 
             passed_time = time()
 
-        raise SCAutolibNotFound('The key was not found.')
+        raise SCAutolibNotFound(f"The key='{key}' was not found.")
 
     @log_decorator
     def assert_no_text(self, key: str, timeout: float = 0,
@@ -859,6 +845,8 @@ class GUI:
         :type case_sensitive: bool
         :return: None
         :rtype: None
+        :raises SCAutolibGUIException: If a parameter is not configured
+                                       correctly.
         :raises SCAutolibNotFound: If the ``key`` is found in any screenshot
                                    within the specified timeout.
         """
@@ -920,7 +908,7 @@ class GUI:
 
     @log_decorator
     def assert_image(self, img_path: Union[str, Path], timeout: float = 0,
-                     start_thres: float = .85, end_thres: float = .8):
+                     start_thres: float = .85, end_thres: float = .75):
         """
         Asserts that a given image (taken from a path) is found on the screen
         within a specified timeout. If the image is found in any screenshot
@@ -946,6 +934,8 @@ class GUI:
         :type end_thres: float
         :return: None
         :rtype: None
+        :raises SCAutolibGUIException: If a parameter is not configured
+                                       correctly.
         :raises SCAutolibNotFound: If the image is not found in any screenshot
                                    within the specified timeout.
         """
@@ -988,17 +978,19 @@ class GUI:
                 cv2.rectangle(
                     img_rgb, pt, (pt[0] + w, pt[1] + h), (0, 0, 255), 1)
 
-            image_path = self.match_directory.joinpath(
+            match_path = self.match_directory.joinpath(
                 f"{self.match_image_id}.png")
-            cv2.imwrite(image_path, img_rgb)
+            cv2.imwrite(match_path, img_rgb)
             logger.debug(f"Saved image with match number {self.match_image_id}.")
 
             if self.html_file:
                 with open(self.html_file, 'a') as fp:
                     fp.write(
-                        f"<img src=\"screenshots/{self.match_image_id}.png\" "
+                        f"<img src=\"image_matches/{self.match_image_id}.png\" "
                         f"alt=\"Image match number {self.match_image_id}\">"
                     )
+
+            self.match_image_id += 1
 
             if image_found:
                 break
@@ -1008,11 +1000,11 @@ class GUI:
         if not image_found:
             raise SCAutolibNotFound(f"Image from '{img_path}' was not found "
                                     f"in the screenshot {screenshot}. "
-                                    f"Check {image_path}.")
+                                    f"Check {match_path}.")
 
     @log_decorator
     def assert_no_image(self, img_path: Union[str, Path], timeout: float = 0,
-                        start_thres: float = .85, end_thres: float = .8):
+                        start_thres: float = .85, end_thres: float = .75):
         """
         Asserts that a given image (taken from a path) is *not* found on the
         screen within a specified timeout. If the image is found in any
@@ -1038,6 +1030,8 @@ class GUI:
         :type end_thres: float
         :return: None
         :rtype: None
+        :raises SCAutolibGUIException: If a parameter is not configured
+                                       correctly.
         :raises SCAutolibNotFound: If the image is not found in any screenshot
                                    within the specified timeout.
         """
@@ -1080,22 +1074,24 @@ class GUI:
                 cv2.rectangle(
                     img_rgb, pt, (pt[0] + w, pt[1] + h), (0, 0, 255), 1)
 
-            image_path = self.match_directory.joinpath(
+            match_path = self.match_directory.joinpath(
                 f"{self.match_image_id}.png")
-            cv2.imwrite(image_path, img_rgb)
+            cv2.imwrite(match_path, img_rgb)
             logger.debug(f"Saved image with match number {self.match_image_id}.")
 
             if self.html_file:
                 with open(self.html_file, 'a') as fp:
                     fp.write(
-                        f"<img src=\"screenshots/{self.match_image_id}.png\" "
+                        f"<img src=\"image_matches/{self.match_image_id}.png\" "
                         f"alt=\"Image match number {self.match_image_id}\">"
                     )
+
+            self.match_image_id += 1
 
             if image_found:
                 raise SCAutolibNotFound(f"Image from '{img_path}' was found "
                                         f"in the screenshot {screenshot}. "
-                                        f"Check {image_path}.")
+                                        f"Check {match_path}.")
 
             passed_time = time()
 
@@ -1118,17 +1114,23 @@ class GUI:
                            within the timeout.
         """
 
-        if polarity is True:
-            func_str = "assert_text"
+        if isDistro('rhel', '>=10'):
+            isImage = True
+            func_str = ("assert_image"
+                        if polarity is True else "assert_no_image")
         else:
-            func_str = "assert_no_text"
+            isImage = False
+            func_str = ("assert_text"
+                        if polarity is True else "assert_no_text")
 
-        if isDistro("fedora", ">=42"):
-            check_str = "to search"
+        if isImage:
+            arg = TEMPLATES_DIR.joinpath("match_for_RHEL-10.png")
+        elif isDistro("fedora", ">=42"):
+            arg = "to search"
         elif isDistro("fedora"):
-            check_str = "tosearch"
+            arg = "tosearch"
         else:
-            check_str = "Activities"
+            arg = "Activities"
 
         func = getattr(self, func_str)
-        func(check_str, timeout=20)
+        func(arg, timeout=10)

@@ -25,11 +25,11 @@ from SCAutolib import (logger, run, LIB_DIR, LIB_BACKUP, LIB_DUMP,
                        LIB_DUMP_CONFS, TEMPLATES_DIR)
 from SCAutolib.models import CA, file, user, card, authselect as auth
 from SCAutolib.models.file import File, OpensslCnf
-from SCAutolib.models.CA import BaseCA
+from SCAutolib.models.CA import BaseCA, LocalCA, IPAServerCA
 from SCAutolib.enums import (CardType, UserType)
 from SCAutolib.utils import (_check_selinux, _gen_private_key,
-                             _install_packages, _check_packages,
-                             dump_to_json, isDistro)
+                             _install_packages, _restore_packages,
+                             _check_packages, dump_to_json, isDistro)
 from SCAutolib.exceptions import *
 
 
@@ -48,9 +48,12 @@ class Controller:
     _lib_conf_path: Path = None
     local_ca: CA.LocalCA = None
     ipa_ca: CA.IPAServerCA = None
+    custom_cas: list[CA.CustomCA] = []
     users: [user.User] = None
     dconf_file = File(filepath='/etc/dconf/db/local.d/gnome_disable_welcome',
                       template=Path(TEMPLATES_DIR, 'gnome_disable_welcome'))
+
+    virtual_cards_packages = ["virt_cacard", "vpcd", "softhsm"]
 
     @property
     def conf_path(self):
@@ -103,11 +106,15 @@ class Controller:
                   LIB_DUMP_CARDS, LIB_DUMP_CONFS):
             d.mkdir(exist_ok=True)
 
-        if LIB_DUMP_CAS.joinpath("local_ca.json").exists():
-            self.local_ca = BaseCA.load(LIB_DUMP_CAS.joinpath("local_ca.json"))
+        for ca_file in LIB_DUMP_CAS.iterdir():
+            ca = BaseCA.load(ca_file)
 
-        if LIB_DUMP_CAS.joinpath("ipa-server.json").exists():
-            self.ipa_ca = BaseCA.load(LIB_DUMP_CAS.joinpath("ipa-server.json"))
+            if type(ca) is LocalCA:
+                self.local_ca = ca
+            elif type(ca) is IPAServerCA:
+                self.ipa_ca = ca
+            else:
+                self.custom_cas.append(ca)
 
     def prepare(self, force: bool, gdm: bool, install_missing: bool,
                 graphical: bool):
@@ -150,6 +157,10 @@ class Controller:
             self.setup_ipa_client(force=force)
         except SCAutolibWrongConfig as e:
             logger.info(e)
+        try:
+            self.setup_custom_ca(force=force)
+        except SCAutolibWrongConfig as e:
+            logger.info(e)
 
         for usr in self.lib_conf["users"]:
             self.setup_user(usr, force=force)
@@ -159,11 +170,38 @@ class Controller:
         for token in self.lib_conf["cards"]:
             # prepare CA objects for physical cards
             if token["card_type"] == CardType.physical:
-                self.setup_custom_ca(token)
                 self.setup_card(token)
             elif token["card_type"] == CardType.virtual:
                 c = self.setup_card(token)
                 self.enroll_card(c)
+
+    def has_card(self, card_type: CardType):
+        """
+        A helper function that checks if a card of a card_type is defined in
+        the config.
+
+        :param card_type: The type of the card to check if it is defined in
+                          the config.
+        :type card_type: CardType
+        :return: ``True`` if a card of card type is defined in the config;
+            ``False`` otherwise.
+        :rtype: bool
+        """
+        return any(c["card_type"] == card_type for c in self.lib_conf["cards"])
+
+    def has_user(self, user_type: UserType):
+        """
+        A helper function that checks if a user of a user_type is defined in
+        the config.
+
+        :param user_type: The type of the card to check if it is defined in
+                          the config.
+        :type user_type: UserType
+        :return: ``True`` if a user of user_type is defined in the config;
+            ``False`` otherwise.
+        :rtype: bool
+        """
+        return any(u["user_type"] == user_type for u in self.lib_conf["users"])
 
     def setup_system(self, install_missing: bool, gdm: bool, graphical: bool):
         """
@@ -194,15 +232,24 @@ class Controller:
                     "openssl", "nss-tools"]
 
         # Prepare for virtual cards
-        if any(c["card_type"] == CardType.virtual
-                for c in self.lib_conf["cards"]):
-            packages += ["pcsc-lite-ccid", "pcsc-lite", "virt_cacard",
-                         "vpcd", "softhsm"]
+        if self.has_card(CardType.virtual):
+            packages += ["pcsc-lite", "pcsc-lite-ccid"]
+            packages += self.virtual_cards_packages
             run("dnf -y copr --hub fedora enable jjelen/vsmartcard")
 
+        # Prepare for physical cards
+        if self.has_card(CardType.physical):
+            # TODO: Change when a new release of removinator is in PyPI
+            # From more info, see
+            # https://github.com/nkinder/smart-card-removinator/issues/11
+            run([
+                'pip', 'install',
+                'git+https://github.com/nkinder/smart-card-removinator.git'
+                '#egg=removinator&subdirectory=client'
+            ])
+
         # Add IPA packages if needed
-        if any([u["user_type"] == UserType.ipa
-                for u in self.lib_conf["users"]]):
+        if self.has_user(UserType.ipa):
             packages += self._general_steps_for_ipa()
 
         # Check for installed packages
@@ -229,7 +276,9 @@ class Controller:
 
         self.sssd_conf.create()
         self.sssd_conf.save()
-        self._general_steps_for_virtual_sc()
+
+        if self.has_card(CardType.virtual):
+            self._general_steps_for_virtual_sc()
 
         base_user = user.User("base-user", "redhat")
         base_user.add_user()
@@ -318,14 +367,12 @@ class Controller:
         cnf.create()
         cnf.save()
         self.local_ca.setup()
-        self.local_ca.update_ca_db()
-        run(["systemctl", "restart", "sssd"], sleep=5)
 
         logger.info(f"Local CA is configured in {ca_dir}")
 
         dump_to_json(self.local_ca)
 
-    def setup_custom_ca(self, card_data: dict):
+    def setup_custom_ca(self, force: bool):
         """
         Sets up a custom Certificate Authority (CA) based on provided card
         data. This is typically used for physical cards
@@ -342,11 +389,24 @@ class Controller:
                                         after setup.
         """
 
-        if card_data["card_type"] == CardType.physical:
-            ca = BaseCA.factory(create=True, card_data=card_data)
+        if "custom" not in self.lib_conf["ca"]:
+            raise SCAutolibWrongConfig("Section for custom CAs is not found "
+                                       "in the configuration file")
+
+        for ca_data in self.lib_conf["ca"]["custom"]:
+            ca_path = LIB_DUMP_CAS.joinpath(f"{ca_data['name']}.json")
+            if ca_path.exists():
+                if force:
+                    ca_path.unlink()
+                else:
+                    continue
+
+            ca = BaseCA.factory(create=True, ca_name=ca_data["name"],
+                                ca_cert=ca_data["ca_cert"])
             ca.setup()
             if not ca._ca_cert.is_file():
                 raise SCAutolibFileNotExists(f"File not found: {ca._ca_cert}")
+            self.custom_cas.append(ca)
             dump_to_json(ca)
 
     def setup_ipa_client(self, force: bool = False):
@@ -453,20 +513,23 @@ class Controller:
                                      'virtual' is specified.
         """
 
-        card_dir: Path = Path("/root/cards", card_dict["name"])
-        card_dir.mkdir(parents=True, exist_ok=True)
-
-        if force and card_dir.exists():
-            rmtree(card_dir)
-
         if card_dict["card_type"] == CardType.physical:
-            new_card = card.PhysicalCard(card_dict, card_dir=card_dir)
+            new_card = card.PhysicalCard(card_dict)
+            new_card.user = self.find_card_user(new_card)
+            new_card.ca = self.find_card_ca(new_card)
         elif card_dict["card_type"] == CardType.virtual:
+            card_dir: Path = Path("/root/cards", card_dict["name"])
+            card_dir.mkdir(parents=True, exist_ok=True)
+
+            if force and card_dir.exists():
+                rmtree(card_dir)
+
             hsm_conf = self.prepare_softhsm_config(card_dir)
             new_card = card.VirtualCard(card_dict, softhsm2_conf=hsm_conf.path,
                                         card_dir=card_dir)
             # card needs to know some details of its user
-            new_card.user = self.link_user_to_card(new_card)
+            new_card.user = self.find_card_user(new_card)
+            new_card.ca = self.find_card_ca(new_card)
             if new_card.user.user_type == UserType.local:
                 new_card.cnf = self.prepare_user_cnf(new_card)
             if force:
@@ -479,7 +542,7 @@ class Controller:
         dump_to_json(new_card)
         return new_card
 
-    def link_user_to_card(self, card: card.Card):
+    def find_card_user(self, card: card.Card):
         """
         Links a ``Card`` object to its corresponding ``User`` object based
         on the ``cardholder`` attribute of the card.
@@ -495,6 +558,36 @@ class Controller:
         for card_user in self.users:
             if card_user.username == card.cardholder:
                 return card_user
+
+        raise SCAutolibNotFound(f"User {card.cardholder} referenced by card "
+                                f"{card.name} is not specified in conf!")
+
+    def find_card_ca(self, card: card.Card):
+        """
+        Links a ``Card`` object to its corresponding ``User`` object based
+        on the ``cardholder`` attribute of the card.
+        It iterates through the Controller's loaded users to find a match.
+
+        :param card: The ``Card`` object for which to find the associated
+                     user.
+        :type card: SCAutolib.models.card.Card
+        :return: The ``User`` object that matches the card's cardholder.
+        :rtype: SCAutolib.models.user.User
+        """
+        if not card.ca_name:
+            return None
+
+        if self.local_ca and card.ca_name == self.local_ca.ca_name:
+            return self.local_ca
+        elif self.ipa_ca and card.ca_name == self.ipa_ca.ca_name:
+            return self.ipa_ca
+        else:
+            for custom_ca in self.custom_cas:
+                if custom_ca.name == card.ca_name:
+                    return custom_ca
+
+        raise SCAutolibNotFound(f"CA {card.ca_name} referenced by card "
+                                f"{card.name} is not specified in conf!")
 
     def prepare_softhsm_config(self, card_dir: Path = None):
         """
@@ -596,6 +689,7 @@ class Controller:
 
         :return: None
         """
+        virtual_cards = False
 
         users = {}
 
@@ -609,15 +703,23 @@ class Controller:
             if card_file.exists():
                 card_obj = card.Card.load(card_file)
                 if card_obj.card_type == CardType.virtual:
+                    virtual_cards = True
                     card_obj.user = users[card_obj.cardholder]
                     self.revoke_certs(card_obj)
-                    card_obj.delete()
+                card_obj.delete()
+
+        _restore_packages()
+        if virtual_cards:
+            run(["dnf", "-y", "copr", "--hub", "fedora",
+                 "disable", "jjelen/vsmartcard"])
 
         if self.local_ca:
             self.local_ca.cleanup()
             self.local_ca.restore_ca_db()
         if self.ipa_ca:
             self.ipa_ca.cleanup()
+        for custom_ca in self.custom_cas:
+            custom_ca.cleanup()
 
         opensc_cache_dir = Path(os.path.expanduser('~') + "/.cache/opensc/")
         if opensc_cache_dir.exists():

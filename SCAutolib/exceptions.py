@@ -135,3 +135,18 @@ class SCAutolibNotFound(SCAutolibException):
     def __init__(self, msg=None):
         msg = self.default if msg is None else msg
         super().__init__(msg)
+
+
+class SCAutolibCommandFailed(SCAutolibException):
+    """
+    Exception raised when a command gives unexpected return code in run
+    function.
+    """
+    default = "Command failed with unexpected code."
+
+    def __init__(self, cmd: str = None, ret_code: int = None):
+        if cmd and ret_code:
+            msg = f"Command '{cmd}' returned unexpected code {ret_code}."
+        else:
+            msg = self.default
+        super().__init__(msg)

@@ -69,14 +69,14 @@ using a smart card. The user and card needs to exist beforehand:
     import sys
     import logging
     import pexpect
-    from SCAutolib.utils import load_user
+    from SCAutolib.models.user import User
     from SCAutolib.models.authselect import Authselect
     from SCAutolib.models.card import Card
 
     log = logging.getLogger("Simple_test")
 
     log.info("Loading local user")
-    local_user = load_user("local_user")
+    local_user = User.load(username = "local_user")
 
     log.info("Loading token")
     local_user.card = Card.load(card_name = "my_token")
