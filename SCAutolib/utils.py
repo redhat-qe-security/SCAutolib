@@ -16,7 +16,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from typing import Union
 from pathlib import Path
 
-from SCAutolib import run, logger, TEMPLATES_DIR
+from SCAutolib import run, logger, TEMPLATES_DIR, LIB_BACKUP
 
 
 def _check_selinux():
@@ -69,6 +69,22 @@ def _gen_private_key(key_path: Path, size: int = 2048):
             encryption_algorithm=serialization.NoEncryption()))
 
 
+def _read_packages_json():
+    packages_file = LIB_BACKUP.joinpath("packages.json")
+    packages_json = {}
+
+    if packages_file.exists():
+        with packages_file.open("r") as f:
+            packages_json = json.load(f)
+    else:
+        packages_json = {
+            "installed": [],
+            "removed": [],
+        }
+
+    return packages_file, packages_json
+
+
 def _install_packages(packages: list[str]):
     """
     Installs a list of specified RPM packages on the system.
@@ -80,10 +96,60 @@ def _install_packages(packages: list[str]):
     :type packages: list
     :return: None
     """
+    packages_file, packages_json = _read_packages_json()
+
     run(f"dnf install -y {' '.join(packages)}")
     for pkg in packages:
         pkg = run(["rpm", "-q", pkg]).stdout
         logger.debug(f"Package {pkg} is installed")
+
+    packages_json['installed'] += packages
+
+    with packages_file.open("w") as f:
+        json.dump(packages_json, f)
+
+
+def _remove_packages(packages: list[str]):
+    """
+    Removes a list of specified RPM packages on the system.
+    Before removal, it logs the installed version of each removed package.
+
+    :param packages: A list of strings, where each string is the name of a
+                     package to be installed (e.g., ``["opensc", "sssd"]``).
+    :type packages: list
+    :return: None
+    """
+    packages_file, packages_json = _read_packages_json()
+
+    for pkg in packages:
+        pkg = run(["rpm", "-q", pkg]).stdout
+        logger.debug(f"Removing package {pkg}.")
+    run(f"dnf remove -y {' '.join(packages)}")
+
+    packages_json['removed'] += packages
+
+    with packages_file.open("w") as f:
+        json.dump(packages_json, f)
+
+
+def _restore_packages():
+    """
+    Restore the system list of packages to the original state. Every package
+    that was installed with _install_packages function will be removed and
+    every package that was removed with _remove_packages will be restored.
+
+    :return: None
+    """
+    packages_file, packages_json = _read_packages_json()
+
+    if packages_json['removed']:
+        run(f"dnf install -y {' '.join(packages_json['removed'])}")
+    if packages_json['installed']:
+        run(f"dnf remove -y {' '.join(packages_json['installed'])}")
+    logger.debug("Restored original system packages.")
+
+    if packages_file.exists():
+        packages_file.unlink()
 
 
 def _check_packages(packages: list[str]):

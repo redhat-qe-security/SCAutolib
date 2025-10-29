@@ -18,10 +18,11 @@ from traceback import format_exc
 
 from SCAutolib import run, logger, TEMPLATES_DIR, LIB_DUMP_CARDS
 from SCAutolib.exceptions import SCAutolibException, SCAutolibUnknownType, \
-    SCAutolibIPAException, SCAutolibFileNotExists
+    SCAutolibIPAException, SCAutolibFileNotExists, SCAutolibCommandFailed
 from SCAutolib.enums import CardType, UserType
 
 from SCAutolib.models.file import SSSDConf
+from SCAutolib.models.CA import BaseCA
 
 
 class Card:
@@ -32,10 +33,28 @@ class Card:
     specific card type. It also includes a static method
     for loading card objects from JSON dump files.
     """
-    uri: str = None
-    dump_file: Path = None
-    type: str = None
+    _prepared: bool = False
+    _inserted: bool = False
     _pattern: str = None
+
+    name: str = None
+    pin: str = None
+    label: str = None
+    cardholder: str = None
+    CN: str = None
+    UID: str = None
+    expires: str = None
+    card_type: str = None
+    ca_name: str = None
+    slot: str = None
+    uri: str = None
+    card_dir: Path = None
+    uri: str = None
+
+    dump_file: Path = None
+
+    user = None
+    ca = None
 
     def _set_uri(self):
         """
@@ -63,12 +82,45 @@ class Card:
             logger.warning("Multiple matching URIs found. URI not set")
             raise SCAutolibException("Multiple URIs match expected pattern.")
 
-    def insert(self):
+    def _set_label(self):
+        """
+        Sets the label for the given smart card by matching it from the output
+        of the ``p11tool -L`` command using a regular expression
+        (``token label.*: (.*)``). An exception is raised if no label is found,
+        or if multiple labels are found.
+
+        :return: None
+        :rtype: None
+        :raises SCAutolibException: If a matching label is not found or if
+                                    multiple matching labels are detected.
+        """
+        if self.label:
+            return
+
+        cmd = ["pkcs11-tool", "-L"]
+        out = run(cmd).stdout
+        labels = re.findall(r"token label.*: (.*)", out)
+        if len(labels) == 1:
+            self.label = labels[0]
+            logger.info(f"Card label is set to '{self.label}'")
+        elif len(labels) == 0:
+            logger.warning("Card label not set")
+            raise SCAutolibException("Card label not found.")
+        else:
+            logger.warning("Multiple matching labels found. Label not set")
+            logger.warning("Add a label field in the config.")
+            raise SCAutolibException(
+                "Multiple labels match expected pattern."
+                "Possibly multiple slots available. Pass label in config.")
+
+    def insert(self, update_sssd: bool):
         """
         Inserts the smart card.
         This is an abstract method that must be implemented by concrete card
         type subclasses.
 
+        :param update_sssd: If ``True``, it setup the card CA and SSSD config.
+        :type update_sssd: bool
         :return: None
         :rtype: None
         """
@@ -100,6 +152,58 @@ class Card:
 
         ...
 
+    def setup_card_ca(self):
+        """
+        Installs the corresponding CA certificate of the card to the system
+        and updates the SSSD config to link the user with the card.
+
+        :return: None
+        :rtype: None
+        """
+
+        if not self.ca_name or self._prepared:
+            return
+
+        logger.debug(f"Setup CA for card '{self.name}'")
+
+        if not self.ca:
+            self.ca = BaseCA.load(ca_name=self.ca_name)
+
+        self.ca.update_ca_db(restart_sssd=True)
+
+        sssd_conf = SSSDConf()
+        if not sssd_conf.exists():
+            sssd_conf.create()
+        sssd_conf.update_matchrule(self.cardholder, self.CN)
+
+        self._prepared = True
+
+    def restore_card_ca(self, restore_conf: bool = False):
+        """
+        Removes the corresponding CA certificate of the card from the system
+        and restores the SSSD config.
+
+        :param restore_conf: If ``True``, restores the ``sssd.conf`` file to
+                             its original version.
+        :type restore_conf: bool
+        :return: None
+        :rtype: None
+        """
+
+        if not self.ca_name or not self._prepared:
+            return
+
+        if not self.ca:
+            self.ca = BaseCA.load(ca_name=self.ca_name)
+
+        self.ca.restore_ca_db(restart_sssd=True)
+
+        if restore_conf:
+            sssd_conf = SSSDConf()
+            sssd_conf.restore()
+
+        self._prepared = False
+
     @staticmethod
     def load(card_file: Path = None, card_name: str = None,
              update_sssd: bool = False):
@@ -116,6 +220,7 @@ class Card:
         :param update_sssd: If ``True``, the SSSD configuration file will be
                             updated with a ``shadowutils`` rule for the user of
                             the loaded card.
+        :type update_sssd: bool
         :return: An instance of the specific card class loaded with data from
                  the JSON file.
         :rtype: SCAutolib.models.card.Card
@@ -137,7 +242,6 @@ class Card:
         card = None
         if cnt["card_type"] == CardType.virtual:
             card = VirtualCard(cnt, softhsm2_conf=Path(cnt["softhsm"]))
-#            card.uri = cnt["uri"]
         elif cnt["card_type"] == CardType.physical:
             card = PhysicalCard(cnt)
         else:
@@ -146,12 +250,7 @@ class Card:
 
         if update_sssd:
             sssd_conf = SSSDConf()
-            sssd_conf.set(section=f"certmap/shadowutils/{card.cardholder}",
-                          key="matchrule",
-                          value=f"<SUBJECT>.*CN={card.CN}.*")
-            sssd_conf.save()
-            run(["sss_cache", "-E"])
-            run(["systemctl", "restart", "sssd"])
+            sssd_conf.update_matchrule(card.cardholder, card.CN)
 
         return card
 
@@ -172,20 +271,7 @@ class VirtualCard(Card):
     _template: Path = Path(TEMPLATES_DIR, "virt_cacard.service")
     _pattern = r"(pkcs11:model=PKCS%2315%20emulated;" \
                r"manufacturer=Common%20Access%20Card;serial=.*)"
-    _inserted: bool = False
 
-    name: str = None
-    pin: str = None
-    cardholder: str = None
-    CN: str = None
-    UID: str = None
-    key: Path = None
-    cert: Path = None
-    card_dir: Path = None
-    card_type: str = None
-    ca_name: str = None
-    slot: str = None
-    user = None
     cnf = None
 
     def __init__(self, card_data, softhsm2_conf: Path = None,
@@ -216,14 +302,20 @@ class VirtualCard(Card):
         :raises SCAutolibFileNotExists: If the specified ``card_dir`` does not
                                         exist upon initialization.
         """
+        self.uri = card_data.get("uri", None)
+
         self.name = card_data["name"]
         self.pin = card_data["pin"]
+        self.label = card_data.get("label", None)
         self.cardholder = card_data["cardholder"]
         self.card_type = card_data["card_type"]
         self.CN = card_data["CN"]
         self.ca_name = card_data["ca_name"]
+        self.slot = card_data["slot"] if card_data.get("slot", None) else "0"
         self.card_dir = card_dir if card_dir is not None \
             else Path(card_data["card_dir"])
+        self._prepared = card_data.get("_prepared", False)
+        self._inserted = card_data.get("_inserted", False)
         if not self.card_dir.exists():
             raise SCAutolibFileNotExists("Card root directory doesn't exists")
         self.dump_file = LIB_DUMP_CARDS.joinpath(f"{self.name}.json")
@@ -238,7 +330,7 @@ class VirtualCard(Card):
         self._softhsm2_conf = softhsm2_conf if softhsm2_conf \
             else Path(self.card_dir, "softhsm2.conf")
 
-    def __call__(self, insert: bool):
+    def __call__(self, insert: bool = False):
         """
         Allows the ``VirtualCard`` object to be called directly, enabling its
         use as part of a context manager.
@@ -252,8 +344,9 @@ class VirtualCard(Card):
         """
 
         if insert:
+            self.setup_card_ca()
             self.insert()
-        return self.__enter__()
+        return self
 
     def __enter__(self):
         """
@@ -267,6 +360,7 @@ class VirtualCard(Card):
                                         virtual card does not exist.
         """
 
+        self.setup_card_ca()
         if not self._service_location.exists():
             raise SCAutolibFileNotExists(
                 "Service for virtual sc doesn't exists.")
@@ -309,6 +403,7 @@ class VirtualCard(Card):
         return {
             "name": self.name,
             "pin": self.pin,
+            "label": self.label,
             "cardholder": self.cardholder,
             "card_type": self.card_type,
             "CN": self.CN,
@@ -318,7 +413,9 @@ class VirtualCard(Card):
             "uri": self.uri,
             "softhsm": str(self._softhsm2_conf),
             "ca_name": self.ca_name,
-            "slot": self.slot
+            "slot": self.slot,
+            "_prepare": self._prepared,
+            "_inserted": self._inserted,
         }
 
     @property
@@ -363,16 +460,21 @@ class VirtualCard(Card):
 
         return self._service_location
 
-    def insert(self):
+    def insert(self, update_sssd: bool = False):
         """
         Inserts the virtual smart card by starting its corresponding systemd
         service. A short delay is included to prevent
         errors with fast service restarts.
 
+        :param update_sssd: If ``True``, it setup the card CA and SSSD config.
+        :type update_sssd: bool
         :return: The ``subprocess.CompletedProcess`` object from the systemctl
                  command.
         :rtype: subprocess.CompletedProcess
         """
+
+        if update_sssd:
+            self.setup_card_ca()
 
         cmd = ["systemctl", "start", self._service_name]
         out = run(cmd, check=True)
@@ -390,6 +492,9 @@ class VirtualCard(Card):
                  command.
         :rtype: subprocess.CompletedProcess
         """
+
+        if self._prepared:
+            self.restore_card_ca()
 
         cmd = ["systemctl", "stop", self._service_name]
         out = run(cmd, check=True)
@@ -409,15 +514,15 @@ class VirtualCard(Card):
         """
 
         cmd = ["pkcs11-tool", "--module", "libsofthsm2.so", "--slot-index",
-               '0', "-w", self.key, "-y", "privkey", "--label",
+               self.slot, "-w", self.key, "-y", "privkey", "--label",
                "test_key", "-p", self.pin, "--set-id", "0",
                "-d", "0"]
         run(cmd, env={"SOFTHSM2_CONF": self._softhsm2_conf})
         logger.debug(
             f"User key {self.key} is added to virtual smart card")
 
-        cmd = ['pkcs11-tool', '--module', 'libsofthsm2.so', '--slot-index', "0",
-               '-w', self.cert, '-y', 'cert', '-p', self.pin,
+        cmd = ['pkcs11-tool', '--module', 'libsofthsm2.so', '--slot-index',
+               self.slot, '-w', self.cert, '-y', 'cert', '-p', self.pin,
                '--label', "test_cert", '--set-id', "0", '-d', "0"]
         run(cmd, env={"SOFTHSM2_CONF": self._softhsm2_conf})
         logger.debug(
@@ -426,9 +531,14 @@ class VirtualCard(Card):
         # To get URI of the card, the card has to be inserted
         # Virtual smart card can't be started without a cert and a key uploaded
         # to it, so URI can be set only after uploading the cert and a key
-        with self:
-            self.insert()
+        self.insert()
+        try:
             self._set_uri()
+            self._set_label()
+            self.remove()
+        except Exception as e:
+            self.remove()
+            raise e
 
     def create(self):
         """
@@ -456,7 +566,7 @@ class VirtualCard(Card):
                "--pin", self.pin]
         run(cmd, env={"SOFTHSM2_CONF": self._softhsm2_conf}, check=True)
         logger.debug(
-            f"SoftHSM token is initialized with label '{self.cardholder}'")
+            f"SoftHSM token is initialized with label '{self.name}'")
 
         # Initialize NSS db
         self._nssdb = self.card_dir.joinpath("db")
@@ -514,7 +624,7 @@ class VirtualCard(Card):
                                        attempting to generate a CSR for an IPA
                                        user.
         """
-        csr_path = self.card_dir.joinpath(f"csr-{self.cardholder}.csr")
+        csr_path = self.card_dir.joinpath(f"csr-{self.name}.csr")
         if self.user.user_type == UserType.local:
             cmd = ["openssl", "req", "-new", "-nodes", "-key", self.key,
                    "-reqexts", "req_exts", "-config", self.cnf,
@@ -525,7 +635,7 @@ class VirtualCard(Card):
                     "Can't generate CSR because private key is not set")
             cmd = ["openssl", "req", "-new", "-days", "365",
                    "-nodes", "-key", self.key, "-out",
-                   csr_path, "-subj", f"/CN={self.cardholder}"]
+                   csr_path, "-subj", f"/CN={self.CN}"]
         run(cmd)
         return csr_path
 
@@ -539,21 +649,19 @@ class PhysicalCard(Card):
     Note: As of the provided code, this class is noted as 'Work In Progress'
     and not yet fully tested. Needs to be implemented with removinator.
     """
-    _inserted: bool = False
+    reminator = None
 
-    name: str = None
-    pin: str = None
-    cardholder: str = None
-    CN: str = None
-    UID: str = None
-    expires: str = None
-    card_type: str = None
-    ca_name: str = None
-    slot: str = None
-    uri: str = None
-    card_dir: Path = None
+    def __new__(class_, *args, **kwargs):
+        if not class_.reminator:
+            from removinator.removinator import Removinator
+            class_.reminator = Removinator()
+        return object.__new__(class_)
 
-    def __init__(self, card_data: dict = None, card_dir: Path = None):
+    def __del__(self):
+        if self.reminator.get_status()["current"] != 0:
+            self.reminator.remove_card()
+
+    def __init__(self, card_data: dict = None):
         """
         Initializes a ``PhysicalCard`` object.
         It sets up card attributes based on provided data and verifies the
@@ -562,34 +670,52 @@ class PhysicalCard(Card):
         :param card_data: A dictionary containing details about the physical
                           card.
         :type card_data: dict, optional
-        :param card_dir: The ``pathlib.Path`` object to the card's root
-                         directory.
-        :type card_dir: pathlib.Path, optional
         :return: None
         :rtype: None
-        :raises SCAutolibFileNotExists: If the specified ``card_dir`` does not
-                                        exist upon initialization.
+        :raises SCAutolibException: If there is no card present in the
+                                    specified slot.
         """
+
+        if "slot" not in card_data:
+            raise SCAutolibException("Physical cards need a slot field")
+
+        self.uri = card_data.get("uri", None)
 
         self.card_data = card_data
         # Not sure we will need following, let's see later
         self.name = card_data["name"]
         self.pin = card_data["pin"]
+        self.label = card_data.get("label", None)
         self.cardholder = card_data["cardholder"]
         self.CN = card_data["CN"]
         self.UID = card_data["UID"]
-#        self.expires = card_data["expires"]
-#        self.card_type = card_data["card_type"]
-#        self.ca_name = card_data["ca_name"]
-        self.slot = card_data["slot"]
+        self.expires = card_data["expires"]
+        self.card_type = card_data["card_type"]
+        self.ca_name = card_data["ca_name"]
         self.uri = card_data["uri"]
-        self.card_dir = card_dir
-        if not self.card_dir.exists():
-            raise SCAutolibFileNotExists("Card root directory doesn't exists")
+        self._prepared = card_data.get("_prepared", False)
+        self._inserted = card_data.get("_inserted", False)
+
+        self.slot = int(card_data["slot"])
 
         self.dump_file = LIB_DUMP_CARDS.joinpath(f"{self.name}.json")
 
-    def __call__(self, insert: bool):
+        removinator_status = self.reminator.get_status()
+        if self.slot not in removinator_status["present"]:
+            raise SCAutolibException(f"The is no card in slot {self.slot}. "
+                                     "Please connect a card to removinator.")
+        if self.slot in removinator_status["locked"]:
+            logger.warning(
+                f"Card '{self.name}' is locked. "
+                "Please check it unlock it manually.")
+        if removinator_status["current"] != 0:
+            self.reminator.remove_card()
+
+        self.reminator.insert_card(self.slot)
+        self._set_label()
+        self.reminator.remove_card()
+
+    def __call__(self, insert: bool = False):
         """
         Allows the ``PhysicalCard`` object to be called directly, enabling its
         use as part of a context manager.
@@ -604,7 +730,7 @@ class PhysicalCard(Card):
 
         if insert:
             self.insert()
-        return self.__enter__()
+        return self
 
     def __enter__(self):
         """
@@ -613,6 +739,9 @@ class PhysicalCard(Card):
         :return: The ``PhysicalCard`` instance.
         :rtype: SCAutolib.models.card.PhysicalCard
         """
+
+        self.login_to_card()
+        self.setup_card_ca()
 
         return self
 
@@ -636,8 +765,11 @@ class PhysicalCard(Card):
         if exp_type is not None:
             logger.error("Exception in physical smart card context")
             logger.error(format_exc())
-        if self._inserted:
-            self.remove()
+
+        if self._prepared:
+            self.restore_card_ca()
+
+        self.login_to_card(remove_after=True)
 
     def to_dict(self):
         """
@@ -649,30 +781,41 @@ class PhysicalCard(Card):
         :rtype: dict
         """
 
-        return self.card_data
+        return {
+            **self.card_data,
+            "label": self.label,
+            "_inserted": self._inserted,
+            "_prepared": self._prepared
+        }
 
-    @property
-    def user(self):
-        """
-        Returns the cardholder's username associated with this physical card.
-
-        :return: The cardholder's username.
-        :rtype: str
-        """
-
-        return self.cardholder
-
-    def insert(self):
+    def insert(self, update_sssd: bool = True):
         """
         Inserts the physical card.
         Note: This method is a placeholder and needs to be implemented
         to interact with Removinator.
 
+        :param update_sssd: If ``True``, it setup the card CA and SSSD config.
+        :type update_sssd: bool
         :return: None
         :rtype: None
         """
 
-        ...
+        status = self.reminator.get_status()
+        if self.slot in status["locked"]:
+            raise SCAutolibException(
+                f"Card '{self.name}' is locked and cannot be inserted. "
+                "Please check and unlock the card manually.")
+
+        if update_sssd:
+            self.setup_card_ca()
+
+        self.reminator.insert_card(self.slot)
+        logger.debug(f"Inserted slot {self.slot} removinator card.")
+        logger.debug(f"Removinator status: {self.reminator.get_status()}")
+
+        self._inserted = True
+
+        return 0
 
     def remove(self):
         """
@@ -683,5 +826,59 @@ class PhysicalCard(Card):
         :return: None
         :rtype: None
         """
+        if self._prepared:
+            self.restore_card_ca()
 
-        ...
+        self.reminator.remove_card()
+        logger.debug(f"Removed slot {self.slot} removinator card.")
+        logger.debug(f"Removinator status: {self.reminator.get_status()}")
+
+        self._inserted = False
+
+        return 0
+
+    def delete(self):
+        """
+        Deletes the physical card config file if exist.
+
+        :return: None
+        :rtype: None
+        """
+        if self.dump_file.exists():
+            self.dump_file.unlink()
+            logger.debug(f"Removed {self.dump_file} dump file")
+
+    def login_to_card(self, remove_after: bool = None):
+        """
+        Login to a physical card with the provided pin.
+
+        :param remove_after: If ``True``, removes the card after the login.
+        :type remove_after: bool
+        :return: None
+        :rtype: None
+        :raises SCAutolibCommandFailed: If login to card failed.
+        """
+        if not self.pin:
+            return
+
+        if not remove_after:
+            remove_after = not self._inserted
+
+        if not self._inserted:
+            self.insert(update_sssd=False)
+
+        try:
+            logger.debug(f"Login to card '{self.name}'.")
+            run(["pkcs11-tool", "-L", "--login", "--pin", self.pin],
+                check=True)
+            logger.debug("Login successful")
+        except SCAutolibCommandFailed as e:
+            logger.error("Failed to login to physical card.")
+            self.remove()
+            logger.error(
+                f"Locking card in slot {self.slot}. Please investigate.")
+            self.reminator.lock_card(self.slot)
+            raise e
+
+        if remove_after:
+            self.remove()

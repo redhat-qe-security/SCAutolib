@@ -15,7 +15,6 @@ from os.path import exists
 
 from traceback import format_exc
 
-from SCAutolib import LIB_BACKUP
 from SCAutolib import logger
 from SCAutolib.utils import run
 from SCAutolib.exceptions import SCAutolibFileNotExists
@@ -30,7 +29,7 @@ class Authselect:
     upon exiting the context. It configures the
     ``sssd`` profile with specific features like ``with-smartcard``.
     """
-    backup_name = LIB_BACKUP.joinpath("SCAutolib_authselect_backup")
+    backup_name = "SCAutolib_authselect_backup"
 
     def __init__(self, required: bool = False, lock_on_removal: bool = False,
                  mk_homedir: bool = False, sudo: bool = False):

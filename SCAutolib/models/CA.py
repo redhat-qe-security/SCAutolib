@@ -90,7 +90,7 @@ class BaseCA:
 
         ...
 
-    def update_ca_db(self):
+    def update_ca_db(self, restart_sssd: bool = False):
         """
         Updates the system's ``sssd_auth_ca_db.pem`` file with the CA's
         certificate defined in this CA object.
@@ -98,6 +98,8 @@ class BaseCA:
         ensures the CA certificate is added if not already present.
         SELinux context is restored on the database file after modification.
 
+        :param restart_sssd: If ``True``, SSSD service will be restarted.
+        :type restart_sssd: bool
         :return: None
         :rtype: None
         """
@@ -126,13 +128,18 @@ class BaseCA:
         run(f"restorecon -v {self._ca_pki_db}")
         logger.info("Local CA is updated")
 
-    def restore_ca_db(self):
+        if restart_sssd:
+            run(["systemctl", "restart", "sssd"], sleep=5)
+
+    def restore_ca_db(self, restart_sssd: bool = False):
         """
         Restores the ``sssd_auth_ca_db.pem`` file to its state before it was
         modified by this CA object. It uses the backed-up
         original file for restoration. If no backup exists, it will simply
         remove the current ``sssd_auth_ca_db.pem`` if it's present.
 
+        :param restart_sssd: If ``True``, SSSD service will be restarted.
+        :type restart_sssd: bool
         :return: None
         :rtype: None
         """
@@ -148,6 +155,9 @@ class BaseCA:
             if self._ca_pki_db.exists():
                 self._ca_pki_db.unlink()
         logger.info(f"Restored {self._ca_pki_db} to original version")
+
+        if restart_sssd:
+            run(["systemctl", "restart", "sssd"], sleep=5)
 
     def sign_cert(self):
         """
@@ -177,7 +187,7 @@ class BaseCA:
         ...
 
     @staticmethod
-    def load(json_file: Union[str, Path]):
+    def load(json_file: Union[str, Path] = None, ca_name: str = None):
         """
         Loads a CA object from a JSON file.
         It reads the JSON content, determines the CA type, and then
@@ -193,6 +203,10 @@ class BaseCA:
                                      JSON file, or if the data is invalid for
                                      IPA CA initialization.
         """
+        if ca_name and not json_file:
+            json_file = LIB_DUMP_CAS.joinpath(f"{ca_name}.json")
+            logger.debug(f"Loading CA {ca_name} from {json_file}")
+
         with json_file.open("r") as f:
             cnt = json.load(f)
 
@@ -205,7 +219,7 @@ class BaseCA:
                              domain=cnt["_ipa_server_domain"],
                              realm=cnt["_ipa_server_realm"])
         elif cnt["ca_type"] == CAType.custom:
-            ca = CustomCA(cnt)
+            ca = CustomCA(name=cnt["name"], ca_cert=cnt["ca_cert"])
         elif cnt["ca_type"] == CAType.local:
             ca = LocalCA(root_dir=cnt["root_dir"])
         else:
@@ -218,7 +232,7 @@ class BaseCA:
 
     @staticmethod
     def factory(path: Path = None, cnf: OpensslCnf = None,
-                card_data: dict = None, ca_name: str = None,
+                ca_cert: str = None, ca_name: str = None,
                 create: bool = False):
         """
         A factory function to create or load Certificate Authority (CA) objects
@@ -232,10 +246,10 @@ class BaseCA:
                     configuration file for the CA. Used when creating a new
                     ``LocalCA``.
         :type cnf: SCAutolib.models.file.OpensslCnf, optional
-        :param card_data: A dictionary containing various attributes of the
-                        card (e.g., PIN, cardholder, slot). This data is used
-                        when creating a new ``CustomCA`` for physical cards.
-        :type card_data: dict, optional
+        :param ca_cert: The CA cert to be added to the custom CA object. This
+                        data is used when creating a new ``CustomCA`` for
+                        physical cards.
+        :type ca_cert: str, optional
         :param ca_name: The name of the CA to load. This parameter is used when
                         ``create`` is ``False`` to identify the specific CA
                         JSON dump file.
@@ -252,12 +266,16 @@ class BaseCA:
             ca = BaseCA.load(LIB_DUMP_CAS.joinpath(f"{ca_name}.json"))
             return ca
 
-        if not path:            # create CA for physical card
-            ca = CustomCA(card_data)
+        if ca_cert:  # create custom CA for physical card
+            ca = CustomCA(name=ca_name, ca_cert=ca_cert)
             return ca
-        else:                   # create new CA object for virtual card
+        elif path:  # create new CA object for virtual card
             ca = LocalCA(root_dir=path, cnf=cnf)
             return ca
+        else:
+            raise SCAutolibException(
+                "To create a cert, either a path or ca_cert should be "
+                "provided")
 
 
 class LocalCA(BaseCA):
@@ -529,9 +547,8 @@ class CustomCA(BaseCA):
     :TODO: As of the provided code, this class is noted as not yet fully
     tested or functional.
     """
-    ca_type = CAType.custom
 
-    def __init__(self, card: dict):
+    def __init__(self, name: str, ca_cert: str):
         """
         Initializes a ``CustomCA`` object from provided card data.
         It sets up the CA's name, certificate path, and dump file location
@@ -545,9 +562,9 @@ class CustomCA(BaseCA):
         :rtype: None
         """
 
-        self.ca_type = CustomCA.ca_type
-        self.name = card["ca_name"]
-        self.ca_cert = card["ca_cert"]
+        self.ca_type = CAType.custom
+        self.name = name
+        self.ca_cert = ca_cert
         self.dump_file = LIB_DUMP_CAS.joinpath(f"{self.name}.json")
         self.root_dir: Path = LIB_DIR.joinpath(self.name)
         self._ca_cert = self.root_dir.joinpath(f"{self.name}.pem")
@@ -573,6 +590,30 @@ class CustomCA(BaseCA):
             newcert.write(self.ca_cert)
         logger.info("Local CA files are prepared")
 
+    def cleanup(self):
+        """
+        Removes the entire root directory of the local CA, including all
+        its generated files, certificates, and keys.
+        It also deletes the associated JSON dump file.
+
+        :return: None
+        :rtype: None
+        """
+
+        logger.warning(f"Removing custom CA '{self.name}'")
+
+        if self._ca_cert.exists():
+            self._ca_cert.unlink()
+
+        if self.root_dir.exists():
+            rmtree(self.root_dir)
+
+        if self.dump_file.exists():
+            self.dump_file.unlink()
+            logger.debug(f"Removed {self.dump_file} dump file")
+
+        logger.info(f"Local CA from {self.root_dir} is removed")
+
     def to_dict(self):
         """
         Customizes the serialization of the ``CustomCA`` object to a dictionary
@@ -584,9 +625,11 @@ class CustomCA(BaseCA):
         :rtype: dict
         """
 
-        dict_ = {k: str(v) if type(v) is PosixPath else v
-                 for k, v in super().__dict__.items()}
-        return dict_
+        return {
+            "ca_type": self.ca_type,
+            "name": self.name,
+            "ca_cert": self.ca_cert
+        }
 
 
 class IPAServerCA(BaseCA):
@@ -1016,10 +1059,8 @@ class IPAServerCA(BaseCA):
 
         :return: None
         :rtype: None
-        :raises subprocess.CalledProcessError: If
-                                               ``ipa-client-install --uninstall``
-                                               fails with an unexpected return
-                                               code.
+        :raises SCAutolibCommandFailed: If ``ipa-client-install --uninstall``
+                                        fails with an unexpected return code.
         """
 
         logger.warning("Removing IPA client from the host "
