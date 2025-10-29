@@ -105,7 +105,7 @@ class User:
         try:
             pwd.getpwnam(self.username)
             logger.info(f"Deleting the user {self.username}")
-            run(['userdel', '-f', self.username], check=True)
+            run(['userdel', '-rf', self.username], check=True)
         except KeyError:
             logger.info(f"User {self.username} is not present on the system")
 

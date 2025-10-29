@@ -68,8 +68,8 @@ class ReturnCode(Enum):
     """
 
     SUCCESS = 0  # operation completed successfully
-    MISSING_CA = auto()  # required CA is not configured on the system
     FAILURE = auto()  # general failure during an operation
+    MISSING_CA = auto()  # required CA is not configured on the system
     ERROR = auto()  # error condition during an operation
     EXCEPTION = auto()  # an unhandled exception occurred
     UNKNOWN = auto()  # unknown return status or outcome
