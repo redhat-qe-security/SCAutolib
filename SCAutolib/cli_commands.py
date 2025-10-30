@@ -322,8 +322,23 @@ def cleanup(ctx: click.Context):
               default=False,
               is_flag=True,
               help="Install missing packages")
+@click.option("--wait-time",
+              required=False,
+              default=5,
+              help="Time to wait after running function before continuing")
+@click.option("--no-screenshot",
+              required=False,
+              default=False,
+              is_flag=True,
+              help="Skip screenshots before and after gui functions")
+@click.option("--no-check-difference",
+              required=False,
+              default=False,
+              is_flag=True,
+              help="Skip check difference after gui functions")
 @click.pass_context
-def gui(ctx: click.Context, install_missing: bool):
+def gui(ctx: click.Context, install_missing: bool, wait_time: float,
+        no_screenshot: bool, no_check_difference: bool):
     """
     Command group for running chained GUI test commands.
     Manages graphical environment dependencies.
@@ -517,7 +532,12 @@ def done():
 
 @gui.result_callback()
 @click.pass_context
-def gui_run_all(ctx: click.Context, actions: list, install_missing: bool):
+def gui_run_all(ctx: click.Context,
+                actions: list,
+                install_missing: bool,
+                wait_time: float,
+                no_screenshot: bool,
+                no_check_difference: bool):
     """
     Executes all chained GUI test actions in the order they were provided on
     the command line. It initializes the graphical
@@ -533,6 +553,12 @@ def gui_run_all(ctx: click.Context, actions: list, install_missing: bool):
                             packages required for the graphical setup should be
                             installed prior to running the GUI actions.
     :type install_missing: bool
+    :param wait_time: Time to wait after running functions
+    :type wwait_time: float
+    :param no_screenshot: Skip taking screenshots before/after kb_send
+    :type no_screenshot: bool
+    :param no_check_difference: Skip checking screenshot difference after kb_send
+    :type no_check_difference: bool
     :return: This function does not explicitly return a value. It executes
              the GUI test workflow.
     :rtype: None
@@ -540,7 +566,10 @@ def gui_run_all(ctx: click.Context, actions: list, install_missing: bool):
     ctx.obj["CONTROLLER"].setup_graphical(install_missing, True)
 
     from SCAutolib.models.gui import GUI
-    gui = GUI(from_cli=True)
+    gui = GUI(from_cli=True,
+              wait_time=wait_time,
+              screenshot=not no_screenshot,
+              check_difference=not no_check_difference)
     for action in actions:
         logger.debug(f"Processing GUI CLI option: {action}...")
 

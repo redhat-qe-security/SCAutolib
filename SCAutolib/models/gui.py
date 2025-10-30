@@ -306,17 +306,17 @@ def action_decorator(func: Callable):
     def wrapper(self,
                 *args,
                 wait_time: int = None,
-                screenshot: bool = True,
-                check_difference: bool = True,
                 **kwargs):
 
-        start_screenshot = self.screen.screenshot() if screenshot else None
-        func(self, *args, **kwargs)
-        sleep(wait_time or self.wait_time)
-        end_screenshot = self.screen.screenshot() if screenshot else None
+        start_screenshot = self.screen.screenshot() if self.screenshot else None
 
-        if screenshot and check_difference:
-            # If the checking is enabled
+        func(self, *args, **kwargs)
+
+        sleep(wait_time or self.wait_time)
+
+        end_screenshot = self.screen.screenshot() if self.screenshot else None
+
+        if self.screenshot and self.check_difference:
             # the action should change contents of the screen
             if images_equal(start_screenshot, end_screenshot):
                 # If the screenshot before and after action are the same
@@ -359,8 +359,12 @@ class GUI:
     The class is designed to be used as a context manager for proper setup
     and cleanup of the GUI testing environment.
     """
-    def __init__(self, wait_time: float = 5, res_dir_name: str = None,
-                 from_cli: bool = False):
+    def __init__(self,
+                 wait_time: float = 5,
+                 res_dir_name: str = None,
+                 from_cli: bool = False,
+                 screenshot: bool = True,
+                 check_difference: bool = True):
         """
         Initializes the GUI automation environment. This includes
         setting up directories for screenshots and HTML reports, configuring
@@ -466,6 +470,11 @@ class GUI:
 
         # create screen object to use from calls
         self.screen = Screen(self.screenshot_directory, self.html_file)
+
+        # Set variables for screenshot and check_difference for
+        # action_decorator
+        self.screenshot = screenshot
+        self.check_difference = check_difference
 
     def __enter__(self):
         """
@@ -670,9 +679,13 @@ class GUI:
         :return: None
         :rtype: None
         """
-
         # delay is a workaround needed for keyboard library
         kwargs.setdefault('delay', 0.1)
+
+        # If screenshot is False, need a slight delay before sending to
+        # keyboard.write() to workaround first key(char) being missed
+        if not self.screenshot:
+            sleep(0.1)
 
         word = args[0]
         last = ""
@@ -684,7 +697,9 @@ class GUI:
                 keyboard.send(f"shift+{char.lower()}")
             else:
                 last = f"{last}{char}"
+
         keyboard.write(*[last], **kwargs)
+
         if press_enter:
             self.kb_send('enter')
 
@@ -704,6 +719,10 @@ class GUI:
         :return: None
         :rtype: None
         """
+        # If screenshot is False, need a slight delay before sending to
+        # keyboard.write() to workaround first key(char) being missed
+        if not self.screenshot:
+            sleep(0.1)
 
         keyboard.send(*args, **kwargs)
 
