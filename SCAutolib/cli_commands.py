@@ -520,11 +520,9 @@ def kb_write(keys: str):
 def done():
     """
     Serves as a finalization step for a sequence of GUI test commands.
-    It triggers cleanup actions after all preceding GUI test operations have
-    completed.
 
     :return: A string literal `"done"` that signals the execution of the
-             GUI cleanup action within the ``gui_run_all`` callback.
+             GUI done action within the ``gui_run_all`` callback.
     :rtype: str
     """
     return ("done",)
@@ -610,7 +608,6 @@ def gui_run_all(ctx: click.Context,
             gui.kb_write(text)
         elif keyword == "done":
             gui.__exit__(None, None, None)
-            ctx.obj["CONTROLLER"].cleanup()
 
 
 if __name__ == "__main__":

@@ -918,6 +918,7 @@ class GUI:
 
             passed_time = time()
 
+    @log_decorator
     def assert_image(self, img_path: Union[str, Path], timeout: float = 0,
                      start_thres: float = .85, end_thres: float = .8):
         """
@@ -1009,6 +1010,7 @@ class GUI:
                                     f"in the screenshot {screenshot}. "
                                     f"Check {image_path}.")
 
+    @log_decorator
     def assert_no_image(self, img_path: Union[str, Path], timeout: float = 0,
                         start_thres: float = .85, end_thres: float = .8):
         """
