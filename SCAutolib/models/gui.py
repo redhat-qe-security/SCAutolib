@@ -577,6 +577,8 @@ class GUI:
                                    within the specified timeout.
         """
 
+        self.mouse.move(1.0, 1.0)
+
         if not case_sensitive:
             key = key.lower()
 
@@ -778,7 +780,7 @@ class GUI:
 
         key_list = key.split(" ")
         multiword = len(key_list) > 1
-        threshold = max_thres
+        threshold = min_thres
 
         start_time = time()
         end_time = start_time + timeout
@@ -1127,6 +1129,10 @@ class GUI:
             check_str = "to search"
         elif isDistro("fedora"):
             check_str = "tosearch"
+        elif isDistro("centos"):
+            check_str = "to search"
+        elif isDistro("rhel", ">=10.2"):
+            check_str = "to search"
         else:
             check_str = "Activities"
 
