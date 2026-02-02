@@ -20,7 +20,7 @@ import json
 
 from SCAutolib import logger, TEMPLATES_DIR, LIB_BACKUP, LIB_DUMP_CONFS, run
 from SCAutolib.exceptions import SCAutolibFileExists, SCAutolibWrongConfig, \
-    SCAutolibNoTemplate, SCAutolibFileNotExists
+    SCAutolibNoTemplate
 from SCAutolib.utils import isDistro
 
 
@@ -500,7 +500,7 @@ class SSSDConf(File):
             logger.info(f"{self._conf_file} file exists, loading values")
             self._backup_original = self.backup("sssd-conf-original")
 
-        except SCAutolibFileNotExists:
+        except FileNotFoundError:
             logger.warning(f"{self._conf_file} not present")
             logger.warning("Creating sssd.conf based on the template")
 
