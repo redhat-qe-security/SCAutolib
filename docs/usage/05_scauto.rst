@@ -115,7 +115,7 @@ These are the primary commands available through the ``scauto`` CLI.
 
 .. warning::
 
-    The ``setup-ca`` command was designed for debugging puproses and not for
+    The ``setup-ca`` command was designed for debugging purposes and not for
     real testing use.
 
 * ``setup-user``
@@ -170,7 +170,7 @@ These are the primary commands available through the ``scauto`` CLI.
 
 .. warning::
 
-    The ``setup-user`` command was designed for debugging puproses and not for
+    The ``setup-user`` command was designed for debugging purposes and not for
     real testing use.
 
 * ``cleanup``

@@ -32,7 +32,8 @@ class Authselect:
     backup_name = "SCAutolib_authselect_backup"
 
     def __init__(self, required: bool = False, lock_on_removal: bool = False,
-                 mk_homedir: bool = False, sudo: bool = False):
+                 mk_homedir: bool = False, sudo: bool = False,
+                 gssapi: bool = False):
         """
         Initializes the ``Authselect`` object with desired ``authselect``
         profile features. By default, it sets the ``with-smartcard``
@@ -54,6 +55,10 @@ class Authselect:
                      be added to the ``authselect`` profile, enabling sudo
                      integration.
         :type sudo: bool
+        :param gssapi: If ``True``, the ``with-gssapi`` option will
+                     be added to the ``authselect`` profile, enabling gssapi
+                     integration.
+        :type gssapi: bool
         :return: None
         :rtype: None
         """
@@ -67,6 +72,8 @@ class Authselect:
             self._options.append("with-mkhomedir")
         if sudo:
             self._options.append("with-sudo")
+        if gssapi:
+            self._options.append("with-gssapi")
 
     def _set(self):
         """

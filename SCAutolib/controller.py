@@ -577,9 +577,9 @@ class Controller:
         if not card.ca_name:
             return None
 
-        if self.local_ca and card.ca_name == self.local_ca.ca_name:
+        if self.local_ca and card.ca_name.lower() == self.local_ca.ca_name:
             return self.local_ca
-        elif self.ipa_ca and card.ca_name == self.ipa_ca.ca_name:
+        elif self.ipa_ca and card.ca_name.upper() == self.ipa_ca.ca_name:
             return self.ipa_ca
         else:
             for custom_ca in self.custom_cas:
@@ -708,11 +708,6 @@ class Controller:
                     self.revoke_certs(card_obj)
                 card_obj.delete()
 
-        _restore_packages()
-        if virtual_cards:
-            run(["dnf", "-y", "copr", "--hub", "fedora",
-                 "disable", "jjelen/vsmartcard"])
-
         if self.local_ca:
             self.local_ca.cleanup()
             self.local_ca.restore_ca_db()
@@ -741,6 +736,11 @@ class Controller:
         pcscd_service.restore()
         opensc_module = File("/usr/share/p11-kit/modules/opensc.module")
         opensc_module.restore()
+
+        _restore_packages()
+        if virtual_cards:
+            run(["dnf", "-y", "copr", "--hub", "fedora",
+                 "disable", "jjelen/vsmartcard"])
 
     @staticmethod
     def _validate_configuration(conf: dict, params: dict = None) -> dict:

@@ -204,7 +204,10 @@ class BaseCA:
                                      IPA CA initialization.
         """
         if ca_name and not json_file:
-            json_file = LIB_DUMP_CAS.joinpath(f"{ca_name}.json")
+            if ca_name.upper() == IPAServerCA.ca_name:
+                json_file = IPAServerCA.dump_file
+            else:
+                json_file = LIB_DUMP_CAS.joinpath(f"{ca_name}.json")
             logger.debug(f"Loading CA {ca_name} from {json_file}")
 
         with json_file.open("r") as f:
