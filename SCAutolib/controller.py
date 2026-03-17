@@ -445,6 +445,9 @@ class Controller:
         self.sssd_conf.set(key="domains",
                            value=f"shadowutils, {self.ipa_ca.domain}",
                            section="sssd")
+        self.sssd_conf.set(key="debug_level", value="9",
+                           section=f"domain/{self.ipa_ca.domain}")
+        self.sssd_conf.save()
         dump_to_json(self.ipa_ca)
 
     def setup_user(self, user_dict: dict, force: bool = False):

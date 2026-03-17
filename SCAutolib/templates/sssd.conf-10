@@ -11,6 +11,12 @@ debug_level = 9
 debug_level = 9
 pam_cert_auth = True
 
+[ssh]
+debug_level = 9
+
+[sudo]
+debug_level = 9
+
 [domain/shadowutils]
 debug_level = 9
 id_provider = proxy

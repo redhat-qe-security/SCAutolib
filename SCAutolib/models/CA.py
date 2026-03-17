@@ -784,7 +784,7 @@ class IPAServerCA(BaseCA):
                  "--domain", self._ipa_server_domain,
                  "--realm", self._ipa_server_realm,
                  "--hostname", self._ipa_client_hostname,
-                 "--force", "--force-join", "--no-ntp",
+                 "--force", "--force-join", "--no-ntp", "--preserve-sssd",
                  "--no-dns-sshfp", "--mkhomedir", "--unattended"],
                 input="yes")
         except:
