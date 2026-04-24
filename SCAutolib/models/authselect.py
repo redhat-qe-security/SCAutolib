@@ -1,13 +1,9 @@
 """
-This module provides methods allowing to configure the system for smart-card
-authentication using the ``authselect`` tool.
+Configure system authentication using the ``authselect`` tool.
 
-It is implemented as a context manager (``Authselect`` class), which
-ensures that system configurations are properly set up upon entry and
-restored to their original state upon exit.
-The module interacts with ``authselect(8)`` to apply the ``sssd`` profile
-with specified features (for more information see manual page for
-``authselect(8)``).
+This module provides a context manager, the ``Authselect`` class, which
+automates system configuration for smart card authentication. It ensures
+profiles are properly applied and restored to their original state.
 """
 
 
@@ -22,23 +18,23 @@ from SCAutolib.exceptions import SCAutolibFileNotExists
 
 class Authselect:
     """
-    Manages the ``authselect`` configuration of the system for smart card
-    authentication. This class is designed to be
-    used as a context manager, ensuring that any changes made to ``authselect``
-    profiles are automatically backed up and restored to their previous state
-    upon exiting the context. It configures the
-    ``sssd`` profile with specific features like ``with-smartcard``.
+    Manage ``authselect`` configuration for smart card authentication.
+
+    This class acts as a context manager to apply the ``sssd`` profile with
+    specific features. It automatically creates a backup upon entry and
+    restores the previous configuration upon exit.
     """
+
     backup_name = "SCAutolib_authselect_backup"
 
     def __init__(self, required: bool = False, lock_on_removal: bool = False,
                  mk_homedir: bool = False, sudo: bool = False,
                  gssapi: bool = False):
         """
-        Initializes the ``Authselect`` object with desired ``authselect``
-        profile features. By default, it sets the ``with-smartcard``
-        feature for the ``sssd`` profile and uses the ``--force`` option to
-        apply changes.
+        Initialize the ``Authselect`` object with specific profile features.
+
+        By default, it enables the ``with-smartcard`` feature for the
+        ``sssd`` profile and prepares the command options for execution.
 
         :param required: If ``True``, the ``with-smartcard-required`` option
                          will be added to the ``authselect`` profile.
@@ -62,7 +58,6 @@ class Authselect:
         :return: None
         :rtype: None
         """
-
         self._options = ["with-smartcard"]
         if required:
             self._options.append("with-smartcard-required")
@@ -77,14 +72,14 @@ class Authselect:
 
     def _set(self):
         """
-        Applies the SSSD profile with the selected Authselect profile
-        features using the ``authselect`` command. It also backs
-        up the previous Authselect configuration to a default location.
+        Apply the SSSD profile with selected features.
+
+        Uses the ``authselect select`` command to apply configurations
+        and creates a system backup at the default authselect location.
 
         :return: None
         :rtype: None
         """
-
         # compose and run Authselect command
         cmd = ["authselect", "select", "sssd", *self._options,
                "--backup", self.backup_name, "--force"]
@@ -101,16 +96,16 @@ class Authselect:
 
     def _restore(self):
         """
-        Restores the Authselect configuration to the state it was in before
-        the Authselect class context manager applied its changes.
-        It attempts to restore from the backup file created during ``_set()``.
+        Restore the system to its original Authselect state.
+
+        Attempts to revert changes using the backup file created during
+        initialization.
 
         :return: None
         :rtype: None
         :raises SCAutolibFileNotExists: If the backup file expected for
                                         restoration does not exist.
         """
-
         if exists(f"/var/lib/authselect/backups/{self.backup_name}"):
             cmd = ["authselect", "backup-restore", self.backup_name, "--debug"]
             run(cmd)
@@ -124,27 +119,25 @@ class Authselect:
                 "Backup file not found. _restore method was"
                 "probably called in unexpected manner.")
 
-    def __enter__(self):
+    def __enter__(self) -> Authselect:
         """
-        Enters the Authselect calls context manager.
-        This method calls ``_set()`` to apply the desired Authselect
-        configuration and returns the instance itself, allowing for ``with``
-        statement usage.
+        Enter the Authselect context manager.
+
+        Applies the desired configuration immediately upon entering the
+        ``with`` block.
 
         :return: The ``Authselect`` instance.
         :rtype: SCAutolib.models.authselect.Authselect
         """
-
         self._set()
         return self
 
     def __exit__(self, ext_type, ext_value, ext_traceback):
         """
-        Exits the Authselect class context manager.
-        This method is called automatically when exiting a ``with`` statement.
-        It attempts to restore the Authselect configuration to its original
-        state by calling ``_restore()``. If an exception occurred
-        within the context, it logs the exception details.
+        Exit the Authselect context manager.
+
+        Automatically restores the original configuration. If an error
+        occurred within the block, the details are logged before restoration.
 
         :param ext_type: The type of the exception that caused the context to
                          be exited, or ``None`` if no exception occurred.
@@ -158,7 +151,6 @@ class Authselect:
         :return: None
         :rtype: None
         """
-
         if ext_type is not None:
             logger.error("Exception in authselect context")
             logger.error(format_exc())

@@ -24,7 +24,7 @@ graphical_reqs = [
 
 setup(
     name="SCAutolib",
-    version="3.5.2",
+    version="3.5.3",
     description=description,
     long_description=long_description,
     long_description_content_type='text/markdown',
@@ -45,10 +45,10 @@ setup(
     python_requires='>=3',
     install_requires=reqs,
     extras_require={
-        'graphical': graphical_reqs
+        'graphical': graphical_reqs,
+        'test': ["pytest", "pytest-env"]
     },
     include_package_data=True,
-    tests_require=["pytest", "pytest-env"],
     entry_points={
         "console_scripts": ["scauto=SCAutolib.cli_commands:cli"]
     }

@@ -1,11 +1,9 @@
 """
-This module provides a collection of utility and helper functions utilized
-across the SCAutolib library. These functions are
-specifically designed to support various internal demands of the library,
-including system checks, package management, key/certificate handling,
-and data serialization. They are not intended as
-general-purpose utilities but as specialized aids tailored to SCAutolib's
-operations.
+Define utility and helper functions for the SCAutolib library.
+
+These functions support internal demands including system checks, package
+management, key/certificate handling, and data serialization. They are
+tailored specifically for SCAutolib's operations.
 """
 
 
@@ -21,11 +19,10 @@ from SCAutolib import run, logger, TEMPLATES_DIR, LIB_BACKUP
 
 def _check_selinux():
     """
-    Checks if a specific SELinux module, 'virtcacard' (for virtual smart cards),
-    is currently installed and active on the system.
-    If the module is not found, this function attempts to install it from
-    a predefined template file (``virtcacard.cil``) and then restarts the
-    ``pcscd`` service.
+    Check if the 'virtcacard' SELinux module is active.
+
+    If the module is not found, it attempts to install it from the
+    template file and restarts the ``pcscd`` service.
 
     :return: None
     """
@@ -45,10 +42,10 @@ def _check_selinux():
 
 def _gen_private_key(key_path: Path, size: int = 2048):
     """
-    Generates an RSA private key and saves it to the specified file path in PEM
-    format without encryption.
-    This function is used when a private key is needed for a user's smart card
-    or certificate request and doesn't already exist.
+    Generate an unencrypted RSA private key in PEM format.
+
+    The key is saved to the specified path. Note that sizes greater than
+    2048 bits are typically not supported by CAC specifications.
 
     :param key_path: The ``pathlib.Path`` object specifying the full path
                      (including filename) where the generated private key
@@ -69,7 +66,15 @@ def _gen_private_key(key_path: Path, size: int = 2048):
             encryption_algorithm=serialization.NoEncryption()))
 
 
-def _read_packages_json():
+def _read_packages_json() -> tuple[Path, dict[str, list]]:
+    """
+    Read the package tracking JSON file from the backup directory.
+
+    If the file does not exist, it returns a default structure.
+
+    :return: A tuple containing the file path and the package data dictionary.
+    :rtype: tuple[Path, dict]
+    """
     packages_file = LIB_BACKUP.joinpath("packages.json")
     packages_json = {}
 
@@ -87,9 +92,9 @@ def _read_packages_json():
 
 def _install_packages(packages: list[str]):
     """
-    Installs a list of specified RPM packages on the system.
-    After installation, it logs the installed version of each package for
-    verification.
+    Install a list of RPM packages and log their versions.
+
+    The installation is tracked in the package backup JSON file.
 
     :param packages: A list of strings, where each string is the name of a
                      package to be installed (e.g., ``["opensc", "sssd"]``).
@@ -111,8 +116,9 @@ def _install_packages(packages: list[str]):
 
 def _remove_packages(packages: list[str]):
     """
-    Removes a list of specified RPM packages on the system.
-    Before removal, it logs the installed version of each removed package.
+    Remove a list of RPM packages from the system.
+
+    The removal is tracked in the package backup JSON file.
 
     :param packages: A list of strings, where each string is the name of a
                      package to be installed (e.g., ``["opensc", "sssd"]``).
@@ -134,9 +140,10 @@ def _remove_packages(packages: list[str]):
 
 def _restore_packages():
     """
-    Restore the system list of packages to the original state. Every package
-    that was installed with _install_packages function will be removed and
-    every package that was removed with _remove_packages will be restored.
+    Restore system packages to their original state.
+
+    Removes all packages installed via ``_install_packages`` and
+    reinstalls those removed via ``_remove_packages``.
 
     :return: None
     """
@@ -152,11 +159,12 @@ def _restore_packages():
         packages_file.unlink()
 
 
-def _check_packages(packages: list[str]):
+def _check_packages(packages: list[str]) -> list[str]:
     """
-    Identifies and returns a list of packages that are required for SCAutolib
-    but are not currently installed on the system.
-    It uses ``rpm -q`` to query each package's installation status.
+    Identify missing required packages on the system.
+
+    Queries the RPM database to check the installation status of each
+    package in the provided list.
 
     :param packages: A list of strings, where each string is the name of a
                      package to check for.
@@ -180,11 +188,10 @@ def _check_packages(packages: list[str]):
 
 def dump_to_json(obj: any):
     """
-    Serializes a given object into a JSON file, using the object's
-    ``to_dict()`` method for serialization and its ``dump_file`` attribute to
-    determine the output path. This is used to persist
-    the state of SCAutolib's internal objects (like users, CAs, and cards)
-    across different runs.
+    Serialize an object into a JSON file for persistence.
+
+    The object must implement a ``to_dict()`` method and have a
+    ``dump_file`` attribute.
 
     :param obj: The object to be serialized. It must have a ``to_dict()``
                 method and a ``dump_file`` attribute.
@@ -198,9 +205,10 @@ def dump_to_json(obj: any):
 
 def isDistro(OSes: Union[str, list], version: str = None) -> bool:
     """
-    Identifies if the current operating system matches a specified distribution
-    and, optionally, its version. This function leverages the ``distro`` library
-    to determine the system's ID, name, and version details.
+    Check if the current OS matches a specified distribution and version.
+
+    Leverages the ``distro`` library to verify system IDs, names, and
+    versions using optional comparison operators.
 
     :param OSes: The ID or name of the operating system(s) to check against.
                  Can be a single string (e.g., "fedora", "rhel") or a list of
@@ -216,7 +224,6 @@ def isDistro(OSes: Union[str, list], version: str = None) -> bool:
              distribution(s) and version criteria; ``False`` otherwise.
     :rtype: bool
     """
-
     cur_id = distro.id().lower()
     cur_name = distro.name().lower()
 

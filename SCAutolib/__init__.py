@@ -109,8 +109,9 @@ def run(cmd: list[str], stdout: int = subprocess.PIPE,
         return_code: list = None, sleep: int = 0, **kwargs) \
         -> subprocess.CompletedProcess:
     """
-    Executes an external command as a subprocess, providing a controlled
-    wrapper around ``subprocess.run``. This function
+    Execute an external command as a subprocess.
+
+    Provides a controlled wrapper around ``subprocess.run``. This function
     standardizes command execution, capturing and optionally printing output,
     performing robust error checking based on expected return codes, and
     provides consistent logging of what is being executed.

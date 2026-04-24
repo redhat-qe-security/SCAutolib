@@ -1,0 +1,56 @@
+name: Check Version Bump
+
+on:
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: head
+
+      - name: Checkout Base branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.base_ref }}
+          path: base
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3
+
+      - name: Install dependencies
+        run: pip install packaging
+
+      - name: Compare Versions
+        shell: python
+        run: |
+            import sys
+            import re
+            from packaging import version
+
+            def grab_version(filename):
+                with open(filename, "r") as f:
+                    content = f.read()
+                    # Searches for version="1.2.3" or version='1.2.3'
+                    match = re.search(r"version\s*=\s*['\"]([^'\"]+)['\"]", content)
+                    return match.group(1) if match else ""
+
+            v_head = grab_version("head/setup.py")
+            v_base = grab_version("base/setup.py")
+
+            print(f"Base version: {v_base}")
+            print(f"PR version: {v_head}")
+
+            if version.parse(v_head) <= version.parse(v_base):
+                print("❌ Error: Version in setup.py must be increased.")
+                sys.exit(1)
+            else:
+                print("✅ Version bump detected.")
