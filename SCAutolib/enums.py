@@ -1,8 +1,8 @@
 """
-This module defines various enumeration classes used throughout the SCAutolib
-library. These enumerations provide a set of
-named constants, enhancing code readability, maintainability, and reducing
-the likelihood of errors by restricting values to a predefined set.
+Define enumeration classes for the SCAutolib library.
+
+These enumerations provide a set of named constants to enhance code
+readability and maintainability while restricting values to predefined sets.
 """
 
 
@@ -11,10 +11,10 @@ from enum import Enum, auto
 
 class OSVersion(int, Enum):
     """
-    Enumeration for Linux operating system versions.
-    This class provides a convenient way to represent and check different
-    Linux distributions and their major versions numerically within SCAutolib's
-    logic.
+    Represent Linux operating system versions.
+
+    Used to numerically identify and check different Linux distributions
+    and their major versions within SCAutolib's logic.
     """
 
     Fedora = 1  # Fedora distribution
@@ -28,9 +28,10 @@ class OSVersion(int, Enum):
 
 class CardType(str, Enum):
     """
-    Enumeration for different types of smart cards supported by SCAutolib.
-    This allows for clear categorization and differentiation in handling
-    various card implementations within the library's logic.
+    Categorize smart card implementations supported by SCAutolib.
+
+    Distinguishes between physical hardware cards and software-based
+    virtual cards.
     """
 
     physical = "physical"  # physical smart card, connected via reader
@@ -39,8 +40,9 @@ class CardType(str, Enum):
 
 class UserType(str, Enum):
     """
-    Enumeration for the types of users that can be managed and tested by
-    SCAutolib. This distinguishes between local system users and users managed
+    Identify the origin of user accounts managed by SCAutolib.
+
+    Distinguishes between local system accounts and accounts managed
     by an Identity Management (IdM) system like FreeIPA.
     """
 
@@ -50,8 +52,9 @@ class UserType(str, Enum):
 
 class CAType(str, Enum):
     """
-    Enumeration for the different types of Certificate Authorities (CAs) that
-    SCAutolib can interact with or configure.
+    Represent types of Certificate Authorities (CAs) used in the library.
+
+    Provides consistent CA types of local, custom, or IPA.
     """
 
     local = "local"  # locally configured CA instance
@@ -61,10 +64,10 @@ class CAType(str, Enum):
 
 class ReturnCode(Enum):
     """
-    Enumeration for standardized return codes used throughout SCAutolib
-    to indicate the outcome of operations.
-    These codes provide a clear and consistent way to signal success or
-    various types of failures.
+    Standardize operation outcomes across SCAutolib.
+
+    Provides a consistent set of codes to signal success, configuration
+    issues, or runtime errors.
     """
 
     SUCCESS = 0  # operation completed successfully

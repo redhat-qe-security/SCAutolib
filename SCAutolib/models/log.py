@@ -1,9 +1,9 @@
 """
-This module provides a context manager, ``assert_log``, designed for verifying
-the presence of specific log entries in a file during test execution.
+Verify the presence of specific log entries in a file.
 
-It allows for asserting that a given regular expression matches a newly
-generated log line within a specified log file.
+This module provides the ``assert_log`` context manager, which is used
+during test execution to verify that a given regular expression matches
+a newly generated log line within a specified log file.
 """
 
 
@@ -16,17 +16,11 @@ import re
 @contextmanager
 def assert_log(path: str, expected_log: str):
     """
-    A context manager that asserts the creation of a new log line in a
-    specified file that matches a given regular expression.
+    Assert that a new log line matches a regular expression.
 
-    When entering the context, the log file's pointer is moved to its end to
-    ignore any existing logs. The code block within the
-    ``with`` statement is then executed. Upon exiting the context (either
-    normally or due to an exception), the function reads new log entries and
-    attempts to find a match for the ``expected_log`` regular expression.
-
-    If no matching log is found among the newly generated entries, an exception
-    is raised.
+    When entering the context, the file pointer moves to the end to ignore
+    existing logs. Upon exit, the function reads any new entries and
+    searches for a match against the ``expected_log`` regex.
 
     :param path: The string path to the log file that will be monitored
                  for new log entries.
@@ -54,6 +48,7 @@ def assert_log(path: str, expected_log: str):
             logger.info(f'Asserting regex `{expected_log}` in {path}')
             log = ''  # Only for debugging purposes
 
+            found = False
             for line in f:
                 log += line
                 m = p.match(line)
@@ -61,7 +56,9 @@ def assert_log(path: str, expected_log: str):
                     # found the log
                     text = m.group()
                     logger.info(f'Found matching line: {text}')
-                    return
+                    found = True
+                    break
 
-            logger.debug(log)
-            raise SCAutolibNotFound('The log was not found.')
+            if not found:
+                logger.debug(log)
+                raise SCAutolibNotFound('The log was not found.')

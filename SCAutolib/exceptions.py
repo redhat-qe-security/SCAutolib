@@ -1,150 +1,237 @@
 """
-Exceptions that are used in the SCAutolib library.
-This module defines a hierarchy of custom exception classes that are
-raised by SCAutolib components to signal specific error conditions
-during operations. These custom exceptions
-provide more specific context than generic Python exceptions,
-aiding in error handling and debugging.
+Define custom exceptions for the SCAutolib library.
+
+This module provides a hierarchy of exception classes used to signal
+specific error conditions, offering more context than generic Python
+exceptions to aid in debugging and error handling.
 """
 
 
 class SCAutolibException(Exception):
     """
-    Base exception class for all custom exceptions within SCAutolib.
-    All other SCAutolib-specific exceptions inherit from this class,
-    allowing for a unified way to catch any error originating from the library.
+    Base class for all custom exceptions within SCAutolib.
+
+    Inherit from this class to allow a unified way to catch any error
+    originating specifically from this library.
     """
+
     def __init__(self, *args):
+        """
+        Initialize the base exception.
+
+        :param args: Variable length argument list.
+        :type args: Any
+        :return: None
+        """
         super().__init__(*args)
 
 
 class SCAutolibGUIException(SCAutolibException):
     """
-    Exception raised by GUI functions when something is wrong.
+    Signal an error encountered within the graphical environment.
     """
+
     default = "Graphical environment encountered and error"
 
     def __init__(self, msg=None):
+        """
+        Initialize the GUI exception.
+
+        :param msg: Custom error message.
+        :type msg: str, optional
+        :return: None
+        """
         msg = self.default if msg is None else msg
         super().__init__(msg)
 
 
 class SCAutolibIPAException(SCAutolibException):
     """
-    Exception raised by IPA functions when something is wrong.
+    Signal an error encountered during IPA-related functions.
     """
+
     default = "IPA setup encountered and error"
 
     def __init__(self, msg=None):
+        """
+        Initialize the IPA exception.
+
+        :param msg: Custom error message.
+        :type msg: str, optional
+        :return: None
+        """
         msg = self.default if msg is None else msg
         super().__init__(msg)
 
 
 class SCAutolibWrongConfig(SCAutolibException):
     """
-    Exception raised when a required key or section is missing or is
-    incorrectly configured in the application's configuration file.
-    This signals that the current operation cannot proceed due to an invalid
-    or incomplete configuration setup.
+    Raise when a required configuration key or section is missing or invalid.
     """
+
     default = "Key/section for current operation is not present in the " \
               "configuration file"
 
     def __init__(self, msg=None):
+        """
+        Initialize the configuration exception.
+
+        :param msg: Custom error message.
+        :type msg: str, optional
+        :return: None
+        """
         msg = self.default if msg is None else msg
         super().__init__(msg)
 
 
 class SCAutolibMissingCA(SCAutolibException):
     """
-    Exception raised when a Certificate Authority (CA) required for an
-    operation is not configured on the system. This typically
-    occurs if a smart card enrollment or certificate request is attempted
-    without a proper CA setup.
+    Raise when a required Certificate Authority is not configured.
     """
+
     default = "CA is not configured on the system"
 
     def __init__(self, msg=None):
+        """
+        Initialize the missing CA exception.
+
+        :param msg: Custom error message.
+        :type msg: str, optional
+        :return: None
+        """
         msg = self.default if msg is None else msg
         super().__init__(msg)
 
 
 class SCAutolibMissingUserConfig(SCAutolibException):
     """
-    Exception raised when a user, specified by their name, is expected to
-    be found in the configuration file but is not present.
-    This indicates that the library cannot proceed with operations for the
-    requested user due to missing configuration.
+    Raise when a user configuration is missing.
     """
+
     def __init__(self, name):
+        """
+        Initialize the missing user configuration exception.
+
+        :param msg: Custom error message.
+        :type msg: str, optional
+        :return: None
+        """
         msg = f"User {name} is found in config file"
         super().__init__(msg)
 
 
 class SCAutolibFileExists(SCAutolibException):
     """
-    Exception raised when a file that we want to create already exists.
+    Raise when attempting to create a file that already exists.
     """
+
     default = "The file already exists"
 
     def __init__(self, msg=None):
+        """
+        Initialize the file exists exception.
+
+        :param msg: Custom error message.
+        :type msg: str, optional
+        :return: None
+        """
         msg = self.default if msg is None else msg
         super().__init__(msg)
 
 
 class SCAutolibFileNotExists(SCAutolibException):
     """
-    Exception raised when a file that we want doesn't exist.
+    Raise when a required file is missing from the filesystem.
     """
+
     default = "The file does not exists"
 
     def __init__(self, msg=None):
+        """
+        Initialize the file not found exception.
+
+        :param msg: Custom error message.
+        :type msg: str, optional
+        :return: None
+        """
         msg = self.default if msg is None else msg
         super().__init__(msg)
 
 
 class SCAutolibNoTemplate(SCAutolibException):
     """
-    Exception raised when no template file was provided during object
-    initialization when a ``create`` function is called.
+    Raise when no template file is provided for a creation operation.
     """
+
     default = "No template was provided for the file to be created"
 
     def __init__(self, msg=None):
+        """
+        Initialize the missing template exception.
+
+        :param msg: Custom error message.
+        :type msg: str, optional
+        :return: None
+        """
         msg = self.default if msg is None else msg
         super().__init__(msg)
 
 
 class SCAutolibUnknownType(SCAutolibException):
     """
-    Exception raised when a type given is not in the enum.
+    Raise when a provided value does not match expected enumeration types.
     """
+
     default = "Unknown type"
 
     def __init__(self, msg=None):
+        """
+        Initialize the unknown type exception.
+
+        :param msg: Custom error message.
+        :type msg: str, optional
+        :return: None
+        """
         msg = self.default if msg is None else msg
         super().__init__(msg)
 
 
 class SCAutolibNotFound(SCAutolibException):
     """
-    Exception raised when expected result is not found.
+    Raise when an expected search result or object is not found.
     """
+
     default = "Expected result is not found"
 
     def __init__(self, msg=None):
+        """
+        Initialize the not found exception.
+
+        :param msg: Custom error message.
+        :type msg: str, optional
+        :return: None
+        """
         msg = self.default if msg is None else msg
         super().__init__(msg)
 
 
 class SCAutolibCommandFailed(SCAutolibException):
     """
-    Exception raised when a command gives unexpected return code in run
-    function.
+    Raise when a system command returns an unexpected exit code.
     """
+
     default = "Command failed with unexpected code."
 
     def __init__(self, cmd: str = None, ret_code: int = None):
+        """
+        Initialize the command failure exception.
+
+        :param cmd: The command string that was executed.
+        :type cmd: str, optional
+        :param ret_code: The exit code returned by the system.
+        :type ret_code: int, optional
+        :return: None
+        """
         if cmd and ret_code:
             msg = f"Command '{cmd}' returned unexpected code {ret_code}."
         else:

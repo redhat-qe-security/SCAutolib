@@ -1,14 +1,10 @@
 """
-This module defines the ``Controller`` class, which serves as the central
-orchestrator for SCAutolib's operations.
+Central orchestrator for the SCAutolib library's operations.
 
-It bridges the gap between the CLI (View) or automated test scripts and the
-underlying Model components (like CAs, users, and cards).
-The ``Controller`` is responsible for high-level logic, including system
-preparation, CA configuration, user and smart card setup, and overall
-cleanup. It manages the flow of actions,
-validates configurations, and handles the persistence of critical object
-states.
+This module defines the Controller class, which bridges the gap between
+high-level interfaces (CLI or automated tests) and model components.
+It manages system preparation, CA and user setup, and cleanup logic
+while ensuring configuration validation and state persistence.
 """
 
 
@@ -17,7 +13,7 @@ import os
 from pathlib import Path
 from schema import Schema, Use
 from shutil import rmtree
-from typing import Union
+from typing import Union, Any
 
 from SCAutolib import schema_cas, schema_user, schema_card
 from SCAutolib import (logger, run, LIB_DIR, LIB_BACKUP, LIB_DUMP,
@@ -35,13 +31,15 @@ from SCAutolib.exceptions import *
 
 class Controller:
     """
-    The ``Controller`` class acts as the central logic unit within SCAutolib,
-    orchestrating complex workflows involving system setup, CA management,
-    user creation, and smart card enrollment. It initializes
+    The ``Controller`` class acts as the central logic unit within SCAutolib.
+
+    The class orchestrating complex workflows involving system setup, CA
+    management, user creation, and smart card enrollment. It initializes
     and manages various model objects (e.g., ``Authselect``, ``SSSDConf``,
     ``CA``'s, ``User``'s, ``Card``'s) and executes their methods in a
     coordinated manner to achieve desired system states for smart card testing.
     """
+
     authselect: auth.Authselect = auth.Authselect()
     sssd_conf: file.SSSDConf = file.SSSDConf()
     lib_conf: dict = None
@@ -49,17 +47,16 @@ class Controller:
     local_ca: CA.LocalCA = None
     ipa_ca: CA.IPAServerCA = None
     custom_cas: list[CA.CustomCA] = []
-    users: [user.User] = None
+    users: list[user.User] = None
     dconf_file = File(filepath='/etc/dconf/db/local.d/gnome_disable_welcome',
                       template=Path(TEMPLATES_DIR, 'gnome_disable_welcome'))
 
     virtual_cards_packages = ["virt_cacard", "vpcd", "softhsm"]
 
     @property
-    def conf_path(self):
+    def conf_path(self) -> Path:
         """
-        Returns the absolute path to the configuration file loaded by the
-        Controller.
+        Return the absolute path to the configuration file.
 
         :return: A ``pathlib.Path`` object representing the absolute path of
                  the loaded configuration file.
@@ -69,9 +66,10 @@ class Controller:
 
     def __init__(self, config: Union[Path, str] = None, params: dict = None):
         """
-        Initializes the Controller, parsing and validating the input
-        configuration file. If values are missing
-        from the configuration, it checks if they are provided via CLI
+        Initialize the Controller.
+
+        Parsing and validating the input configuration file. If values are
+        missing from the configuration, it checks if they are provided via CLI
         parameters. It also sets up necessary
         dump and backup directories and initializes related model objects (CAs)
         from previous runs if their dump files exist.
@@ -85,14 +83,15 @@ class Controller:
         :type params: dict, optional
         :return: None
         """
-
         # Check params
 
         # Parse config file
         self.lib_conf = None
         if config:
-            self._lib_conf_path = config.absolute() if isinstance(config, Path) \
+            self._lib_conf_path = (
+                config.absolute() if isinstance(config, Path)
                 else Path(config).absolute()
+            )
 
             with self._lib_conf_path.open("r") as f:
                 tmp_conf = json.load(f)
@@ -116,9 +115,12 @@ class Controller:
             else:
                 self.custom_cas.append(ca)
 
-    def prepare(self, force: bool, gdm: bool, install_missing: bool,
-                graphical: bool):
+    def prepare(
+        self, force: bool, gdm: bool, install_missing: bool, graphical: bool
+    ):
         """
+        Prepare the entire system for smart card testing.
+
         Prepares the entire system for smart card testing based on the loaded
         configuration and provided CLI options. This method
         orchestrates the complex configuration of the system under test,
@@ -143,7 +145,6 @@ class Controller:
         :raises SCAutolibWrongConfig: If a required CA section is missing in
                                       the configuration.
         """
-
         self.setup_system(install_missing, gdm, graphical)
 
         # Prepare CAs: Virtual cards are populated by certificates that are: a)
@@ -175,8 +176,10 @@ class Controller:
                 c = self.setup_card(token)
                 self.enroll_card(c)
 
-    def has_card(self, card_type: CardType):
+    def has_card(self, card_type: CardType) -> bool:
         """
+        Check if a card of card_type exists in config.
+
         A helper function that checks if a card of a card_type is defined in
         the config.
 
@@ -189,8 +192,10 @@ class Controller:
         """
         return any(c["card_type"] == card_type for c in self.lib_conf["cards"])
 
-    def has_user(self, user_type: UserType):
+    def has_user(self, user_type: UserType) -> bool:
         """
+        Check if a user of user_type exists in config.
+
         A helper function that checks if a user of a user_type is defined in
         the config.
 
@@ -205,10 +210,11 @@ class Controller:
 
     def setup_system(self, install_missing: bool, gdm: bool, graphical: bool):
         """
-        Performs general system setup, including the installation of necessary
-        packages, SSSD configuration, and specific configurations for virtual
-        smart cards based on the requirements defined in the configuration
-        file.
+        Perform general system setup.
+
+        Including the installation of necessary packages, SSSD configuration,
+        and specific configurations for virtual smart cards based on the
+        requirements defined in the configuration file.
 
         :param install_missing: If ``True``, all detected missing prerequisite
                                 packages will be automatically installed.
@@ -223,7 +229,6 @@ class Controller:
         :raises SCAutolibException: If required packages are missing and
                                     ``install_missing`` is ``False``.
         """
-
         for d in (LIB_DIR, LIB_BACKUP, LIB_DUMP, LIB_DUMP_USERS, LIB_DUMP_CAS,
                   LIB_DUMP_CARDS):
             d.mkdir(exist_ok=True)
@@ -288,7 +293,8 @@ class Controller:
 
     def setup_graphical(self, install_missing: bool, gdm: bool):
         """
-        Configures the system specifically for GUI testing.
+        Configure the system specifically for GUI testing.
+
         This involves installing necessary graphical user interface (GUI)
         packages and ensuring the environment is ready for GUI automation.
 
@@ -302,7 +308,6 @@ class Controller:
         :raises SCAutolibGUIException: If required packages are missing and
                                       ``install_missing`` is ``False``.
         """
-
         packages = ["gcc", "tesseract", "ffmpeg-free"]
 
         if gdm:
@@ -336,10 +341,11 @@ class Controller:
 
     def setup_local_ca(self, force: bool = False):
         """
-        Configures a local Certificate Authority (CA) based on the settings
-        from the configuration file. It ensures the
-        necessary directory and file structures are created and the CA's
-        self-signed root certificate is generated.
+        Configure a local Certificate Authority (CA).
+
+        Configures the CA based on the settings from the configuration file. It
+        ensures the necessary directory and file structures are created and the
+        CA's self-signed root certificate is generated.
         It also updates the system's ``sssd_auth_ca_db.pem`` with the CA's
         certificate.
 
@@ -351,7 +357,6 @@ class Controller:
         :raises SCAutolibWrongConfig: If the 'local_ca' section is not found
                                       in the configuration file.
         """
-
         if "local_ca" not in self.lib_conf["ca"]:
             msg = "Section for local CA is not found in the configuration file"
             raise SCAutolibWrongConfig(msg)
@@ -374,10 +379,11 @@ class Controller:
 
     def setup_custom_ca(self, force: bool):
         """
-        Sets up a custom Certificate Authority (CA) based on provided card
-        data. This is typically used for physical cards
-        where root CA certificates might be provided externally and cannot be
-        changed (like precreated physical cards).
+        Set up a custom Certificate Authority (CA).
+
+        Sets up a custom CA based on provided card data. This is typically used
+        for physical cards where root CA certificates might be provided
+        externally and cannot be changed (like precreated physical cards).
         It creates the CA object, performs its setup, and then dumps its state
         to a JSON file.
 
@@ -388,7 +394,6 @@ class Controller:
         :raises SCAutolibFileNotExists: If the CA certificate file is not found
                                         after setup.
         """
-
         if "custom" not in self.lib_conf["ca"]:
             raise SCAutolibWrongConfig("Section for custom CAs is not found "
                                        "in the configuration file")
@@ -411,11 +416,12 @@ class Controller:
 
     def setup_ipa_client(self, force: bool = False):
         """
-        Configures an IPA (Identity Management for Linux) client on the current
-        host to communicate with a given IPA server. The IPA
-        server is expected to be already operational. If an IPA
-        client is already installed, it can be optionally removed before
-        reconfiguration.
+        Configure an IPA (Identity Management for Linux) client.
+
+        Configures an IPA client on the current host to communicate with a
+        given IPA server. The IPA server is expected to be already operational.
+        If an IPA client is already installed, it can be optionally removed
+        before reconfiguration.
 
         :param force: If ``True`` and an IPA Client is already configured, the
                       existing installation will be uninstalled before setting
@@ -425,7 +431,6 @@ class Controller:
         :raises SCAutolibWrongConfig: If the 'ipa' section is not found in the
                                       configuration file.
         """
-
         if "ipa" not in self.lib_conf["ca"]:
             msg = "Section for IPA is not found in the configuration file"
             raise SCAutolibWrongConfig(msg)
@@ -450,10 +455,12 @@ class Controller:
         self.sssd_conf.save()
         dump_to_json(self.ipa_ca)
 
-    def setup_user(self, user_dict: dict, force: bool = False):
+    def setup_user(self, user_dict: dict, force: bool = False) -> user.User:
         """
-        Configures a user on the specified system (either a local machine or an
-        IPA server) based on the provided user dictionary.
+        Configure a user on the specified system.
+
+        Either a local machine or an IPA server based on the provided user
+        dictionary.
 
         :param user_dict: A dictionary containing the user's attributes such as
                           'name', 'passwd', and 'user_type'.
@@ -468,7 +475,6 @@ class Controller:
                                        IPA client is currently configured on the
                                        system.
         """
-
         new_user = None
 
         if user_dict["user_type"] == UserType.local:
@@ -493,10 +499,12 @@ class Controller:
         dump_to_json(new_user)
         return new_user
 
-    def setup_card(self, card_dict: dict, force: bool = False):
+    def setup_card(self, card_dict: dict, force: bool = False) -> card.Card:
         """
-        Creates and initializes a ``Card`` object (either ``PhysicalCard`` or
-        ``VirtualCard``) based on the provided card dictionary.
+        Create and initialize a ``Card`` object.
+
+        Either ``PhysicalCard`` or ``VirtualCard`` based on the provided card
+        dictionary.
         For virtual cards, this includes preparing SoftHSM2 configuration and
         OpenSSL CNF files, linking the card to its user, and creating the
         SoftHSM2 token and virt_cacard systemd service.
@@ -515,7 +523,6 @@ class Controller:
         :raises NotImplementedError: If a card type other than 'physical' or
                                      'virtual' is specified.
         """
-
         if card_dict["card_type"] == CardType.physical:
             new_card = card.PhysicalCard(card_dict)
             new_card.user = self.find_card_user(new_card)
@@ -545,10 +552,11 @@ class Controller:
         dump_to_json(new_card)
         return new_card
 
-    def find_card_user(self, card: card.Card):
+    def find_card_user(self, card: card.Card) -> user.User:
         """
-        Links a ``Card`` object to its corresponding ``User`` object based
-        on the ``cardholder`` attribute of the card.
+        Link a ``Card`` object to its corresponding ``User`` object.
+
+        This action is based on the ``cardholder`` attribute of the card.
         It iterates through the Controller's loaded users to find a match.
 
         :param card: The ``Card`` object for which to find the associated
@@ -556,8 +564,9 @@ class Controller:
         :type card: SCAutolib.models.card.Card
         :return: The ``User`` object that matches the card's cardholder.
         :rtype: SCAutolib.models.user.User
+        :raises SCAutolibNotFound: If the cardholder is provided but not found
+                                    in the configuration.
         """
-
         for card_user in self.users:
             if card_user.username == card.cardholder:
                 return card_user
@@ -565,17 +574,20 @@ class Controller:
         raise SCAutolibNotFound(f"User {card.cardholder} referenced by card "
                                 f"{card.name} is not specified in conf!")
 
-    def find_card_ca(self, card: card.Card):
+    def find_card_ca(self, card: card.Card) -> CA.BaseCA:
         """
-        Links a ``Card`` object to its corresponding ``User`` object based
-        on the ``cardholder`` attribute of the card.
-        It iterates through the Controller's loaded users to find a match.
+        Locate the Certificate Authority associated with a specific card.
+
+        Searches through the configured local CA, IPA CA, and custom CAs
+        to find a match for the CA name referenced by the smart card.
 
         :param card: The ``Card`` object for which to find the associated
                      user.
         :type card: SCAutolib.models.card.Card
-        :return: The ``User`` object that matches the card's cardholder.
-        :rtype: SCAutolib.models.user.User
+        :return: The matching CA object, or None if the card has no CA name.
+        :rtype: SCAutolib.models.CA.BaseCA
+        :raises SCAutolibNotFound: If the CA name is provided but not found
+                                    in the configuration.
         """
         if not card.ca_name:
             return None
@@ -592,40 +604,39 @@ class Controller:
         raise SCAutolibNotFound(f"CA {card.ca_name} referenced by card "
                                 f"{card.name} is not specified in conf!")
 
-    def prepare_softhsm_config(self, card_dir: Path = None):
+    def prepare_softhsm_config(self, card_dir: Path = None) -> file.SoftHSM2Conf:
         """
-        Prepares the ``softhsm2.conf`` file specifically for a virtual card.
-        This involves creating the configuration file based on a template and
-        saving it in the specified card directory.
+        Locate and return the Certificate Authority (CA) associated with a card.
 
-        :param card_dir: The ``pathlib.Path`` object to the directory where the
-                         ``softhsm2.conf`` file should be saved.
-        :type card_dir: pathlib.Path, optional
-        :return: An initialized ``SoftHSM2Conf`` object.
-        :rtype: SCAutolib.models.file.SoftHSM2Conf
+        The method performs a case-insensitive check against the local CA,
+        a case-sensitive check against the IPA CA, and finally searches
+        through custom CAs.
+
+        :param card: The card object containing the CA name to search for.
+        :return: The matching CA object if found, or None if the card has no
+                 CA name.
+        :raises SCAutolibNotFound: If a CA name is specified but cannot be
+                                located in the configuration.
         """
-
         filepath = card_dir.joinpath("sofhtsm2.conf")
         hsm_conf = file.SoftHSM2Conf(filepath, card_dir=card_dir)
         hsm_conf.create()
         hsm_conf.save()
         return hsm_conf
 
-    def prepare_user_cnf(self, card: card.VirtualCard):
+    def prepare_user_cnf(self, card: card.VirtualCard) -> Path:
         """
-        Prepares an OpenSSL configuration file (``{cardholder}.cnf``)
-        specifically for a virtual card's user. This CNF file is
-        used for generating Certificate Signing Requests (CSRs) for the user's
-        certificate.
+        Prepare an OpenSSL configuration file for a virtual card user.
 
-        :param card: The ``VirtualCard`` object for which to prepare the user
-                     CNF.
+        The generated file ({cardholder}.cnf) is used specifically for
+        generating Certificate Signing Requests (CSRs) for the user's
+        certificate associated with the virtual card.
+
+        :param card: The VirtualCard object for which to prepare the user CNF.
         :type card: SCAutolib.models.card.VirtualCard
-        :return: The ``pathlib.Path`` object to the created user OpenSSL CNF
-                 file.
+        :return: The path to the created user OpenSSL CNF file.
         :rtype: pathlib.Path
         """
-
         cnf_path = card.card_dir.joinpath(f"{card.cardholder}.cnf")
         cnf = file.OpensslCnf(filepath=cnf_path, conf_type="user",
                               replace=[card.cardholder, card.CN])
@@ -635,7 +646,8 @@ class Controller:
 
     def revoke_certs(self, card: card.VirtualCard):
         """
-        Revokes the certificate associated with a virtual card.
+        Revoke the certificate associated with a virtual card.
+
         The revocation is performed by the appropriate Certificate Authority
         (local or IPA) based on the user's type.
 
@@ -644,7 +656,6 @@ class Controller:
         :type card: SCAutolib.models.card.VirtualCard
         :return: None
         """
-
         if card.cert and card.cert.exists():
             if card.user.user_type == UserType.local:
                 self.local_ca.revoke_cert(card.cert)
@@ -653,18 +664,19 @@ class Controller:
 
     def enroll_card(self, card: card.VirtualCard):
         """
-        Enrolls a virtual smart card by generating a private key (if missing),
-        requesting a certificate from the corresponding CA (local or IPA),
-        and then uploading the key and certificate to the virtual card's token.
-        The card's URI is also set during this process.
+        Enroll a virtual smart card.
 
-        :param card: The ``VirtualCard`` object to be enrolled.
+        This process generates a private key if one is missing, requests a
+        certificate from the corresponding CA (local or IPA) based on the user
+        type, and uploads the key and certificate to the virtual card's token.
+        The card's URI is also set and the state is persisted to JSON.
+
+        :param card: The VirtualCard object to be enrolled.
         :type card: SCAutolib.models.card.VirtualCard
         :return: None
         :raises SCAutolibException: If the card object is not properly
-                                    initialized.
+                                    initialized or is None.
         """
-
         logger.debug(f"Starting enrollment of the card {card.name}")
         if not card:
             raise SCAutolibException(
@@ -684,11 +696,13 @@ class Controller:
 
     def cleanup(self):
         """
-        Cleans up all system configurations and changes made by SCAutolib's
-        ``prepare`` command. This includes restoring SSSD
-        configuration, deleting created users (except 'root'), removing smart
-        cards and their associated directories, and cleaning up both local and
-        IPA client CA setups. It also clears OpenSC and SSSD caches.
+        Clean up all system configurations and changes made by SCAutolib.
+
+        This includes restoring SSSD configuration, deleting created users
+        (excluding 'root'), removing smart cards and their directories, and
+        cleaning up both local and IPA client CA setups. It also clears
+        OpenSC and SSSD caches, restores service files, and disables
+        external repositories if virtual cards were used.
 
         :return: None
         """
@@ -748,25 +762,22 @@ class Controller:
     @staticmethod
     def _validate_configuration(conf: dict, params: dict = None) -> dict:
         """
-        Validates the schema of the provided configuration dictionary against
-        predefined schemas for CAs, users, and cards.
-        It also accounts for CLI parameters that might override or supplement
-        configuration file values.
+        Validate the schema of the configuration dictionary.
 
-        :param conf: The configuration data, typically loaded from a JSON file,
-                     to be validated.
+        The configuration is checked against predefined schemas for CAs, users,
+        and cards. The process also accounts for CLI parameters that may
+        override or supplement values found in the configuration file.
+
+        :param conf: The configuration data to be validated.
         :type conf: dict
-        :param params: A dictionary of parameters (e.g., from CLI arguments)
-                       that might provide missing values or override existing
-                       ones in the ``conf`` dictionary.
+        :param params: Optional parameters (e.g., from CLI) to override or
+                    supplement the configuration.
         :type params: dict, optional
-        :return: A dictionary containing the validated and potentially adjusted
-                 configuration values.
+        :return: A dictionary of validated and adjusted configuration values.
         :rtype: dict
         :raises schema.SchemaError: If the configuration does not conform to
                                     the defined schemas.
         """
-
         # FIXME: any schema requires all values to be in the config file, and
         #  only IP address of IPA server is accepted from CLI arguments.
         #  Add loading of the values from params dict
@@ -784,15 +795,14 @@ class Controller:
     @staticmethod
     def _general_steps_for_virtual_sc():
         """
-        Performs general system preparation steps specifically for virtual
-        smart cards. This involves configuring the
-        ``pcscd`` service and ``opensc.module`` to ensure correct interaction
-        with virtual cards. It also adds the ``virt_cacard``
-        COPR repository (for Fedora) and cleans SSSD caches.
+        Perform general system preparation steps for virtual smart cards.
+
+        This involves configuring the pcscd service and opensc.module to ensure
+        correct interaction with virtual cards. It also adds the virt_cacard
+        COPR repository (for Fedora) and clears SSSD caches.
 
         :return: None
         """
-
         _check_selinux()
 
         pcscd_service = File("/usr/lib/systemd/system/pcscd.service")
@@ -827,9 +837,10 @@ class Controller:
         logger.debug("Copr repo for virt_cacard is enabled")
 
     @staticmethod
-    def _general_steps_for_ipa():
+    def _general_steps_for_ipa() -> list[str]:
         """
-        Performs general system preparation steps for installing an IPA client.
+        Perform general system preparation steps for installing an IPA client.
+
         This includes enabling DNF modules for RHEL 8 and determining the
         correct IPA client package name based on the distribution.
 
@@ -837,7 +848,6 @@ class Controller:
                  client-related package to be installed.
         :rtype: list
         """
-
         if isDistro(['rhel', 'centos'], version='8'):
             run("dnf module enable -y idm:DL1")
             run("dnf install @idm:DL1 -y")
@@ -848,18 +858,19 @@ class Controller:
         else:
             return ["e2fsprogs", "ipa-client"]
 
-    def get_user_dict(self, name: str):
+    def get_user_dict(self, name: str) -> dict[str, Any]:
         """
-        Retrieves a user's configuration dictionary from the loaded
-        configuration file based on the provided username.
+        Retrieve a user's configuration dictionary from the loaded config.
+
+        The search is based on the provided username string within the
+        internal configuration mapping.
 
         :param name: The name of the user to search for in the configuration.
         :type name: str
         :return: A dictionary containing the user's configuration details.
         :rtype: dict
         :raises SCAutolibMissingUserConfig: If a user with the specified name
-                                            is not found in the configuration
-                                            file.
+                                            is not found in the configuration.
         """
         for user_dict in self.lib_conf["users"]:
             if user_dict["name"] == name:
@@ -868,19 +879,20 @@ class Controller:
 
     def init_ca(self, local: bool = False):
         """
-        Initializes a Certificate Authority (CA) object based on its type
-        (local or IPA). It loads the CA configuration
-        from its respective dump file and ensures the CA certificate exists.
+        Initialize a Certificate Authority (CA) object based on its type.
 
-        :param local: If ``True``, a local CA is initialized.
-                      If ``False``, an IPA server CA is initialized.
+        This method supports both local and IPA CAs. It loads the CA
+        configuration from its respective dump file and ensures the CA
+        certificate is present and valid.
+
+        :param local: If True, a local CA is initialized.
+                      If False, an IPA server CA is initialized.
         :type local: bool
         :return: None
         :raises SCAutolibMissingCA: If the CA certificate is not found
                                     (for local CA) or if the IPA server CA is
                                     not installed (for IPA CA).
         """
-
         if local:
             self.local_ca = CA.LocalCA(self.lib_conf["ca"]["local_ca"]["dir"])
             if not self.local_ca.cert.exists():

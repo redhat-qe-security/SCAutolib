@@ -1,11 +1,9 @@
 """
-Implementation of CLI commands for SCAutolib.
+Implement CLI commands for SCAutolib.
 
 This module defines the command-line interface (CLI) for the ``scauto``
-tool, utilizing the ``click`` library. It provides a
-user-friendly interface for system preparation, CA configuration, user setup
-with smart cards, and cleanup operations. Additionally,
-it includes a specialized command group for automated GUI testing.
+tool using the ``click`` library. It provides commands for system
+preparation, CA configuration, user setup, and GUI testing.
 """
 
 
@@ -25,7 +23,10 @@ from SCAutolib.utils import dump_to_json
 
 def check_conf_path(conf: str):
     """
-    Validates and resolves the path to the JSON configuration file.
+    Validate and resolve the path to the JSON configuration file.
+
+    Checks if the provided configuration path exists and resolves it
+    to an absolute Path object.
 
     :param conf: The path string to the configuration file.
     :type conf: str
@@ -44,14 +45,18 @@ def check_conf_path(conf: str):
 # https://github.com/pallets/click/issues/513#issuecomment-301046782
 class NaturalOrderGroup(click.Group):
     """
-    A custom ``click.Group`` subclass that ensures subcommands are listed in the
-    help output in the order they were defined in the code.
-    This overrides ``click``'s default alphabetical sorting for subcommands.
+    Custom click group to maintain command definition order.
+
+    This subclass ensures that subcommands are listed in the help output
+    in the order they were defined in the code, rather than alphabetically.
     """
+
     def __init__(self, name: str = None, commands: dict = None, **attrs):
         """
-        Initializes the NaturalOrderGroup, ensuring the commands dictionary
-        is an ``OrderedDict`` to maintain insertion order.
+        Initialize the NaturalOrderGroup.
+
+        Ensures the commands dictionary is an OrderedDict to maintain
+        insertion order.
 
         :param name: The name of the command group.
         :type name: str, optional
@@ -70,7 +75,7 @@ class NaturalOrderGroup(click.Group):
 
     def list_commands(self, ctx: click.Context):
         """
-        Lists the command names in their defined order.
+        List the command names in their defined order.
 
         :param ctx: The Click context object.
         :type ctx: click.Context
@@ -95,9 +100,10 @@ class NaturalOrderGroup(click.Group):
 @click.pass_context
 def cli(ctx: click.Context, force: bool, verbose: bool, conf: Path):
     """
-    The main entry point for the SCAutolib CLI.
-    It initializes global settings and the Controller instance based on
-    the configuration.
+    Initialize entry point to the SCAutolib's CLI.
+
+    Initializes global logging settings and the Controller instance
+    based on the provided configuration file.
 
     :param ctx: The Click context object, used to pass data to subcommands.
     :type ctx: click.Context
@@ -138,12 +144,14 @@ def cli(ctx: click.Context, force: bool, verbose: bool, conf: Path):
               is_flag=True,
               help="Install missing packages")
 @click.pass_context
-def prepare(ctx: click.Context, gdm: bool, install_missing: bool,
-            graphical: bool):
+def prepare(
+    ctx: click.Context, gdm: bool, install_missing: bool, graphical: bool
+):
     """
-    Configures the entire system for smart card operations and testing
-    based on the configuration file. This includes
-    installing packages and setting up CAs, users, and smart cards.
+    Configure the entire system for smart card operations.
+
+    Handles package installation and initial setup for CAs, users,
+    and smart cards according to the configuration.
 
     :param ctx: The Click context object.
     :type ctx: click.Context
@@ -192,11 +200,15 @@ def prepare(ctx: click.Context, gdm: bool, install_missing: bool,
               help="Restore system from the prepare step.")
 @click.argument("card_name")
 @click.pass_context
-def card(ctx: click.Context, card_name: str, prepare: bool, insert: bool,
-         remove: bool, restore: bool):
+def card(
+    ctx: click.Context, card_name: str, prepare: bool, insert: bool,
+    remove: bool, restore: bool
+):
     """
-    This function depending on the function that was given will prepare the
-    system for a card, insert a card, remove a card or restore the system.
+    Manage smart card lifecycle actions.
+
+    Provides options to prepare the system, insert, remove, or restore
+    configurations for a specific smart card.
 
     :param ctx: The Click context object.
     :type ctx: click.Context
@@ -237,9 +249,10 @@ def card(ctx: click.Context, card_name: str, prepare: bool, insert: bool,
 @click.pass_context
 def cleanup(ctx: click.Context):
     """
-    Cleans up all configurations and system changes made by SCAutolib commands,
-    particularly from ``prepare``. Restores the system to a clean state (as
-    much as possible).
+    Clean up all system changes made by SCAutolib.
+
+    Restores the system to a clean state as defined by the controller
+    cleanup logic.
 
     :param ctx: The Click context object, containing the ``CONTROLLER`` instance.
     :type ctx: click.Context
@@ -271,11 +284,15 @@ def cleanup(ctx: click.Context):
               is_flag=True,
               help="Skip check difference after gui functions")
 @click.pass_context
-def gui(ctx: click.Context, install_missing: bool, wait_time: float,
-        no_screenshot: bool, no_check_difference: bool):
+def gui(
+    ctx: click.Context, install_missing: bool, wait_time: float,
+    no_screenshot: bool, no_check_difference: bool
+):
     """
-    Command group for running chained GUI test commands.
-    Manages graphical environment dependencies.
+    Command group for chained GUI test actions.
+
+    Manages graphical environment dependencies and configurations for
+    automated visual testing.
 
     :param ctx: The Click context object.
     :type ctx: click.Context
@@ -290,8 +307,9 @@ def gui(ctx: click.Context, install_missing: bool, wait_time: float,
 @gui.command()
 def init():
     """
-    Initializes the GUI environment for automated testing.
-    Restarts the display manager for a clean state.
+    Initialize the GUI environment for testing.
+
+    Restarts the display manager to ensure a clean state.
 
     :return: A string literal ``"init"`` that signals the execution of the
              GUI initialization action within the ``gui_run_all`` callback.
@@ -316,14 +334,17 @@ def init():
               default=False,
               is_flag=True,
               help="Log words found on screen regardless of match.")
-@click.argument("name")
-def assert_text(name: str, no: bool, case_insensitive: bool, get_text: bool):
+@click.argument("text")
+def assert_text(
+    text: str, no: bool, case_insensitive: bool, get_text: bool
+) -> tuple[str, bool, bool, str]:
     """
-    Asserts the presence or absence of a specific text string on the
-    currently displayed GUI screen.
+    Assert the presence or absence of text on screen.
 
-    :param name: The text string to search for on the screen.
-    :type name: str
+    Checks the currently displayed graphical screen for the target string.
+
+    :param text: The text string to search for on the screen.
+    :type text: str
     :param no: If ``True``, this reverses the assertion, checking that the text
                is *not* found on the screen.
     :type no: bool
@@ -335,9 +356,10 @@ def assert_text(name: str, no: bool, case_insensitive: bool, get_text: bool):
              ``"assert_no_text:UnexpectedText"``).
     :rtype: str
     """
-    if no:
-        return ("assert_no_text", not case_insensitive, name)
-    return ("assert_text", not case_insensitive, get_text, name)
+    return (
+        "assert_no_text" if no else "assert_text",
+        not case_insensitive, get_text, text
+    )
 
 
 @gui.command()
@@ -347,10 +369,11 @@ def assert_text(name: str, no: bool, case_insensitive: bool, get_text: bool):
               is_flag=True,
               help="Reverse the action")
 @click.argument("path")
-def assert_image(path: str, no: bool):
+def assert_image(path: str, no: bool) -> tuple[str, str]:
     """
-    Asserts the presence or absence of a specific image on the
-    currently displayed GUI screen.
+    Assert the presence or absence of a specific image.
+
+    Checks the screen for an image match based on the provided path.
 
     :param path: The text string to search for on the screen.
     :type path: str
@@ -362,9 +385,7 @@ def assert_image(path: str, no: bool):
              ``"assert_no_image:ImagePath"``).
     :rtype: str
     """
-    if no:
-        return ("assert_no_image", f"{path}")
-    return ("assert_image", f"{path}")
+    return ("assert_no_image" if no else "assert_image", f"{path}")
 
 
 @gui.command()
@@ -373,15 +394,16 @@ def assert_image(path: str, no: bool):
               default=False,
               is_flag=True,
               help="make the match of the words case insensitive.")
-@click.argument("name")
-def click_on(name: str, case_insensitive: bool):
+@click.argument("text")
+def click_on(text: str, case_insensitive: bool) -> tuple[str, bool, str]:
     """
-    Simulates a mouse click action on a GUI object or area that contains the
-    specified text.
+    Simulate a mouse click on an object containing text.
 
-    :param name: The string text content of the GUI object that should be
+    Locates the text on the GUI and clicks the center of the match.
+
+    :param text: The string text content of the GUI object that should be
                  clicked.
-    :type name: str
+    :type text: str
     :param case_insensitive: If ``True``, then the search of the text will be
                              case insensitive
     :type case_insensitive: bool
@@ -389,7 +411,7 @@ def click_on(name: str, case_insensitive: bool):
              ``gui_run_all`` callback (e.g., ``"click_on:ButtonLabel"``).
     :rtype: str
     """
-    return ("click_on", not case_insensitive, name)
+    return ("click_on", not case_insensitive, text)
 
 
 @gui.command()
@@ -398,11 +420,11 @@ def click_on(name: str, case_insensitive: bool):
               default=False,
               is_flag=True,
               help="Reverse the action")
-def check_home_screen(no: bool):
+def check_home_screen(no: bool) -> tuple[str]:
     """
-    Verifies if the currently displayed graphical screen is (or is not) the
-    expected "home screen" environment. Currently the Gnome Shell home screen
-    from RHEL, CentOS and Fedora is detected.
+    Verify if the current screen is the home screen.
+
+    Detects common home screen indicators for GNOME environments.
 
     :param no: If ``True``, reverses the check to verify that the current screen
                is *not* the home screen.
@@ -412,16 +434,14 @@ def check_home_screen(no: bool):
              `"check_no_home_screen"`).
     :rtype: str
     """
-    if no:
-        return ("check_no_home_screen",)
-    return ("check_home_screen",)
+    return ("check_no_home_screen" if no else "check_home_screen", )
 
 
 @gui.command()
 @click.argument("keys")
-def kb_send(keys: str):
+def kb_send(keys: str) -> tuple[str, str]:
     """
-    Sends one or more specific key press events to the active GUI window.
+    Send specific key press events to the active window.
 
     :param keys: A string representing the key or sequence of keys to simulate
                  pressing (e.g., ``enter``, ``alt+f4``).
@@ -435,11 +455,11 @@ def kb_send(keys: str):
 
 @gui.command()
 @click.argument("keys")
-def kb_write(keys: str):
+def kb_write(keys: str) -> tuple[str, str]:
     """
-    Simulates typing a literal string of characters into the active GUI input
-    field or window. After the string is sent, an 'enter' key press is
-    automatically appended.
+    Simulate typing a literal string of text.
+
+    Writes the text and automatically appends an 'enter' key press.
 
     :param keys: The string of text to be written or typed into the GUI.
     :type keys: str
@@ -453,27 +473,26 @@ def kb_write(keys: str):
 @gui.command()
 def done():
     """
-    Serves as a finalization step for a sequence of GUI test commands.
+    Finalize a sequence of GUI test commands.
 
     :return: A string literal `"done"` that signals the execution of the
              GUI done action within the ``gui_run_all`` callback.
     :rtype: str
     """
-    return ("done",)
+    return ("done", )
 
 
 @gui.result_callback()
 @click.pass_context
-def gui_run_all(ctx: click.Context,
-                actions: list,
-                install_missing: bool,
-                wait_time: float,
-                no_screenshot: bool,
-                no_check_difference: bool):
+def gui_run_all(
+    ctx: click.Context, actions: list, install_missing: bool, wait_time: float,
+    no_screenshot: bool, no_check_difference: bool
+):
     """
-    Executes all chained GUI test actions in the order they were provided on
-    the command line. It initializes the graphical
-    environment and performs specified GUI automation steps.
+    Execute all chained GUI test actions in sequence.
+
+    Sets up the graphical environment and iterates through the collected
+    subcommands to automate the GUI test workflow.
 
     :param ctx: The Click context object.
     :type ctx: click.Context

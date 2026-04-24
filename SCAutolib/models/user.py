@@ -1,11 +1,9 @@
 """
-This module defines the ``User`` and ``IPAUser`` classes, which are designed to
-represent and manage system and FreeIPA users within the SCAutolib framework.
+Manage system and FreeIPA users for the SCAutolib framework.
 
-These classes encapsulate user properties
-like username and password, and implement methods for common user management
-operations such as adding and deleting users from either the local system
-or a specified IPA server.
+This module defines the ``User`` and ``IPAUser`` classes, representing
+local and FreeIPA users respectively. It handles user properties and
+implements methods for adding and deleting users across platforms.
 """
 
 
@@ -23,13 +21,13 @@ from SCAutolib.enums import UserType
 
 class User:
     """
-    Represents a general system user, typically a local user account on the
-    machine where SCAutolib is running.
-    It holds user properties like username and password, and provides methods
-    to manage the user's presence on the local system.
-    User objects can be serialized to and loaded from JSON dump files for
-    persistence across SCAutolib runs.
+    Represent a general local system user account.
+
+    This class holds properties like username and password, providing
+    methods to manage the user locally. Objects can be serialized to
+    and loaded from JSON files for persistence.
     """
+
     username: str = None
     password: str = None
     dump_file: Path = None
@@ -37,7 +35,7 @@ class User:
 
     def __init__(self, username: str, password: str):
         """
-        Initializes a ``User`` object for a local system user.
+        Initialize a ``User`` object for a local system user.
 
         :param username: The username for the system user.
         :type username: str
@@ -46,7 +44,6 @@ class User:
         :return: None
         :rtype: None
         """
-
         self.username = username
         self.password = password
         self.user_type = UserType.local
@@ -54,13 +51,11 @@ class User:
 
     def to_dict(self):
         """
-        Converts the ``User`` object's attributes into a dictionary suitable
-        for JSON serialization.
+        Convert the ``User`` attributes into a serializable dictionary.
 
         :return: A dictionary representation of the user object's attributes.
         :rtype: dict
         """
-
         # Retype patlib.Path object to str
         d = {k: str(v) if type(v) in (PosixPath, Path) else v
              for k, v in self.__dict__.items()}
@@ -68,15 +63,15 @@ class User:
 
     def add_user(self):
         """
-        Adds the user to the local system using the ``useradd`` system
-        management command and sets their password via ``passwd --stdin``.
-        It checks if the user already exists to prevent collisions.
+        Add the user to the local system.
+
+        Uses ``useradd`` and ``passwd --stdin``. It validates that the
+        user does not already exist to prevent collisions.
 
         :return: None
         :rtype: None
         :raises SCAutolibException: If the user already exists on the system.
         """
-
         try:
             pwd.getpwnam(self.username)
             msg = f"User {self.username} already exists on this " \
@@ -94,14 +89,13 @@ class User:
 
     def delete_user(self):
         """
-        Deletes the local user from the system using the ``userdel -f``
-        command.
-        It also removes the corresponding JSON dump file for the user.
+        Delete the local user and its associated dump file.
+
+        Uses the ``userdel -f`` command to remove the account.
 
         :return: None
         :rtype: None
         """
-
         try:
             pwd.getpwnam(self.username)
             logger.info(f"Deleting the user {self.username}")
@@ -114,12 +108,12 @@ class User:
             logger.debug(f"Removed {self.dump_file} dump file")
 
     @staticmethod
-    def load(user_file: Path = None, username: str = None, **kwargs):
+    def load(user_file: Path = None, username: str = None, **kwargs) -> User:
         """
-        Loads user data from a specified JSON file and reconstructs the
-        corresponding ``User`` or ``IPAUser`` object.
-        It determines the correct class to instantiate based on the
-        ``user_type`` field in the JSON content.
+        Reconstruct a user object from a JSON dump file.
+
+        Determines whether to instantiate a ``User`` or ``IPAUser``
+        based on the stored metadata.
 
         :param user_file: The ``pathlib.Path`` object pointing to the JSON file
                           from which to read the user's data.
@@ -139,7 +133,6 @@ class User:
         :raises SCAutolibUnknownType: If an unknown user type is encountered in
                                     the JSON data.
         """
-
         if username and not user_file:
             user_file = LIB_DUMP_USERS.joinpath(f"{username}.json")
             logger.debug(f"Loading user {username} from {user_file}")
@@ -176,21 +169,20 @@ class User:
 
 class IPAUser(User):
     """
-    Represents an IPA (Identity Management for Linux) user.
-    This class extends the base ``User`` class to include specific
-    functionalities for managing users within an IPA server environment,
-    primarily through the ``python_freeipa`` library.
+    Represent an Identity Management (FreeIPA) user.
+
+    Extends the base ``User`` class to manage users within an IPA
+    environment via the ``python_freeipa`` library.
     """
+
     default_password = "redhat"
 
     def __init__(self, ipa_server: IPAServerCA, *args, **kwargs):
         """
-        Initializes an ``IPAUser`` object.
-        IPA client should be configured first before creating an IPA user
-        through this class.
-        It requires an ``IPAServerCA`` object to facilitate communication with
-        the IPA server and inherits user attributes from the base ``User``
-        class.
+        Initialize an ``IPAUser`` object.
+
+        Requires a configured IPA client and an ``IPAServerCA`` object
+        to communicate with the server.
 
         :param ipa_server: An ``IPAServerCA`` object that provides the
                            necessary IPA server hostname and ``ClientMeta``
@@ -203,7 +195,6 @@ class IPAUser(User):
         :return: None
         :rtype: None
         """
-
         super().__init__(*args, **kwargs)
         self.user_type = UserType.ipa
         self._meta_client = ipa_server.meta_client
@@ -211,16 +202,14 @@ class IPAUser(User):
 
     def to_dict(self):
         """
-        Converts the ``IPAUser`` object's attributes into a dictionary for
-        JSON serialization. It calls the base ``User.to_dict()``
-        method and then removes internal ``_meta_client`` and ``_ipa_hostname``
-        attributes, which are not directly serializable.
+        Convert attributes into a serializable dictionary.
+
+        Removes non-serializable internal client attributes.
 
         :return: A dictionary representation of the IPA user object's
                  attributes.
         :rtype: dict
         """
-
         d = super().to_dict()
         d.pop("_meta_client")
         d.pop("_ipa_hostname")
@@ -228,9 +217,10 @@ class IPAUser(User):
 
     def add_user(self):
         """
-        Adds the IPA user to the IPA server using the ``python_freeipa`` client.
-        It sets a default password and then changes it to the specified
-        password to avoid requiring a password change on first login.
+        Add the user to the IPA server.
+
+        Sets a temporary password and immediately updates it to prevent
+        a forced password change on first login.
 
         :return: None
         :rtype: None
@@ -259,9 +249,9 @@ class IPAUser(User):
 
     def delete_user(self):
         """
-        Deletes the IPA user from the IPA server using the ``python_freeipa``
-        client. If the user is not found on the server,
-        the operation is silently ignored.
+        Delete the user from the IPA server.
+
+        If the user is not found, the error is caught and ignored.
 
         :return: None
         :rtype: None
