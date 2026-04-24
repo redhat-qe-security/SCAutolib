@@ -1,20 +1,17 @@
 """
-This module provides a comprehensive set of tools for automating graphical user
-interface (GUI) interactions and assertions within the SCAutolib framework.
-It defines classes for capturing screenshots
-(``Screen``), controlling mouse movements and clicks (``Mouse``), and managing
-keyboard input (through ``keyboard`` python module).
-The central ``GUI`` class orchestrates these interactions, allowing for the
-creation of automated GUI test sequences with logging and visual verification
-capabilities.
+Automate graphical user interface (GUI) interactions and assertions.
+
+This module provides a comprehensive toolset for the SCAutolib framework,
+including screenshot capture, mouse control via uinput, and keyboard
+orchestration. The central GUI class coordinates these tools to provide
+automated test sequences with logging and visual verification.
 """
 
 
 import inspect
 from time import sleep, time
 from pathlib import Path
-from typing import Callable
-from typing import Union
+from typing import Callable, Union, Any
 
 import cv2
 import keyboard
@@ -30,15 +27,18 @@ from SCAutolib.exceptions import SCAutolibGUIException, SCAutolibNotFound
 
 class Screen:
     """
-    Captures screenshots of the system's display.
-    It manages the naming and numbering of screenshots and can integrate them
-    into an HTML report.
+    Capture and manage system display screenshots.
+
+    Handles naming, numbering, and optional integration into HTML reports
+    for automated testing workflows.
     """
+
     def __init__(self, directory: str, html_file: str = None):
         """
-        Initializes the ``Screen`` object, setting up the directory where
-        screenshots will be saved and tracking the next screenshot number.
-        Optionally links to an HTML file for report generation.
+        Initialize the Screen object for screenshot management.
+
+        Sets up the destination directory and determines the starting
+        sequence number based on existing files.
 
         :param directory: Path to the directory where the screenshots will be
                           saved.
@@ -49,7 +49,6 @@ class Screen:
         :return: None
         :rtype: None
         """
-
         self.directory = directory
         self.html_file = html_file
 
@@ -62,12 +61,12 @@ class Screen:
         if len(taken_images) > 0:
             self.screenshot_num = taken_image_ids[0] + 1
 
-    def screenshot(self, timeout: float = 30):
+    def screenshot(self, timeout: float = 30) -> Path:
         """
-        Captures a screenshot of the display using the ``ffmpeg`` command with
-        `kmsgrab` input. It repeatedly tries to capture
-        until successful or a specified timeout is reached.
-        The screenshot is saved as a PNG file and its path is returned.
+        Capture a screenshot using ffmpeg with kmsgrab.
+
+        Retries the capture until successful or the timeout is reached.
+        The resulting PNG path is returned.
 
         :param timeout: The maximum time in seconds to wait for ``ffmpeg`` to
                         successfully capture a screenshot.
@@ -78,10 +77,9 @@ class Screen:
                                        screenshot within the specified timeout
                                        period.
         """
-
         logger.debug(f"Taking screenshot number {self.screenshot_num}")
 
-        filename = f'{self.directory}/{self.screenshot_num}.png'
+        filename = Path(f"{self.directory}", f"{self.screenshot_num}.png")
         t_end = time() + timeout
         captured = False
 
@@ -116,15 +114,16 @@ class Screen:
 
 class Mouse:
     """
-    Controls the mouse cursor and clicks on the system under test using the
-    ``uinput`` kernel module.
+    Control mouse cursor and clicks via uinput.
+
+    Interfaces with the uinput kernel module to simulate a hardware
+    pointing device for GUI automation.
     """
+
     def __init__(self):
         """
-        Initializes the ``Mouse`` object by loading the ``uinput`` kernel
-        module and creating a virtual ``uinput`` device for mouse events.
+        Initialize the Mouse object and create a virtual uinput device.
         """
-
         run(['modprobe', 'uinput'], check=True)
 
         # Maximum coordinate for both axis
@@ -144,9 +143,9 @@ class Mouse:
 
     def move(self, x: float, y: float):
         """
-        Moves the mouse cursor to a specified absolute coordinate on the
-        screen. Coordinates are provided as float numbers
-        between 0 and 1, which are then mapped to the screen's resolution.
+        Move the mouse cursor to absolute normalized coordinates.
+
+        Maps float coordinates (0.0 to 1.0) to the absolute uinput range.
 
         :param x: The X-coordinate of the cursor, a float between 0 and 1
                   (inclusive).
@@ -159,7 +158,6 @@ class Mouse:
         :raises ValueError: If either X or Y coordinate is not within the 0 to
                             1 range.
         """
-
         logger.info(f'Moving mouse to {x, y})')
 
         for uinput_axis, value in [(uinput.ABS_X, x), (uinput.ABS_Y, y)]:
@@ -174,7 +172,10 @@ class Mouse:
 
     def click(self, button: str = 'left'):
         """
-        Simulates a click of a specified mouse button.
+        Simulate a mouse button click.
+
+        Supports left, right, and middle buttons with a configurable
+        hold time.
 
         :param button: The mouse button to click. Possible values are ``left``,
                        ``right``, or ``middle``. Defaults to ``left``.
@@ -183,7 +184,6 @@ class Mouse:
         :rtype: None
         :raises KeyError: If button is not ``left``, ``right``, or ``middle``.
         """
-
         button_map = {
             'left': uinput.BTN_LEFT,
             'right': uinput.BTN_RIGHT,
@@ -201,12 +201,12 @@ class Mouse:
         self.device.emit(uinput_button, 0)
 
 
-def image_to_data(path: str, threshold: int = 120):
+def image_to_data(path: str, threshold: int = 120) -> Any:
     """
-    Converts a screenshot image into a DataFrame of words with their
-    normalized coordinates and dimensions. This process
-    involves image preprocessing (grayscale, upscaling, binarization)
-    and OCR (Optical Character Recognition) using `pytesseract`.
+    Perform OCR on a screenshot to extract text and coordinates.
+
+    Preprocesses the image via grayscale conversion, upscaling, and
+    binarization before using pytesseract for extraction.
 
     :param path: The string path to the image file (screenshot) to convert.
     :type path: str
@@ -233,11 +233,11 @@ def image_to_data(path: str, threshold: int = 120):
     return df
 
 
-def images_equal(path1: str, path2: str):
+def images_equal(path1: str, path2: str) -> bool:
     """
-    Compares two images to determine if they are pixel-perfectly identical.
-    Images are considered identical if they have the same
-    resolution and all pixel values are exactly equal.
+    Compare two images for pixel-perfect equality.
+
+    Verifies that resolutions match and every pixel value is identical.
 
     :param path1: The string path to the first image file.
     :type path1: str
@@ -260,13 +260,12 @@ def images_equal(path1: str, path2: str):
     return True
 
 
-def action_decorator(func: Callable):
+def action_decorator(func: Callable) -> Callable:
     """
-    A decorator for GUI automation functions that change the state of the GUI.
-    This decorator captures a screenshot before and after
-    the decorated function's execution. If both screenshots
-    are identical and `check_difference` is enabled, an exception is raised,
-    indicating that the action did not produce a visible change.
+    Capture screenshots before and after a GUI state change.
+
+    Ensures that an action produced a visible change on the screen if
+    difference checking is enabled.
 
     :param func: The function to be decorated.
     :type func: callable
@@ -276,12 +275,9 @@ def action_decorator(func: Callable):
     :raises SCAutolibGUIException: If `check_difference` is enabled and that
                                    the action did not produce a visible change
     """
-
-    def wrapper(self,
-                *args,
-                wait_time: int = None,
-                **kwargs):
-
+    def wrapper(
+        self, *args, wait_time: int = None, **kwargs
+    ):
         start_screenshot = self.screen.screenshot() if self.screenshot else None
 
         func(self, *args, **kwargs)
@@ -301,18 +297,17 @@ def action_decorator(func: Callable):
     return wrapper
 
 
-def log_decorator(func: Callable):
+def log_decorator(func: Callable) -> Callable:
     """
-    A decorator that logs the invocation of the decorated function, including
-    its name and arguments. This provides a clear
-    record of GUI actions being performed.
+    Log GUI method invocations with arguments.
+
+    Provides a trace of performed GUI actions for debugging.
 
     :param func: The function to be decorated.
     :type func: callable
     :return: The wrapper function that adds logging functionality.
     :rtype: callable
     """
-
     def wrapper(self, *args, **kwargs):
         # Format the arguments for logging
         kwargs_list = ["=".join((key, repr(value)))
@@ -326,23 +321,22 @@ def log_decorator(func: Callable):
 
 class GUI:
     """
-    Represents the Graphical User Interface (GUI) of the system under test
-    and provides methods for controlling it. It integrates
-    screenshot capture, mouse control, and keyboard input to automate GUI
-    interactions and perform visual assertions.
-    The class is designed to be used as a context manager for proper setup
-    and cleanup of the GUI testing environment.
+    Orchestrate GUI automation and visual assertions.
+
+    Integrates Mouse and Screen objects with keyboard input and OCR to
+    provide high-level methods for interacting with the system under test.
     """
-    def __init__(self,
-                 wait_time: float = 5,
-                 res_dir_name: str = None,
-                 from_cli: bool = False,
-                 screenshot: bool = True,
-                 check_difference: bool = True):
+
+    def __init__(
+        self, wait_time: float = 5, res_dir_name: str = None,
+        from_cli: bool = False, screenshot: bool = True,
+        check_difference: bool = True
+    ):
         """
-        Initializes the GUI automation environment. This includes
-        setting up directories for screenshots and HTML reports, configuring
-        logging to file, and initializing mouse and screen control objects.
+        Initialize the GUI environment and results directories.
+
+        Configures logging handlers, sets up result directories, and
+        prepares mouse/screen interfaces.
 
         :param wait_time: The default time in seconds to wait after each GUI
                           action to allow the system to respond.
@@ -359,7 +353,6 @@ class GUI:
         :return: None
         :rtype: None
         """
-
         self.wait_time = wait_time
         self.gdm_init_time = 10
         self.from_cli = from_cli
@@ -450,18 +443,15 @@ class GUI:
         self.screenshot = screenshot
         self.check_difference = check_difference
 
-    def __enter__(self):
+    def __enter__(self) -> GUI:
         """
-        Enters the context manager for GUI testing.
-        It restarts the GDM (GNOME Display Manager) service to ensure a defined
-        system state and waits for it to initialize before GUI interactions
-        begin. It also adds the file handler for logging
-        if not initialized from CLI.
+        Enter the GUI context and restart the display manager.
+
+        Ensures GDM is in a clean state and waits for initialization.
 
         :return: The ``GUI`` instance.
         :rtype: SCAutolib.models.gui.GUI
         """
-
         # By restarting gdm, the system gets into defined state
         run(['systemctl', 'restart', 'gdm'], check=True)
         # Cannot screenshot before gdm starts displaying
@@ -475,11 +465,9 @@ class GUI:
 
     def __exit__(self, type, value, traceback):
         """
-        Exits the context manager for GUI testing.
-        It stops the GDM service to clean up the graphical environment and
-        finalizes the HTML logging file.
-        A "done" file is created in the results directory to indicate
-        completion.
+        Exit the GUI context and stop display services.
+
+        Finalizes report files and removes logging handlers.
 
         :param type: The type of the exception that caused the context to be
                      exited, or ``None`` if no exception occurred.
@@ -490,7 +478,6 @@ class GUI:
         :return: None
         :rtype: None
         """
-
         done_file = self.html_directory.joinpath('.done')
         if done_file.exists():
             return
@@ -513,16 +500,16 @@ class GUI:
 
     @action_decorator
     @log_decorator
-    def click_on(self, key: str, timeout: float = 30,
-                 min_thres: int = 120, max_thres: int = 160,
-                 case_sensitive: bool = True,
-                 click_on_match: int = 1):
+    def click_on(
+        self, key: str, timeout: float = 30, min_thres: int = 120,
+        max_thres: int = 160, case_sensitive: bool = True,
+        click_on_match: int = 1
+    ):
         """
-        Simulates a mouse click on a GUI object containing the specified text.
-        It repeatedly captures screenshots and
-        performs OCR to locate the text until it is found or a timeout is
-        reached. Once found, the mouse cursor is moved to
-        the center of the detected text and a click is performed.
+        Locate text on screen via OCR and perform a mouse click.
+
+        Iteratively captures screenshots and adjusts thresholds to find
+        the target text within the timeout.
 
         :param key: The string to find on the screenshot, identifying the
                     object to click.
@@ -555,7 +542,6 @@ class GUI:
         :raises SCAutolibNotFound: If the ``key`` is not found in screenshots
                                    within the specified timeout.
         """
-
         if click_on_match < 1:
             raise SCAutolibGUIException(
                 "The match to click one should be more or equal to 1.")
@@ -647,9 +633,10 @@ class GUI:
     @log_decorator
     def kb_write(self, *args, press_enter: bool = True, **kwargs):
         """
-        Simulates typing a literal string of characters into the active GUI
-        input field or window. It handles uppercase
-        characters by sending a shift key press.
+        Simulate typing characters into the active input.
+
+        Handles mixed-case strings by managing shift states and
+        supports an optional enter press at the end.
 
         :param args: Positional arguments. The first argument is expected to be
                      the string to write.
@@ -691,8 +678,9 @@ class GUI:
     @log_decorator
     def kb_send(self, *args, **kwargs):
         """
-        Sends specific key(s) or key combinations to the keyboard.
-        This method wraps the ``keyboard.send`` function.
+        Send specific key combinations to the keyboard.
+
+        Wraps keyboard.send with optional delays for consistency.
 
         :param args: Positional arguments representing the key(s) to send
                      (e.g., ``enter``, ``alt+f4``).
@@ -711,14 +699,16 @@ class GUI:
         keyboard.send(*args, **kwargs)
 
     @log_decorator
-    def assert_text(self, key: str, timeout: float = 0,
-                    min_thres: int = 120, max_thres: int = 160,
-                    case_sensitive: bool = True, get_text: bool = False):
+    def assert_text(
+        self, key: str, timeout: float = 0, min_thres: int = 120,
+        max_thres: int = 160, case_sensitive: bool = True,
+        get_text: bool = False
+    ):
         """
-        Asserts that a given text string (``key``) is found on the screen
-        within a specified timeout. It repeatedly captures
-        screenshots and performs OCR until the text is detected or the timeout
-        expires.
+        Validate that specific text is visible on the screen.
+
+        Monitoring continues until the text is found or the timeout
+        is reached.
 
         :param key: The string to find in the screenshots.
         :type key: str
@@ -751,7 +741,6 @@ class GUI:
         :raises SCAutolibNotFound: If the ``key`` is not found in any
                                    screenshot within the specified timeout.
         """
-
         logger.info(f"Trying to find key='{key}'")
 
         if not case_sensitive:
@@ -815,13 +804,15 @@ class GUI:
         raise SCAutolibNotFound(f"The key='{key}' was not found.")
 
     @log_decorator
-    def assert_no_text(self, key: str, timeout: float = 0,
-                       min_thres: int = 120, max_thres: int = 160,
-                       case_sensitive: bool = True):
+    def assert_no_text(
+        self, key: str, timeout: float = 0, min_thres: int = 120,
+        max_thres: int = 160, case_sensitive: bool = True
+    ):
         """
-        Asserts that a given text string (`key`) is *not* found on the screen
-        within a specified timeout. If the key is found in any screenshot
-        during the monitoring period, an exception is raised.
+        Validate that specific text is absent from the screen.
+
+        If the text is found at any point within the timeout, an
+        exception is raised.
 
         :param key: The string that should not be found in the screenshots.
         :type key: str
@@ -850,7 +841,6 @@ class GUI:
         :raises SCAutolibNotFound: If the ``key`` is found in any screenshot
                                    within the specified timeout.
         """
-
         logger.info(f"Trying to find key='{key}'"
                     " (it should not be in the screenshot)")
 
@@ -907,12 +897,15 @@ class GUI:
             passed_time = time()
 
     @log_decorator
-    def assert_image(self, img_path: Union[str, Path], timeout: float = 0,
-                     start_thres: float = .85, end_thres: float = .75):
+    def assert_image(
+        self, img_path: Union[str, Path], timeout: float = 0,
+        start_thres: float = .85, end_thres: float = .75
+    ):
         """
-        Asserts that a given image (taken from a path) is found on the screen
-        within a specified timeout. If the image is found in any screenshot
-        during the monitoring period, an exception is raised.
+        Validate that a specific image template is visible on the screen.
+
+        Performs template matching via OpenCV until a match is found or
+        the timeout expires.
 
         :param img_path: The path of the image that should be found in the
                          screenshots.
@@ -939,7 +932,6 @@ class GUI:
         :raises SCAutolibNotFound: If the image is not found in any screenshot
                                    within the specified timeout.
         """
-
         logger.info(f"Trying to match image from '{img_path}'"
                     " (it should be in the screenshot)")
 
@@ -1003,12 +995,15 @@ class GUI:
                                     f"Check {match_path}.")
 
     @log_decorator
-    def assert_no_image(self, img_path: Union[str, Path], timeout: float = 0,
-                        start_thres: float = .85, end_thres: float = .75):
+    def assert_no_image(
+        self, img_path: Union[str, Path], timeout: float = 0,
+        start_thres: float = .85, end_thres: float = .75
+    ):
         """
-        Asserts that a given image (taken from a path) is *not* found on the
-        screen within a specified timeout. If the image is found in any
-        screenshot during the monitoring period, an exception is raised.
+        Validate that a specific image template is absent from the screen.
+
+        If the image is detected in any screenshot during the timeout, an
+        exception is raised.
 
         :param img_path: The path of the image that should be found in the
                          screenshots.
@@ -1035,7 +1030,6 @@ class GUI:
         :raises SCAutolibNotFound: If the image is not found in any screenshot
                                    within the specified timeout.
         """
-
         logger.info(f"Trying to match image from '{img_path}'"
                     " (it should not be in the screenshot)")
 
@@ -1098,11 +1092,10 @@ class GUI:
     @log_decorator
     def check_home_screen(self, polarity: bool = True):
         """
-        Checks for the presence or absence of a specific string on the screen
-        to determine if the displayed GUI is the system's "home screen" or
-        desktop. It adapts the text to search for based
-        on the detected Linux distribution (e.g., "to search" for Fedora >= 42,
-        "tosearch" for Fedora < 42, "Activities" for CentOS and RHEL).
+        Validate the presence or absence of the system home screen.
+
+        Adapts search indicators based on the detected Linux distribution
+        and version (e.g. 'Activities' vs 'to search').
 
         :param polarity: If ``True``, it asserts that the home screen indicator
                          text is present. If ``False``, it asserts that the
@@ -1113,7 +1106,6 @@ class GUI:
         :raises Exception: If the assertion (presence or absence of text) fails
                            within the timeout.
         """
-
         if isDistro('rhel', '>=10'):
             isImage = True
             func_str = ("assert_image"

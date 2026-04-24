@@ -5,31 +5,30 @@ on:
   pull_request:
     branches:
       - master
-      - V2**
   workflow_dispatch:
 
 jobs:
-  flake:
-
+  flake8:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v2
+    - name: Checkout code
+      uses: actions/checkout@v4
 
     - name: Set up Python 3
-      uses: actions/setup-python@v2
+      uses: actions/setup-python@v5
       with:
         python-version: 3
 
-    - name: Install krb5-config deps
-      run: sudo apt-get update -y
-           && sudo apt-get upgrade -y
-           && sudo apt-get install -y
-           libkrb5-dev
-           gcc
+    # - name: Install krb5-config deps
+    #   run: sudo apt-get update -y
+    #        && sudo apt-get upgrade -y
+    #        && sudo apt-get install -y
+    #        libkrb5-dev
+    #        gcc
 
     - name: Install dependencies
       run: python3 -m pip install tox
 
-    - name: Running tox
-      run: tox -e flake8
+    - name: Running linting
+      run: tox -e lint
