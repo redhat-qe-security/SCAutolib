@@ -17,8 +17,9 @@ from pathlib import Path
 from traceback import format_exc
 
 from SCAutolib import run, logger, TEMPLATES_DIR, LIB_DUMP_CARDS
-from SCAutolib.exceptions import SCAutolibException, SCAutolibUnknownType, \
-    SCAutolibIPAException, SCAutolibFileNotExists, SCAutolibCommandFailed
+from SCAutolib.exceptions import SCAutolibException, SCAutolibNotFound, \
+    SCAutolibUnknownType, SCAutolibIPAException, SCAutolibFileNotExists, \
+    SCAutolibCommandFailed, SCAutolibWrongConfig
 from SCAutolib.enums import CardType, UserType
 
 from SCAutolib.models.file import SSSDConf
@@ -65,8 +66,8 @@ class Card:
 
         :return: None
         :rtype: None
-        :raises SCAutolibException: If a matching URI is not found or if
-                                    multiple matching URIs are detected.
+        :raises SCAutolibNotFound: If a matching URI is not found
+        :raises SCAutolibWrongConfig: If multiple matching URIs are detected.
         """
         cmd = ["p11tool", "--list-token-urls"]
         out = run(cmd).stdout
@@ -76,10 +77,10 @@ class Card:
             logger.info(f"Card URI is set to {self.uri}")
         elif len(urls) == 0:
             logger.warning("URI not set")
-            raise SCAutolibException("URI matching expected pattern not found.")
+            raise SCAutolibNotFound("URI matching expected pattern not found.")
         else:
             logger.warning("Multiple matching URIs found. URI not set")
-            raise SCAutolibException("Multiple URIs match expected pattern.")
+            raise SCAutolibWrongConfig("Multiple URIs match expected pattern.")
 
     def _set_label(self):
         """
@@ -89,8 +90,8 @@ class Card:
 
         :return: None
         :rtype: None
-        :raises SCAutolibException: If a matching label is not found or if
-                                    multiple matching labels are detected.
+        :raises SCAutolibNotFound: If a matching URI is not found
+        :raises SCAutolibWrongConfig: If multiple matching URIs are detected.
         """
         if self.label:
             return
@@ -103,11 +104,11 @@ class Card:
             logger.info(f"Card label is set to '{self.label}'")
         elif len(labels) == 0:
             logger.warning("Card label not set")
-            raise SCAutolibException("Card label not found.")
+            raise SCAutolibNotFound("Card label not found.")
         else:
             logger.warning("Multiple matching labels found. Label not set")
             logger.warning("Add a label field in the config.")
-            raise SCAutolibException(
+            raise SCAutolibWrongConfig(
                 "Multiple labels match expected pattern."
                 "Possibly multiple slots available. Pass label in config.")
 
@@ -499,7 +500,7 @@ class VirtualCard(Card):
             self._set_uri()
             self._set_label()
             self.remove()
-        except Exception as e:
+        except SCAutolibException as e:
             self.remove()
             raise e
 
@@ -633,11 +634,11 @@ class PhysicalCard(Card):
         :type card_data: dict, optional
         :return: None
         :rtype: None
-        :raises SCAutolibException: If there is no card present in the
-                                    specified slot.
+        :raises SCAutolibWrongConfig: If there is no card present in the
+                                      specified slot.
         """
         if "slot" not in card_data:
-            raise SCAutolibException("Physical cards need a slot field")
+            raise SCAutolibWrongConfig("Physical cards need a slot field")
 
         self.uri = card_data.get("uri", None)
 
@@ -662,8 +663,8 @@ class PhysicalCard(Card):
 
         removinator_status = self.reminator.get_status()
         if self.slot not in removinator_status["present"]:
-            raise SCAutolibException(f"The is no card in slot {self.slot}. "
-                                     "Please connect a card to removinator.")
+            raise SCAutolibNotFound(f"The is no card in slot {self.slot}. "
+                                    "Please connect a card to removinator.")
         if self.slot in removinator_status["locked"]:
             logger.warning(
                 f"Card '{self.name}' is locked. "
@@ -750,7 +751,7 @@ class PhysicalCard(Card):
         """
         status = self.reminator.get_status()
         if self.slot in status["locked"]:
-            raise SCAutolibException(
+            raise SCAutolibCommandFailed(
                 f"Card '{self.name}' is locked and cannot be inserted. "
                 "Please check and unlock the card manually.")
 

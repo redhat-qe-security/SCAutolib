@@ -23,7 +23,7 @@ from socket import gethostname
 
 from SCAutolib import TEMPLATES_DIR, logger, run, LIB_DIR, LIB_DUMP_CAS, \
     LIB_BACKUP
-from SCAutolib.exceptions import SCAutolibException, SCAutolibUnknownType, \
+from SCAutolib.exceptions import SCAutolibWrongConfig, SCAutolibUnknownType, \
     SCAutolibIPAException, SCAutolibFileNotExists, SCAutolibCommandFailed
 from SCAutolib.models.file import OpensslCnf
 from SCAutolib.enums import CAType
@@ -272,7 +272,7 @@ class BaseCA:
             ca = LocalCA(root_dir=path, cnf=cnf)
             return ca
         else:
-            raise SCAutolibException(
+            raise SCAutolibWrongConfig(
                 "To create a cert, either a path or ca_cert should be "
                 "provided")
 
@@ -412,11 +412,11 @@ class LocalCA(BaseCA):
 
         :return: None
         :rtype: None
-        :raises SCAutolibException: If the CA's CNF file is not set.
+        :raises SCAutolibWrongConfig: If the CA's CNF file is not set.
         :raises SCAutolibFileNotExists: If the CA's CNF file  does not exist.
         """
         if self._ca_cnf is None:
-            raise SCAutolibException("CA CNF file is not set")
+            raise SCAutolibWrongConfig("CA CNF file is not set")
         elif not self._ca_cnf.path.exists():
             raise SCAutolibFileNotExists("CA CNF does not exist")
 
@@ -554,13 +554,13 @@ class CustomCA(BaseCA):
 
         :return: None
         :rtype: None
-        :raises SCAutolibException: If the CA certificate content is not
-                                    provided in ``self.ca_cert``.
+        :raises SCAutolibWrongConfig: If the CA certificate content is not
+                                      provided in ``self.ca_cert``.
         """
         self.root_dir.mkdir(parents=True, exist_ok=True)
         if self.ca_cert is None:
-            raise SCAutolibException(
-                f"CA cerf for {self.name} not found")
+            raise SCAutolibWrongConfig(
+                f"CA cert for {self.name} not found")
         with self._ca_cert.open('w') as newcert:
             newcert.write(self.ca_cert)
         logger.info("Local CA files are prepared")
@@ -743,11 +743,12 @@ class IPAServerCA(BaseCA):
                  "--force", "--force-join", "--no-ntp", "--preserve-sssd",
                  "--no-dns-sshfp", "--mkhomedir", "--unattended"],
                 input="yes")
-        except SCAutolibCommandFailed:
+        except SCAutolibCommandFailed as e:
             logger.critical("Installation of IPA client is failed")
             rmtree("/etc/ipa/*")
             logger.debug("Directory /etc/ipa is removed")
-            raise SCAutolibIPAException("IPA client installation failed.")
+            raise SCAutolibIPAException("IPA client installation failed.") \
+                from e
         logger.debug("IPA client is installed")
 
         try:
@@ -853,8 +854,9 @@ class IPAServerCA(BaseCA):
 
         :return: None
         :rtype: None
-        :raises SCAutolibException: If the script is not correctly copied or
-                                    if SSH connection/command execution fails.
+        :raises SCAutolibCommandFailed: If the script is not correctly copied
+                                        or if SSH connection/command execution
+                                        fails.
         """
         import paramiko
         from invoke import Responder
@@ -893,7 +895,7 @@ class IPAServerCA(BaseCA):
                   "copied to the host"
             logger.error(result.stdout)
             logger.error(result.stderr)
-            raise SCAutolibException(msg)
+            raise SCAutolibCommandFailed(msg)
 
         logger.debug("File for setting up IPA client for smart cards is "
                      f"copied to {self._ipa_client_script}")

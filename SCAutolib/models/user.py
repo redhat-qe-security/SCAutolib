@@ -13,7 +13,7 @@ import python_freeipa
 from pathlib import Path, PosixPath
 
 from SCAutolib import run, logger, LIB_DUMP_USERS
-from SCAutolib.exceptions import SCAutolibException, SCAutolibIPAException, \
+from SCAutolib.exceptions import SCAutolibWrongConfig, SCAutolibIPAException, \
     SCAutolibUnknownType, SCAutolibFileNotExists
 from SCAutolib.models.CA import IPAServerCA
 from SCAutolib.enums import UserType
@@ -70,7 +70,7 @@ class User:
 
         :return: None
         :rtype: None
-        :raises SCAutolibException: If the user already exists on the system.
+        :raises SCAutolibWrongConfig: If the user already exists on the system.
         """
         try:
             pwd.getpwnam(self.username)
@@ -78,7 +78,7 @@ class User:
                   f"machine. Username should be unique to avoid " \
                   f"future problems with collisions"
             logger.critical(msg)
-            raise SCAutolibException(msg)
+            raise SCAutolibWrongConfig(msg)
         except KeyError:
             logger.debug(f"Creating new user {self.username}")
             cmd = ['useradd', '-m', self.username]
@@ -224,8 +224,8 @@ class IPAUser(User):
 
         :return: None
         :rtype: None
-        :raises SCAutolibException: If the user already exists on the IPA
-                                    server.
+        :raises SCAutolibWrongConfig: If the user already exists on the IPA
+                                      server.
         """
         try:
             r = self._meta_client.user_add(self.username, self.username,
@@ -240,12 +240,12 @@ class IPAUser(User):
             client.change_password(self.username, self.password,
                                    self.default_password)
             logger.info(f"User {self.username} is added to the IPA server")
-        except python_freeipa.exceptions.DuplicateEntry:
+        except python_freeipa.exceptions.DuplicateEntry as e:
             msg = f"User {self.username} already exists on the " \
                   f"IPA server. Username should be unique to avoid " \
                   f"future problems with collisions"
             logger.critical(msg)
-            raise SCAutolibException(msg)
+            raise SCAutolibWrongConfig(msg) from e
 
     def delete_user(self):
         """
