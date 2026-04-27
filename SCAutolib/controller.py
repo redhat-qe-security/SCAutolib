@@ -226,8 +226,8 @@ class Controller:
                           GUI testing will be installed.
         :type graphical: bool
         :return: None
-        :raises SCAutolibException: If required packages are missing and
-                                    ``install_missing`` is ``False``.
+        :raises SCAutolibNotFound: If required packages are missing and
+                                   ``install_missing`` is ``False``.
         """
         for d in (LIB_DIR, LIB_BACKUP, LIB_DUMP, LIB_DUMP_USERS, LIB_DUMP_CAS,
                   LIB_DUMP_CARDS):
@@ -265,7 +265,7 @@ class Controller:
             msg = "Can't continue. Some packages are missing: " \
                   f"{', '.join(missing)}"
             logger.critical(msg)
-            raise SCAutolibException(msg)
+            raise SCAutolibNotFound(msg)
 
         if graphical:
             self.setup_graphical(install_missing, gdm)
@@ -674,12 +674,12 @@ class Controller:
         :param card: The VirtualCard object to be enrolled.
         :type card: SCAutolib.models.card.VirtualCard
         :return: None
-        :raises SCAutolibException: If the card object is not properly
-                                    initialized or is None.
+        :raises SCAutolibWrongConfig: If the card object is not properly
+                                      initialized or is None.
         """
         logger.debug(f"Starting enrollment of the card {card.name}")
         if not card:
-            raise SCAutolibException(
+            raise SCAutolibWrongConfig(
                 f"Card {card.name} is not initialized")
 
         if not card.key.exists():

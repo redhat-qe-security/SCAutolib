@@ -17,7 +17,7 @@ from SCAutolib import logger
 from SCAutolib.controller import Controller
 from SCAutolib.models.card import Card
 from SCAutolib.enums import ReturnCode
-from SCAutolib.exceptions import SCAutolibException
+from SCAutolib.exceptions import SCAutolibFileNotExists
 from SCAutolib.utils import dump_to_json
 
 
@@ -32,12 +32,12 @@ def check_conf_path(conf: str):
     :type conf: str
     :return: A resolved ``Path`` object if the file exists.
     :rtype: pathlib.Path
-    :raises SCAutolibException: If there is a problem with the file.
+    :raises SCAutolibFileNotExists: If there is a problem with the file.
     """
     try:
         return click.Path(exists=True, resolve_path=True)(conf)
     except click.BadParameter as e:
-        raise SCAutolibException(str(e))
+        raise SCAutolibFileNotExists("Bad parameter given.") from e
 
 
 # In Help output, force the subcommand list to match the order

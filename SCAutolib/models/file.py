@@ -155,8 +155,9 @@ class File:
                     continue
                 try:
                     conf_key, conf_val = line.split(separator, 1)
-                except ValueError:
-                    raise ValueError(f"unexpected format of line: {line}")
+                except ValueError as e:
+                    raise SCAutolibWrongConfig(
+                        f"unexpected format of line: {line}") from e
                 if conf_key.strip() == key:
                     new_content.append(line.replace(conf_val, value + '\n'))
                     modified = True
@@ -228,7 +229,7 @@ class File:
         try:
             value = self._default_parser[section][key]
         except KeyError as e:
-            raise SCAutolibWrongConfig(str(e))
+            raise SCAutolibWrongConfig() from e
 
         return value
 
