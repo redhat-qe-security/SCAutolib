@@ -314,7 +314,7 @@ class SSSDConf(File):
 
     dump_file: Path = LIB_DUMP_CONFS.joinpath("SSSDConf.json")
 
-    def __new__(cls) -> SSSDConf:
+    def __new__(cls):
         """
         Ensure only a single instance of SSSDConf exists.
 
