@@ -607,23 +607,23 @@ class PhysicalCard(Card):
     Manipulates cards potentially connected via Removinator.
     """
 
-    reminator = None
+    removinator = None
 
     def __new__(cls):
         """
         Create a new instance and initialize the Removinator singleton.
         """
-        if not cls.reminator:
+        if not cls.removinator:
             from removinator.removinator import Removinator
-            cls.reminator = Removinator()
+            cls.removinator = Removinator()
         return object.__new__(cls)
 
     def __del__(self):
         """
         Ensure the card is removed from the Removinator on object deletion.
         """
-        if self.reminator.get_status()["current"] != 0:
-            self.reminator.remove_card()
+        if self.removinator.get_status()["current"] != 0:
+            self.removinator.remove_card()
 
     def __init__(self, card_data: dict = None):
         """
@@ -661,7 +661,7 @@ class PhysicalCard(Card):
 
         self.dump_file = LIB_DUMP_CARDS.joinpath(f"{self.name}.json")
 
-        removinator_status = self.reminator.get_status()
+        removinator_status = self.removinator.get_status()
         if self.slot not in removinator_status["present"]:
             raise SCAutolibNotFound(f"The is no card in slot {self.slot}. "
                                     "Please connect a card to removinator.")
@@ -670,11 +670,11 @@ class PhysicalCard(Card):
                 f"Card '{self.name}' is locked. "
                 "Please check it unlock it manually.")
         if removinator_status["current"] != 0:
-            self.reminator.remove_card()
+            self.removinator.remove_card()
 
-        self.reminator.insert_card(self.slot)
+        self.removinator.insert_card(self.slot)
         self._set_label()
-        self.reminator.remove_card()
+        self.removinator.remove_card()
 
     def __call__(self, insert: bool = False) -> PhysicalCard:
         """
@@ -749,7 +749,7 @@ class PhysicalCard(Card):
         :return: None
         :rtype: None
         """
-        status = self.reminator.get_status()
+        status = self.removinator.get_status()
         if self.slot in status["locked"]:
             raise SCAutolibCommandFailed(
                 f"Card '{self.name}' is locked and cannot be inserted. "
@@ -758,9 +758,9 @@ class PhysicalCard(Card):
         if update_sssd:
             self.setup_card_ca()
 
-        self.reminator.insert_card(self.slot)
+        self.removinator.insert_card(self.slot)
         logger.debug(f"Inserted slot {self.slot} removinator card.")
-        logger.debug(f"Removinator status: {self.reminator.get_status()}")
+        logger.debug(f"Removinator status: {self.removinator.get_status()}")
 
         self._inserted = True
 
@@ -774,9 +774,9 @@ class PhysicalCard(Card):
         if self._prepared:
             self.restore_card_ca()
 
-        self.reminator.remove_card()
+        self.removinator.remove_card()
         logger.debug(f"Removed slot {self.slot} removinator card.")
-        logger.debug(f"Removinator status: {self.reminator.get_status()}")
+        logger.debug(f"Removinator status: {self.removinator.get_status()}")
 
         self._inserted = False
 
@@ -820,7 +820,7 @@ class PhysicalCard(Card):
             self.remove()
             logger.error(
                 f"Locking card in slot {self.slot}. Please investigate.")
-            self.reminator.lock_card(self.slot)
+            self.removinator.lock_card(self.slot)
             raise e
 
         if remove_after:

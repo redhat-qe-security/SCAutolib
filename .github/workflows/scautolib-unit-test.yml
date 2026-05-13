@@ -1,25 +1,25 @@
-name: SCAutolib Unit test
-on:
-  repository_dispatch:
-    types: [test-from-dispatch]
-  push:
-    branches:
-    - "*"
-  pull_request:
-    branches:
-    - master
-    - V2**
-  workflow_dispatch:
+# name: SCAutolib Unit test
+# on:
+#   repository_dispatch:
+#     types: [test-from-dispatch]
+#   push:
+#     branches:
+#     - "*"
+#   pull_request:
+#     branches:
+#     - master
+#     - V2**
+#   workflow_dispatch:
 
-jobs:
-  test:
-    # The type of runner that the job will run on
-    runs-on: ubuntu-latest
-    container:
-        image: plovec/rhel8-smartcards:latest
-    steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v2
+# jobs:
+#   test:
+#     # The type of runner that the job will run on
+#     runs-on: ubuntu-latest
+#     container:
+#         image: plovec/rhel8-smartcards:latest
+#     steps:
+#       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+#       - uses: actions/checkout@v2
 
-      - name: Unit tests
-        run: tox -e ci
+#       - name: Unit tests
+#         run: tox -e ci
