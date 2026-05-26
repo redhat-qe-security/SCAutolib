@@ -11,7 +11,6 @@ creating, modifying, saving, and restoring files.
 from __future__ import annotations
 
 import os
-from configparser import ConfigParser
 from pathlib import Path
 from shutil import copy2
 from traceback import format_exc
@@ -21,7 +20,7 @@ import json
 from SCAutolib import logger, TEMPLATES_DIR, LIB_BACKUP, LIB_DUMP_CONFS, run
 from SCAutolib.exceptions import SCAutolibFileExists, SCAutolibWrongConfig, \
     SCAutolibNoTemplate
-from SCAutolib.utils import isDistro
+from SCAutolib.utils import isDistro, CustomConfigParser
 
 
 class File:
@@ -85,7 +84,7 @@ class File:
             logger.warning(f"Create error: {self._conf_file} already exists.")
             raise SCAutolibFileExists(f'{self._conf_file} already exists')
         else:
-            self._default_parser = ConfigParser()
+            self._default_parser = CustomConfigParser()
             self._default_parser.optionxform = str
             if self._template is None:
                 raise SCAutolibNoTemplate("Template file was not provided.")
@@ -171,7 +170,7 @@ class File:
         else:
             # configparser compatible config files (with sections)
             if self._default_parser is None:
-                self._default_parser = ConfigParser()
+                self._default_parser = CustomConfigParser()
                 self._default_parser.optionxform = str
                 with self._conf_file.open() as config:
                     self._default_parser.read_file(config)
@@ -223,7 +222,7 @@ class File:
             raise SCAutolibWrongConfig(f"Key '{key}' doesn't present in the "
                                        f"file {self._conf_file}")
         elif self._default_parser is None:
-            self._default_parser = ConfigParser()
+            self._default_parser = CustomConfigParser()
             self._default_parser.optionxform = str
             with self._conf_file.open() as config:
                 self._default_parser.read_file(config)
@@ -347,7 +346,7 @@ class SSSDConf(File):
             self._template = TEMPLATES_DIR.joinpath("sssd.conf-10")
 
         # _default_parser object stores default content of config file
-        self._default_parser = ConfigParser()
+        self._default_parser = CustomConfigParser()
         # avoid problems with inserting some 'specific' values
         self._default_parser.optionxform = str
 
@@ -356,7 +355,7 @@ class SSSDConf(File):
                 self._default_parser.read_file(config)
 
         # _changes parser object reflects modifications imposed by set method
-        self._changes = ConfigParser()
+        self._changes = CustomConfigParser()
         self._changes.optionxform = str
 
         if self.dump_file.exists():
@@ -530,7 +529,7 @@ class SSSDConf(File):
                 self._changes.write(config)
                 # re-initialization because I did not find other simple way
                 # to empty parser object
-                self._changes = ConfigParser()
+                self._changes = CustomConfigParser()
                 self._changes.optionxform = str
         os.chmod(self._conf_file, 0o600)
 
@@ -569,7 +568,7 @@ class SSSDConf(File):
         :return: None
         :rtype: None
         """
-        self._default_parser = ConfigParser()
+        self._default_parser = CustomConfigParser()
         self._default_parser.optionxform = str
         with self._conf_file.open() as config:
             self._default_parser.read_file(config)
