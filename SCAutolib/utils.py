@@ -11,10 +11,125 @@ import json
 import distro
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
-from typing import Union
+from typing import Union, Any
 from pathlib import Path
+from configparser import ConfigParser
+from io import TextIOWrapper
 
 from SCAutolib import run, logger, TEMPLATES_DIR, LIB_BACKUP
+
+
+class MultiEntryDict(dict):
+    """
+    A dictionary subclass that merges list values for duplicate keys.
+
+    This dictionary is customized for use with `ConfigParser` where multi-line
+    or duplicate options may be processed as lists. Instead of
+    overwriting an existing list value, it appends new list items to the
+    existing ones.
+    """
+
+    def __setitem__(self, key: str, value: Any):
+        """
+        Set the value for a given key, merging lists if the key already exists.
+
+        If both the existing value and the incoming value are lists, they are
+        concatenated. Otherwise, the standard dictionary assignment is used.
+
+        :param key: The key to set.
+        :type key: str
+        :param value: The value to associate with the key.
+        :type value: Any
+        :return: None
+        :rtype: None
+        """
+        # ConfigParser temporarily stores values as a list of lines during
+        # parsing. If the key already exists, we merge the lists instead of
+        # overwriting.
+        areLists = isinstance(value, list) and isinstance(self[key], list)
+        if (
+            key in self and areLists
+        ):
+            super().__setitem__(key, self[key] + value)
+        else:
+            super().__setitem__(key, value)
+
+
+class CustomConfigParser(ConfigParser):
+    """
+    A custom ConfigParser that supports duplicate keys and continuations.
+
+    By utilizing `MultiEntryDict` as its internal dictionary type and disabling
+    strict mode, this parser handles configuration files containing multiple
+    identical keys within a single section without overwriting them.
+    """
+
+    def __init__(self, *args, **kwargs):
+        """
+        Initialize the CustomConfigParser with non-strict multi-entry support.
+
+        :param args: Positional arguments passed to the parent `ConfigParser`.
+        :type args: list
+        :param kwargs: Keyword arguments passed to the parent `ConfigParser`.
+        :type kwargs: dict
+        :return: None
+        :rtype: None
+        """
+        super().__init__(
+            *args, **kwargs, dict_type=MultiEntryDict, strict=False,
+        )
+
+    def _write_section(
+        self, fp: TextIOWrapper, section_name: str, section_items: list[str],
+        delimiter: str
+    ):
+        r"""
+        Write a single section and its items to a file-like object.
+
+        This overrides the default section writing behavior to match formats
+        like systemd configuration files. It duplicates key names for
+        multi-line entries unless a line explicitly ends with a backslash
+        (`\\`), which triggers a standard indented continuation line.
+
+        :param fp: A file-like object open for writing.
+        :type fp: TextIOWrapper
+        :param section_name: The name of the section being written.
+        :type section_name: str
+        :param section_items: An iterable of (key, value) pairs to write.
+        :type section_items: list[str]
+        :param delimiter: The delimiter string separating keys and values.
+        :type delimiter: str
+        :return: None
+        :rtype: None
+        """
+        fp.write("[{}]\n".format(section_name))
+        for key, value in section_items:
+            value = self._interpolation.before_write(
+                self, section_name, key, value)
+            if value is not None:
+                lines = str(value).split('\n')
+                is_continuation = False
+
+                for line in lines:
+                    if is_continuation:
+                        # Keep it as an indented continuation line if the
+                        # previous line ended in \
+                        fp.write("\t{}\n".format(line.strip()))
+                    else:
+                        # Otherwise, repeat the key name for duplicate options
+                        fp.write("{}{}{}\n".format(key, delimiter, line))
+
+                    # Systemd uses a trailing backslash to denote a split
+                    # single line
+                    if line.strip().endswith('\\'):
+                        is_continuation = True
+                    else:
+                        is_continuation = False
+            elif not self._allow_no_value:
+                fp.write("{}{}\n".format(key, delimiter))
+            else:
+                fp.write("{}\n".format(key))
+        fp.write("\n")
 
 
 def _check_selinux():
