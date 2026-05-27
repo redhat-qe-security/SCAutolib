@@ -1,10 +1,11 @@
 name: Auto Tag on Merge
 
 on:
+  workflow_dispatch:
   pull_request:
     types: [closed]
     branches:
-      - main  # or your default branch name
+      - master
 
 jobs:
   tag-version:
