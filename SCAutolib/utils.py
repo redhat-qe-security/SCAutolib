@@ -46,10 +46,12 @@ class MultiEntryDict(dict):
         # ConfigParser temporarily stores values as a list of lines during
         # parsing. If the key already exists, we merge the lists instead of
         # overwriting.
-        areLists = isinstance(value, list) and isinstance(self[key], list)
-        if (
-            key in self and areLists
-        ):
+        areLists = (
+            isinstance(value, list) and (
+                key in self and isinstance(self[key], list)
+            )
+        )
+        if areLists:
             super().__setitem__(key, self[key] + value)
         else:
             super().__setitem__(key, value)
