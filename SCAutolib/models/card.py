@@ -611,14 +611,15 @@ class PhysicalCard(Card):
 
     removinator = None
 
-    def __new__(cls):
+    def __new__(cls, *args, **kwargs):
         """
         Create a new instance and initialize the Removinator singleton.
         """
         if not cls.removinator:
             from removinator.removinator import Removinator
             cls.removinator = Removinator()
-        return object.__new__(cls)
+
+        return super(PhysicalCard, cls).__new__(cls)
 
     def __del__(self):
         """
