@@ -565,6 +565,9 @@ class GUI:
         key_list = key.split(" ")
         multiword = len(key_list) > 1
 
+        # Move the cursor out of the way so the field isn't blocked
+        self.mouse.move(1.0, 1.0)
+
         start_time = time()
         end_time = start_time + timeout
 
@@ -755,7 +758,7 @@ class GUI:
 
         key_list = key.split(" ")
         multiword = len(key_list) > 1
-        threshold = max_thres
+        threshold = min_thres
 
         start_time = time()
         end_time = start_time + timeout
@@ -1123,6 +1126,10 @@ class GUI:
             arg = "to search"
         elif isDistro("fedora"):
             arg = "tosearch"
+        elif isDistro("centos"):
+            arg = "to search"
+        elif isDistro("rhel", ">=10.2"):
+            arg = "to search"
         else:
             arg = "Activities"
 
